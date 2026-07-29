@@ -5,4 +5,7 @@ package com.nus.folio.data.auth
  */
 object AuthCapabilities {
     const val isBackendAvailable: Boolean = true
+    const val defaultLoginEmail: String = "researcher@folio.app"
+    const val defaultLoginPassword: String = "folio-debug"
 }
+    

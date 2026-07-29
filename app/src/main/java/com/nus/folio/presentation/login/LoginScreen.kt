@@ -37,17 +37,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,11 +78,12 @@ private val ButtonShape = RoundedCornerShape(12.dp)
 @Composable
 fun LoginScreen(
     onNavigateToHome: () -> Unit,
+    onNavigateToSignUp: () -> Unit,
+    onNavigateToResetPassword: (email: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(
             signInUseCase = LocalAppContainer.current.signInUseCase,
-            requestPasswordResetUseCase = LocalAppContainer.current.requestPasswordResetUseCase,
             isAuthAvailable = LocalAppContainer.current.isAuthAvailable,
         ),
     ),
@@ -93,10 +99,13 @@ fun LoginScreen(
 
     LoginContent(
         uiState = uiState,
+        initialEmail = LocalAppContainer.current.defaultLoginEmail,
+        initialPassword = LocalAppContainer.current.defaultLoginPassword,
         onClearFeedback = viewModel::clearFeedback,
         onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
         onSignInClick = viewModel::onSignInClick,
-        onForgotPasswordClick = viewModel::onForgotPasswordClick,
+        onForgotPasswordClick = onNavigateToResetPassword,
+        onSignUpClick = onNavigateToSignUp,
         modifier = modifier,
     )
 }
@@ -108,10 +117,13 @@ private fun LoginContent(
     onTogglePasswordVisibility: () -> Unit,
     onSignInClick: (email: String, password: String) -> Unit,
     onForgotPasswordClick: (email: String) -> Unit,
+    onSignUpClick: () -> Unit,
     modifier: Modifier = Modifier,
+    initialEmail: String = "",
+    initialPassword: String = "",
 ) {
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf(initialEmail) }
+    var password by remember { mutableStateOf(initialPassword) }
     val inputsEnabled = !uiState.isLoading && !uiState.authUnavailable
 
     Box(
@@ -173,17 +185,56 @@ private fun LoginContent(
             )
         }
 
-        Text(
-            text = stringResource(R.string.login_footer),
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp, start = 28.dp, end = 28.dp),
-            fontSize = 12.sp,
-            color = LoginTextMuted,
-            textAlign = TextAlign.Center,
-            lineHeight = 18.sp,
-        )
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (!uiState.authUnavailable) {
+                LoginSignUpPrompt(
+                    onSignUpClick = onSignUpClick,
+                    enabled = !uiState.isLoading,
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.login_footer),
+                fontSize = 12.sp,
+                color = LoginTextMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp,
+            )
+        }
     }
+}
+
+@Composable
+private fun LoginSignUpPrompt(
+    onSignUpClick: () -> Unit,
+    enabled: Boolean,
+) {
+    val prompt = stringResource(R.string.login_no_account)
+    val action = stringResource(R.string.login_sign_up)
+
+    Text(
+        text = buildAnnotatedString {
+            append(prompt)
+            append(" ")
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = LoginTextPrimary)) {
+                append(action)
+            }
+        },
+        modifier = Modifier.clickable(
+            enabled = enabled,
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onSignUpClick,
+        ),
+        fontSize = 14.sp,
+        color = LoginTextMuted,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable
@@ -192,7 +243,6 @@ private fun LoginFeedback(uiState: LoginUiState) {
         LoginError.EMAIL_REQUIRED -> stringResource(R.string.login_error_email_required)
         LoginError.PASSWORD_REQUIRED -> stringResource(R.string.login_error_password_required)
         LoginError.SIGN_IN_FAILED -> stringResource(R.string.login_error_sign_in_failed)
-        LoginError.PASSWORD_RESET_FAILED -> stringResource(R.string.login_error_password_reset_failed)
         LoginError.AUTH_UNAVAILABLE -> stringResource(R.string.login_error_auth_unavailable)
         null -> if (uiState.authUnavailable) {
             stringResource(R.string.login_error_auth_unavailable)
@@ -201,35 +251,17 @@ private fun LoginFeedback(uiState: LoginUiState) {
         }
     }
 
-    val infoText = when (uiState.info) {
-        LoginInfo.PASSWORD_RESET_SENT -> stringResource(R.string.login_password_reset_sent)
-        null -> null
-    }
+    if (errorText == null) return
 
-    when {
-        errorText != null -> {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = errorText,
-                modifier = Modifier.fillMaxWidth(),
-                fontSize = 13.sp,
-                color = LoginCopper,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp,
-            )
-        }
-        infoText != null -> {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = infoText,
-                modifier = Modifier.fillMaxWidth(),
-                fontSize = 13.sp,
-                color = LoginTextSecondary,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp,
-            )
-        }
-    }
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(
+        text = errorText,
+        modifier = Modifier.fillMaxWidth(),
+        fontSize = 13.sp,
+        color = LoginCopper,
+        textAlign = TextAlign.Center,
+        lineHeight = 18.sp,
+    )
 }
 
 @Composable
@@ -407,6 +439,7 @@ private fun LoginPrimaryButton(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
+            .alpha(if (isLoading) 0.6f else 1f)
             .shadow(
                 elevation = 8.dp,
                 shape = ButtonShape,
@@ -418,13 +451,15 @@ private fun LoginPrimaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = LoginPrimary,
             contentColor = Color.White,
+            disabledContainerColor = LoginPrimary,
+            disabledContentColor = Color.White,
         ),
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(24.dp),
                 color = Color.White,
-                strokeWidth = 2.dp,
+                strokeWidth = 2.5.dp,
             )
         } else {
             Text(
@@ -446,6 +481,22 @@ private fun LoginContentPreview() {
             onTogglePasswordVisibility = {},
             onSignInClick = { _, _ -> },
             onForgotPasswordClick = {},
+            onSignUpClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Login Loading")
+@Composable
+private fun LoginContentLoadingPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        LoginContent(
+            uiState = LoginUiState(isLoading = true),
+            onClearFeedback = {},
+            onTogglePasswordVisibility = {},
+            onSignInClick = { _, _ -> },
+            onForgotPasswordClick = {},
+            onSignUpClick = {},
         )
     }
 }
