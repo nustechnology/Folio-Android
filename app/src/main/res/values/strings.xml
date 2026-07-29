@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">Folio</string>
+    <string name="login_tagline">PRIVATE RESEARCH. GROUNDED ANSWERS.</string>
+    <string name="login_description">Your sources, notes and citations in one private archive.</string>
+    <string name="login_email_hint">researcher@folio.app</string>
+    <string name="login_password_hint">••••••••••</string>
+    <string name="login_forgot_password">Forgot password?</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_footer">Private by default. Your archive stays yours.</string>
+    <string name="login_error_email_required">Enter your email address.</string>
+    <string name="login_error_password_required">Enter your password.</string>
+    <string name="login_error_sign_in_failed">Sign in failed. Please try again.</string>
+    <string name="login_error_password_reset_failed">Could not send password reset link. Please try again.</string>
+    <string name="login_error_auth_unavailable">Sign-in is not available in this build yet.</string>
+    <string name="login_password_reset_sent">Password reset link sent. Check your inbox.</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
 </resources>
