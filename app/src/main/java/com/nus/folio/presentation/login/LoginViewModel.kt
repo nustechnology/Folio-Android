@@ -3,7 +3,6 @@ package com.nus.folio.presentation.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -16,7 +15,6 @@ import kotlinx.coroutines.launch
 
 class LoginViewModel(
     private val signInUseCase: SignInUseCase,
-    private val requestPasswordResetUseCase: RequestPasswordResetUseCase,
     private val isAuthAvailable: Boolean,
 ) : ViewModel() {
 
@@ -28,7 +26,7 @@ class LoginViewModel(
     private var activeJob: Job? = null
 
     fun clearFeedback() {
-        _uiState.update { it.copy(error = null, info = null) }
+        _uiState.update { it.copy(error = null) }
     }
 
     fun onNavigationHandled() {
@@ -41,60 +39,24 @@ class LoginViewModel(
 
     fun onSignInClick(email: String, password: String) {
         if (!isAuthAvailable) {
-            _uiState.update {
-                it.copy(error = LoginError.AUTH_UNAVAILABLE, info = null)
-            }
+            _uiState.update { it.copy(error = LoginError.AUTH_UNAVAILABLE) }
             return
         }
         when {
             email.isBlank() -> {
-                _uiState.update { it.copy(error = LoginError.EMAIL_REQUIRED, info = null) }
+                _uiState.update { it.copy(error = LoginError.EMAIL_REQUIRED) }
             }
             password.isBlank() -> {
-                _uiState.update { it.copy(error = LoginError.PASSWORD_REQUIRED, info = null) }
+                _uiState.update { it.copy(error = LoginError.PASSWORD_REQUIRED) }
             }
             else -> performSignIn(email, password)
-        }
-    }
-
-    fun onForgotPasswordClick(email: String) {
-        if (!isAuthAvailable) {
-            _uiState.update {
-                it.copy(error = LoginError.AUTH_UNAVAILABLE, info = null)
-            }
-            return
-        }
-        if (email.isBlank()) {
-            _uiState.update { it.copy(error = LoginError.EMAIL_REQUIRED, info = null) }
-            return
-        }
-
-        launchExclusive {
-            _uiState.update {
-                it.copy(isLoading = true, error = null, info = null, shouldNavigateToHome = false)
-            }
-
-            val result = requestPasswordResetUseCase(email)
-            ensureActive()
-
-            result
-                .onSuccess {
-                    _uiState.update {
-                        it.copy(isLoading = false, info = LoginInfo.PASSWORD_RESET_SENT)
-                    }
-                }
-                .onFailure {
-                    _uiState.update {
-                        it.copy(isLoading = false, error = LoginError.PASSWORD_RESET_FAILED)
-                    }
-                }
         }
     }
 
     private fun performSignIn(email: String, password: String) {
         launchExclusive {
             _uiState.update {
-                it.copy(isLoading = true, error = null, info = null, shouldNavigateToHome = false)
+                it.copy(isLoading = true, error = null, shouldNavigateToHome = false)
             }
 
             val result = signInUseCase(email, password)
@@ -121,16 +83,11 @@ class LoginViewModel(
 
     class Factory(
         private val signInUseCase: SignInUseCase,
-        private val requestPasswordResetUseCase: RequestPasswordResetUseCase,
         private val isAuthAvailable: Boolean,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return LoginViewModel(
-                signInUseCase,
-                requestPasswordResetUseCase,
-                isAuthAvailable,
-            ) as T
+            return LoginViewModel(signInUseCase, isAuthAvailable) as T
         }
     }
 }

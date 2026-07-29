@@ -9,7 +9,13 @@ package com.nus.folio.data.datasource
  */
 class AuthDataSource {
 
+    suspend fun signUp(name: String, email: String, password: String): Nothing =
+        throw authUnavailable()
+
     suspend fun signIn(email: String, password: String): Nothing =
+        throw authUnavailable()
+
+    suspend fun signInWithApple(): Nothing =
         throw authUnavailable()
 
     suspend fun requestPasswordReset(email: String): Nothing =
