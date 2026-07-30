@@ -6,5 +6,6 @@ import com.nus.folio.domain.repository.NoteRepository
 class GetNotesUseCase(
     private val repository: NoteRepository,
 ) {
-    suspend operator fun invoke(): Result<NoteLibrary> = repository.getNotes()
+    suspend operator fun invoke(spaceId: String): Result<NoteLibrary> =
+        repository.getNotes(spaceId)
 }

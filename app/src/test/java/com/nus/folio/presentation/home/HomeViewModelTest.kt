@@ -26,30 +26,53 @@ class HomeViewModelTest {
     private val askRepository = FakeAskRepository()
     private val noteRepository = FakeNoteRepository()
 
-    private fun createViewModel(): HomeViewModel =
+    private fun createViewModel(
+        spaceId: String = "1",
+        spaceTitle: String = "Dissertation Research",
+    ): HomeViewModel =
         HomeViewModel(
+            spaceId = spaceId,
+            spaceTitle = spaceTitle,
             getSourcesUseCase = GetSourcesUseCase(sourceRepository),
             getAskTopicsUseCase = GetAskTopicsUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
         )
 
     @Test
-    fun `init loads sources successfully`() {
+    fun `init loads space-scoped home successfully`() {
         val viewModel = createViewModel()
 
         assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals("1", viewModel.uiState.value.spaceId)
+        assertEquals("Dissertation Research", viewModel.uiState.value.spaceTitle)
         assertNull(viewModel.uiState.value.sourcesError)
         assertNull(viewModel.uiState.value.askError)
         assertNull(viewModel.uiState.value.notesError)
-        assertEquals(7, viewModel.uiState.value.visibleSources.size)
-        assertEquals(128, viewModel.uiState.value.allCount)
-        assertEquals(6, viewModel.uiState.value.textCount)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
+        assertEquals(4, viewModel.uiState.value.allCount)
+        assertEquals(0, viewModel.uiState.value.textCount)
         assertEquals(1, sourceRepository.getSourcesCallCount)
-        assertEquals(4, viewModel.uiState.value.visibleAskTopics.size)
+        assertEquals("1", sourceRepository.lastSpaceId)
+        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
         assertEquals(1, askRepository.getAskTopicsCallCount)
-        assertEquals(5, viewModel.uiState.value.visibleNotes.size)
-        assertEquals(5, viewModel.uiState.value.notesAllCount)
+        assertEquals("1", askRepository.lastSpaceId)
+        assertEquals(2, viewModel.uiState.value.visibleNotes.size)
+        assertEquals(2, viewModel.uiState.value.notesAllCount)
         assertEquals(1, noteRepository.getNotesCallCount)
+        assertEquals("1", noteRepository.lastSpaceId)
+    }
+
+    @Test
+    fun `different spaces load different content`() {
+        val dissertation = createViewModel(spaceId = "1")
+        val teaching = createViewModel(spaceId = "4", spaceTitle = "Teaching Prep")
+
+        assertEquals(4, dissertation.uiState.value.visibleSources.size)
+        assertEquals(2, teaching.uiState.value.visibleSources.size)
+        assertEquals(2, dissertation.uiState.value.visibleAskTopics.size)
+        assertEquals(1, teaching.uiState.value.visibleAskTopics.size)
+        assertEquals(2, dissertation.uiState.value.visibleNotes.size)
+        assertEquals(1, teaching.uiState.value.visibleNotes.size)
     }
 
     @Test
@@ -62,19 +85,19 @@ class HomeViewModelTest {
         assertEquals("offline", viewModel.uiState.value.sourcesError)
         assertNull(viewModel.uiState.value.askError)
         assertNull(viewModel.uiState.value.notesError)
-        assertEquals(4, viewModel.uiState.value.visibleAskTopics.size)
-        assertEquals(5, viewModel.uiState.value.visibleNotes.size)
+        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
+        assertEquals(2, viewModel.uiState.value.visibleNotes.size)
     }
 
     @Test
-    fun `onFilterSelected BOOKS shows only books`() {
+    fun `onFilterSelected PDF shows only pdf`() {
         val viewModel = createViewModel()
 
-        viewModel.onFilterSelected(SourceFilter.BOOKS)
+        viewModel.onFilterSelected(SourceFilter.PDF)
 
-        assertEquals(SourceFilter.BOOKS, viewModel.uiState.value.selectedFilter)
-        assertEquals(1, viewModel.uiState.value.visibleSources.size)
-        assertEquals(SourceType.BOOK, viewModel.uiState.value.visibleSources.first().type)
+        assertEquals(SourceFilter.PDF, viewModel.uiState.value.selectedFilter)
+        assertEquals(3, viewModel.uiState.value.visibleSources.size)
+        assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.PDF })
     }
 
     @Test
@@ -89,7 +112,7 @@ class HomeViewModelTest {
 
     @Test
     fun `onFilterSelected TEXT shows only text`() {
-        val viewModel = createViewModel()
+        val viewModel = createViewModel(spaceId = "4", spaceTitle = "Teaching Prep")
 
         viewModel.onFilterSelected(SourceFilter.TEXT)
 
@@ -104,7 +127,7 @@ class HomeViewModelTest {
         viewModel.onNoteFilterSelected(NoteFilter.PINNED)
 
         assertEquals(NoteFilter.PINNED, viewModel.uiState.value.selectedNoteFilter)
-        assertEquals(2, viewModel.uiState.value.visibleNotes.size)
+        assertEquals(1, viewModel.uiState.value.visibleNotes.size)
         assertTrue(viewModel.uiState.value.visibleNotes.all { it.isPinned })
     }
 
@@ -122,10 +145,10 @@ class HomeViewModelTest {
     fun `onSearchQueryChange filters ask topics by title`() {
         val viewModel = createViewModel()
 
-        viewModel.onSearchQueryChange("Policy")
+        viewModel.onSearchQueryChange("Turing")
 
         assertEquals(1, viewModel.uiState.value.visibleAskTopics.size)
-        assertEquals("Public Policy Insights", viewModel.uiState.value.visibleAskTopics.first().title)
+        assertEquals("Turing and modern AI", viewModel.uiState.value.visibleAskTopics.first().title)
     }
 
     @Test
@@ -169,7 +192,7 @@ class HomeViewModelTest {
 
         assertFalse(viewModel.uiState.value.isSearchVisible)
         assertEquals("", viewModel.uiState.value.searchQuery)
-        assertEquals(7, viewModel.uiState.value.visibleSources.size)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
     }
 
     @Test
@@ -192,8 +215,8 @@ class HomeViewModelTest {
         viewModel.onTabSelected(HomeTab.ASK)
 
         assertEquals("", viewModel.uiState.value.searchQuery)
-        assertEquals(7, viewModel.uiState.value.visibleSources.size)
-        assertEquals(4, viewModel.uiState.value.visibleAskTopics.size)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
+        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
     }
 
     @Test
@@ -203,16 +226,21 @@ class HomeViewModelTest {
         viewModel.loadSources()
 
         assertTrue(sourceRepository.getSourcesCallCount >= 2)
-        assertEquals(7, viewModel.uiState.value.visibleSources.size)
-        assertEquals(4, viewModel.uiState.value.visibleAskTopics.size)
-        assertEquals(5, viewModel.uiState.value.visibleNotes.size)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
+        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
+        assertEquals(2, viewModel.uiState.value.visibleNotes.size)
     }
 
     @Test
     fun `onAddSourceSubmit surfaces not-supported message`() {
         val viewModel = createViewModel()
 
-        viewModel.onAddSourceSubmit(AddSourceTab.PDF, "content://doc/1", "paper.pdf")
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Pdf(
+                displayName = "paper.pdf",
+                uri = null,
+            ),
+        )
 
         assertEquals(
             HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED,
@@ -221,9 +249,57 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onEditSourceClick sets not-supported message`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+
+        viewModel.onEditSourceClick(source)
+
+        assertEquals(HomeUserMessage.EDIT_SOURCE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onDeleteSourceClick sets not-supported message`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+
+        viewModel.onDeleteSourceClick(source)
+
+        assertEquals(HomeUserMessage.DELETE_SOURCE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onNoteOptionsClick shows options sheet for note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+
+        viewModel.onNoteOptionsClick(note)
+
+        assertEquals(note, viewModel.uiState.value.optionsNote)
+    }
+
+    @Test
+    fun `onViewNoteClick dismisses options and sets message`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteOptionsClick(note)
+
+        viewModel.onViewNoteClick()
+
+        assertNull(viewModel.uiState.value.optionsNote)
+        assertEquals(HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
     fun `onUserMessageShown clears message`() {
         val viewModel = createViewModel()
-        viewModel.onAddSourceSubmit(AddSourceTab.WEB, null, "https://example.com")
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Web(
+                url = "https://example.com",
+                title = "Example",
+                author = "Author",
+            ),
+        )
 
         viewModel.onUserMessageShown()
 

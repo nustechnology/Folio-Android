@@ -6,6 +6,7 @@ data class Note(
     val project: String?,
     val updatedLabel: String,
     val isPinned: Boolean,
+    val spaceId: String,
 )
 
 enum class NoteFilter {

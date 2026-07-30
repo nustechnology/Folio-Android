@@ -41,14 +41,14 @@ internal fun HomeBottomNav(
         Triple(HomeTab.SOURCES, R.drawable.ic_nav_sources, R.string.home_tab_sources),
         Triple(HomeTab.ASK, R.drawable.ic_nav_ask, R.string.home_tab_ask),
         Triple(HomeTab.NOTES, R.drawable.ic_nav_notes, R.string.home_tab_notes),
-        Triple(HomeTab.ACCOUNT, R.drawable.ic_nav_account, R.string.home_tab_account),
+        Triple(HomeTab.NOTEBOOK, R.drawable.ic_nav_notebook, R.string.home_tab_notebook),
     )
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 16.dp,
+                elevation = 12.dp,
                 shape = HomeNavPillShape,
                 ambientColor = Color.Black.copy(alpha = 0.35f),
                 spotColor = Color.Black.copy(alpha = 0.35f),
@@ -66,7 +66,7 @@ internal fun HomeBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -98,26 +98,26 @@ private fun HomeNavItem(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(vertical = 2.dp),
+            .padding(vertical = 0.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = stringResource(labelRes),
             tint = HomeNavItemTint,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(20.dp),
         )
         if (selected) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Box(
                 modifier = Modifier
-                    .size(5.dp)
+                    .size(4.dp)
                     .background(HomeNavAccent, CircleShape),
             )
         }
         Text(
             text = stringResource(labelRes),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = HomeNavItemTint,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )

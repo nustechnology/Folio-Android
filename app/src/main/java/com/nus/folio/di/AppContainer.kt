@@ -6,22 +6,26 @@ import com.nus.folio.data.datasource.AuthDataSource
 import com.nus.folio.data.datasource.GreetingDataSource
 import com.nus.folio.data.datasource.NoteDataSource
 import com.nus.folio.data.datasource.SourceDataSource
+import com.nus.folio.data.datasource.SpaceDataSource
 import com.nus.folio.data.repository.AskRepositoryImpl
 import com.nus.folio.data.repository.AuthRepositoryImpl
 import com.nus.folio.data.repository.GreetingRepositoryImpl
 import com.nus.folio.data.repository.NoteRepositoryImpl
 import com.nus.folio.data.repository.SourceRepositoryImpl
+import com.nus.folio.data.repository.SpaceRepositoryImpl
 import com.nus.folio.domain.repository.AskRepository
 import com.nus.folio.domain.repository.AuthRepository
 import com.nus.folio.domain.repository.GreetingRepository
 import com.nus.folio.domain.repository.NoteRepository
 import com.nus.folio.domain.repository.SourceRepository
+import com.nus.folio.domain.repository.SpaceRepository
 import com.nus.folio.domain.usecase.ClearAuthSessionUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetGreetingUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
@@ -74,6 +78,16 @@ class AppContainer {
 
     val getNotesUseCase: GetNotesUseCase by lazy {
         GetNotesUseCase(noteRepository)
+    }
+
+    private val spaceDataSource: SpaceDataSource by lazy { SpaceDataSource() }
+
+    private val spaceRepository: SpaceRepository by lazy {
+        SpaceRepositoryImpl(spaceDataSource)
+    }
+
+    val getSpacesUseCase: GetSpacesUseCase by lazy {
+        GetSpacesUseCase(spaceRepository)
     }
 
     private val authDataSource: AuthDataSource by lazy { AuthDataSource() }

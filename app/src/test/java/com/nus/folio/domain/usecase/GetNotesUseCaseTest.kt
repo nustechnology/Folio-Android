@@ -12,20 +12,21 @@ class GetNotesUseCaseTest {
     private val useCase = GetNotesUseCase(repository)
 
     @Test
-    fun `invoke returns library on success`() = runTest {
-        val result = useCase()
+    fun `invoke returns space-scoped library on success`() = runTest {
+        val result = useCase("1")
 
         assertTrue(result.isSuccess)
-        assertEquals(5, result.getOrNull()?.allCount)
-        assertEquals(5, result.getOrNull()?.notes?.size)
+        assertEquals(2, result.getOrNull()?.allCount)
+        assertEquals(2, result.getOrNull()?.notes?.size)
         assertEquals(1, repository.getNotesCallCount)
+        assertEquals("1", repository.lastSpaceId)
     }
 
     @Test
     fun `invoke returns failure when repository fails`() = runTest {
         repository.getNotesResult = Result.failure(IllegalStateException("offline"))
 
-        val result = useCase()
+        val result = useCase("1")
 
         assertTrue(result.isFailure)
         assertEquals("offline", result.exceptionOrNull()?.message)

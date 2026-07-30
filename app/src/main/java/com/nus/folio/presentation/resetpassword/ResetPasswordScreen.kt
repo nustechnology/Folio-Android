@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -155,7 +156,6 @@ private fun ResetPasswordContent(
                     onClearFeedback()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isLoading,
                 placeholder = {
                     Text(
                         text = stringResource(R.string.reset_password_email_hint),
@@ -173,45 +173,15 @@ private fun ResetPasswordContent(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            Button(
+            ResetPasswordPrimaryButton(
                 onClick = { onSendRecoveryLinkClick(email) },
-                enabled = !uiState.isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = ButtonShape,
-                        ambientColor = LoginButtonGlow,
-                        spotColor = LoginButtonGlow,
-                    )
-                    .border(1.dp, LoginButtonGlow, ButtonShape),
-                shape = ButtonShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = LoginPrimary,
-                    contentColor = Color.White,
-                ),
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.reset_password_send_link),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
+                isLoading = uiState.isLoading,
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = onBackClick,
-                enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -252,6 +222,49 @@ private fun ResetPasswordTopBar(onBackClick: () -> Unit) {
             ),
         tint = LoginTextPrimary,
     )
+}
+
+@Composable
+private fun ResetPasswordPrimaryButton(
+    onClick: () -> Unit,
+    isLoading: Boolean,
+) {
+    Button(
+        onClick = onClick,
+        enabled = !isLoading,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .alpha(if (isLoading) 0.6f else 1f)
+            .shadow(
+                elevation = 8.dp,
+                shape = ButtonShape,
+                ambientColor = LoginButtonGlow,
+                spotColor = LoginButtonGlow,
+            )
+            .border(1.dp, LoginButtonGlow, ButtonShape),
+        shape = ButtonShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = LoginPrimary,
+            contentColor = Color.White,
+            disabledContainerColor = LoginPrimary,
+            disabledContentColor = Color.White,
+        ),
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = Color.White,
+                strokeWidth = 2.5.dp,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.reset_password_send_link),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
 }
 
 @Composable
@@ -331,6 +344,20 @@ private fun ResetPasswordContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         ResetPasswordContent(
             uiState = ResetPasswordUiState(),
+            initialEmail = "researcher@folio.app",
+            onClearFeedback = {},
+            onSendRecoveryLinkClick = {},
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Reset Password Loading")
+@Composable
+private fun ResetPasswordContentLoadingPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        ResetPasswordContent(
+            uiState = ResetPasswordUiState(isLoading = true),
             initialEmail = "researcher@folio.app",
             onClearFeedback = {},
             onSendRecoveryLinkClick = {},

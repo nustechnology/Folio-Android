@@ -77,7 +77,7 @@ private val ButtonShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun LoginScreen(
-    onNavigateToHome: () -> Unit,
+    onNavigateToSpaces: () -> Unit,
     onNavigateToSignUp: () -> Unit,
     onNavigateToResetPassword: (email: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -92,7 +92,7 @@ fun LoginScreen(
 
     LaunchedEffect(uiState.shouldNavigateToHome) {
         if (uiState.shouldNavigateToHome) {
-            onNavigateToHome()
+            onNavigateToSpaces()
             viewModel.onNavigationHandled()
         }
     }
@@ -194,7 +194,7 @@ private fun LoginContent(
             if (!uiState.authUnavailable) {
                 LoginSignUpPrompt(
                     onSignUpClick = onSignUpClick,
-                    enabled = !uiState.isLoading,
+                    enabled = inputsEnabled,
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))

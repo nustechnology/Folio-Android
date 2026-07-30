@@ -11,19 +11,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nus.folio.di.LocalAppContainer
+import com.nus.folio.presentation.account.AccountSettingsScreen
 import com.nus.folio.presentation.home.HomeScreen
 import com.nus.folio.presentation.login.LoginScreen
 import com.nus.folio.presentation.resetpassword.ResetPasswordScreen
 import com.nus.folio.presentation.signup.SignUpScreen
+import com.nus.folio.presentation.space.SpaceScreen
 
 object FolioDestination {
     const val LOGIN = "login"
     const val SIGN_UP = "sign_up"
     const val RESET_PASSWORD = "reset_password"
+    const val SPACES = "spaces"
+    const val ACCOUNT = "account"
     const val HOME = "home"
 
     fun resetPassword(email: String = ""): String =
         "$RESET_PASSWORD?email=${Uri.encode(email)}"
+
+    fun home(spaceId: String, spaceTitle: String = ""): String =
+        "$HOME/${Uri.encode(spaceId)}?title=${Uri.encode(spaceTitle)}"
 }
 
 @Composable
@@ -38,8 +45,8 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
     ) {
         composable(FolioDestination.LOGIN) {
             LoginScreen(
-                onNavigateToHome = {
-                    navController.navigate(FolioDestination.HOME) {
+                onNavigateToSpaces = {
+                    navController.navigate(FolioDestination.SPACES) {
                         popUpTo(FolioDestination.LOGIN) { inclusive = true }
                     }
                 },
@@ -57,8 +64,8 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 if (!isAuthAvailable) navController.popBackStack()
             }
             SignUpScreen(
-                onNavigateToHome = {
-                    navController.navigate(FolioDestination.HOME) {
+                onNavigateToSpaces = {
+                    navController.navigate(FolioDestination.SPACES) {
                         popUpTo(FolioDestination.LOGIN) { inclusive = true }
                     }
                 },
@@ -81,11 +88,50 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onNavigateBack = { navController.popBackStack() },
             )
         }
-        composable(FolioDestination.HOME) {
+        composable(FolioDestination.SPACES) {
+            SpaceScreen(
+                onSpaceSelected = { space ->
+                    navController.navigate(
+                        FolioDestination.home(spaceId = space.id, spaceTitle = space.title),
+                    )
+                },
+                onNavigateToAccount = {
+                    navController.navigate(FolioDestination.ACCOUNT)
+                },
+            )
+        }
+        composable(FolioDestination.ACCOUNT) {
+            val container = LocalAppContainer.current
+            val session = container.getCurrentSessionUseCase()
+            AccountSettingsScreen(
+                displayName = session?.displayName.orEmpty(),
+                email = session?.email.orEmpty(),
+                onBackClick = { navController.popBackStack() },
+                onSignOut = {
+                    container.clearAuthSessionUseCase()
+                    navController.navigate(FolioDestination.LOGIN) {
+                        popUpTo(FolioDestination.SPACES) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(
+            route = "${FolioDestination.HOME}/{spaceId}?title={title}",
+            arguments = listOf(
+                navArgument("spaceId") { type = NavType.StringType },
+                navArgument("title") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+        ) { entry ->
             HomeScreen(
+                spaceId = entry.arguments?.getString("spaceId").orEmpty(),
+                spaceTitle = entry.arguments?.getString("title").orEmpty(),
+                onNavigateBack = { navController.popBackStack() },
                 onSignOut = {
                     navController.navigate(FolioDestination.LOGIN) {
-                        popUpTo(0) { inclusive = true }
+                        popUpTo(FolioDestination.SPACES) { inclusive = true }
                     }
                 },
             )

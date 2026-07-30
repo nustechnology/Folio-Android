@@ -8,15 +8,16 @@ import kotlinx.coroutines.delay
 
 class SourceDataSource {
 
-    suspend fun fetchSources(): SourceLibrary {
+    suspend fun fetchSources(spaceId: String): SourceLibrary {
         delay(200)
+        val sources = sampleSources.filter { it.spaceId == spaceId }
         return SourceLibrary(
-            sources = sampleSources,
-            allCount = 128,
-            papersCount = 80,
-            booksCount = 24,
-            webCount = 18,
-            textCount = 6,
+            sources = sources,
+            allCount = sources.size,
+            papersCount = sources.count { it.type == SourceType.PDF },
+            booksCount = sources.count { it.type == SourceType.BOOK },
+            webCount = sources.count { it.type == SourceType.WEB },
+            textCount = sources.count { it.type == SourceType.TEXT },
         )
     }
 
@@ -28,6 +29,7 @@ class SourceDataSource {
                 type = SourceType.PDF,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.READY,
+                spaceId = "1",
             ),
             Source(
                 id = "2",
@@ -35,6 +37,7 @@ class SourceDataSource {
                 type = SourceType.PDF,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.READY,
+                spaceId = "2",
             ),
             Source(
                 id = "3",
@@ -42,6 +45,7 @@ class SourceDataSource {
                 type = SourceType.BOOK,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.PROCESSING,
+                spaceId = "2",
             ),
             Source(
                 id = "4",
@@ -49,6 +53,7 @@ class SourceDataSource {
                 type = SourceType.PDF,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.FAILED,
+                spaceId = "1",
             ),
             Source(
                 id = "5",
@@ -56,6 +61,7 @@ class SourceDataSource {
                 type = SourceType.PDF,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.READY,
+                spaceId = "1",
             ),
             Source(
                 id = "6",
@@ -63,6 +69,31 @@ class SourceDataSource {
                 type = SourceType.TEXT,
                 addedLabel = "Added 2d ago",
                 status = SourceStatus.READY,
+                spaceId = "3",
+            ),
+            Source(
+                id = "7",
+                title = "Lecture slides: Week 7",
+                type = SourceType.PDF,
+                addedLabel = "Added 3d ago",
+                status = SourceStatus.READY,
+                spaceId = "4",
+            ),
+            Source(
+                id = "8",
+                title = "Course syllabus draft",
+                type = SourceType.TEXT,
+                addedLabel = "Added 3d ago",
+                status = SourceStatus.READY,
+                spaceId = "4",
+            ),
+            Source(
+                id = "9",
+                title = "Wikipedia: Neural Networks",
+                type = SourceType.WEB,
+                addedLabel = "Added 2d ago",
+                status = SourceStatus.READY,
+                spaceId = "1",
             ),
         )
     }

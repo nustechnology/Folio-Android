@@ -5,4 +5,5 @@ data class AskTopic(
     val title: String,
     val sourceCount: Int,
     val noteCount: Int,
+    val spaceId: String,
 )

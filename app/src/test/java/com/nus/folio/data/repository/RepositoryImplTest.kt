@@ -26,13 +26,13 @@ class SourceRepositoryImplTest {
     private val repository = SourceRepositoryImpl(SourceDataSource())
 
     @Test
-    fun `getSources returns success library`() = runTest {
-        val result = repository.getSources()
+    fun `getSources returns success library for space`() = runTest {
+        val result = repository.getSources("1")
 
         assertTrue(result.isSuccess)
-        assertEquals(128, result.getOrNull()?.allCount)
-        assertEquals(6, result.getOrNull()?.sources?.size)
-        assertEquals(6, result.getOrNull()?.textCount)
+        assertEquals(4, result.getOrNull()?.allCount)
+        assertEquals(4, result.getOrNull()?.sources?.size)
+        assertEquals(0, result.getOrNull()?.textCount)
     }
 }
 
@@ -41,11 +41,11 @@ class AskRepositoryImplTest {
     private val repository = AskRepositoryImpl(AskDataSource())
 
     @Test
-    fun `getAskTopics returns success list`() = runTest {
-        val result = repository.getAskTopics()
+    fun `getAskTopics returns success list for space`() = runTest {
+        val result = repository.getAskTopics("1")
 
         assertTrue(result.isSuccess)
-        assertEquals(4, result.getOrNull()?.size)
-        assertEquals("Dissertation Research", result.getOrNull()?.first()?.title)
+        assertEquals(2, result.getOrNull()?.size)
+        assertEquals("Core dissertation arguments", result.getOrNull()?.first()?.title)
     }
 }

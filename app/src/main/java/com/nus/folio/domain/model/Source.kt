@@ -6,6 +6,7 @@ data class Source(
     val type: SourceType,
     val addedLabel: String,
     val status: SourceStatus,
+    val spaceId: String,
 )
 
 enum class SourceType {
@@ -23,8 +24,7 @@ enum class SourceStatus {
 
 enum class SourceFilter {
     ALL,
-    PAPERS,
-    BOOKS,
+    PDF,
     WEB,
     TEXT,
 }

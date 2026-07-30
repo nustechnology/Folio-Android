@@ -11,16 +11,24 @@ class SourceDataSourceTest {
     private val dataSource = SourceDataSource()
 
     @Test
-    fun `fetchSources returns sample library`() = runTest {
-        val library = dataSource.fetchSources()
+    fun `fetchSources returns space-scoped library`() = runTest {
+        val library = dataSource.fetchSources("1")
 
-        assertEquals(128, library.allCount)
-        assertEquals(80, library.papersCount)
-        assertEquals(24, library.booksCount)
-        assertEquals(18, library.webCount)
-        assertEquals(6, library.textCount)
-        assertEquals(6, library.sources.size)
+        assertEquals(4, library.allCount)
+        assertEquals(3, library.papersCount)
+        assertEquals(0, library.booksCount)
+        assertEquals(1, library.webCount)
+        assertEquals(0, library.textCount)
+        assertEquals(4, library.sources.size)
+        assertTrue(library.sources.all { it.spaceId == "1" })
         assertTrue(library.sources.any { it.title.contains("Turing") })
-        assertTrue(library.sources.any { it.type == SourceType.TEXT })
+    }
+
+    @Test
+    fun `fetchSources returns different content for another space`() = runTest {
+        val library = dataSource.fetchSources("4")
+
+        assertEquals(2, library.sources.size)
+        assertTrue(library.sources.all { it.spaceId == "4" })
     }
 }
