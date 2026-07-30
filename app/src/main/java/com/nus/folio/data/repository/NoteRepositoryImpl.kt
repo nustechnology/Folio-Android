@@ -9,9 +9,9 @@ class NoteRepositoryImpl(
     private val dataSource: NoteDataSource,
 ) : NoteRepository {
 
-    override suspend fun getNotes(): Result<NoteLibrary> =
+    override suspend fun getNotes(spaceId: String): Result<NoteLibrary> =
         try {
-            Result.success(dataSource.fetchNotes())
+            Result.success(dataSource.fetchNotes(spaceId))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

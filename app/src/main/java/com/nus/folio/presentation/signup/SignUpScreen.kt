@@ -74,7 +74,7 @@ private val ButtonShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun SignUpScreen(
-    onNavigateToHome: () -> Unit,
+    onNavigateToSpaces: () -> Unit,
     onNavigateToLogin: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SignUpViewModel = viewModel(
@@ -89,7 +89,7 @@ fun SignUpScreen(
 
     LaunchedEffect(uiState.shouldNavigateToHome) {
         if (uiState.shouldNavigateToHome) {
-            onNavigateToHome()
+            onNavigateToSpaces()
             viewModel.onNavigationHandled()
         }
     }

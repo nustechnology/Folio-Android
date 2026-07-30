@@ -7,6 +7,8 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 
 data class HomeUiState(
+    val spaceId: String = "",
+    val spaceTitle: String = "",
     val isLoading: Boolean = false,
     val sourcesError: String? = null,
     val askError: String? = null,
@@ -30,16 +32,26 @@ data class HomeUiState(
     val notesAllCount: Int = 0,
     val notesPinnedCount: Int = 0,
     val notesUnfiledCount: Int = 0,
+    val optionsNote: Note? = null,
     val userMessage: HomeUserMessage? = null,
 )
 
 enum class HomeUserMessage {
     ADD_SOURCE_NOT_SUPPORTED,
+    ASK_NOT_SUPPORTED,
+    ADD_NOTE_NOT_SUPPORTED,
+    ADD_NOTEBOOK_NOT_SUPPORTED,
+    EDIT_SOURCE_NOT_SUPPORTED,
+    DELETE_SOURCE_NOT_SUPPORTED,
+    VIEW_NOTE_NOT_SUPPORTED,
+    EDIT_NOTE_NOT_SUPPORTED,
+    CONVERT_NOTE_NOT_SUPPORTED,
+    DELETE_NOTE_NOT_SUPPORTED,
 }
 
 enum class HomeTab {
     SOURCES,
     ASK,
     NOTES,
-    ACCOUNT,
+    NOTEBOOK,
 }

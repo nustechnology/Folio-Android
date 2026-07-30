@@ -6,13 +6,14 @@ import kotlinx.coroutines.delay
 
 class NoteDataSource {
 
-    suspend fun fetchNotes(): NoteLibrary {
+    suspend fun fetchNotes(spaceId: String): NoteLibrary {
         delay(200)
+        val notes = sampleNotes.filter { it.spaceId == spaceId }
         return NoteLibrary(
-            notes = sampleNotes,
-            allCount = sampleNotes.size,
-            pinnedCount = sampleNotes.count { it.isPinned },
-            unfiledCount = sampleNotes.count { it.project.isNullOrBlank() },
+            notes = notes,
+            allCount = notes.size,
+            pinnedCount = notes.count { it.isPinned },
+            unfiledCount = notes.count { it.project.isNullOrBlank() },
         )
     }
 
@@ -24,6 +25,7 @@ class NoteDataSource {
                 project = "Urban Mobility",
                 updatedLabel = "Updated 1d ago",
                 isPinned = true,
+                spaceId = "2",
             ),
             Note(
                 id = "2",
@@ -31,6 +33,7 @@ class NoteDataSource {
                 project = "Dissertation Research",
                 updatedLabel = "Updated 2d ago",
                 isPinned = true,
+                spaceId = "1",
             ),
             Note(
                 id = "3",
@@ -38,6 +41,7 @@ class NoteDataSource {
                 project = "Dissertation Research",
                 updatedLabel = "Updated 3d ago",
                 isPinned = false,
+                spaceId = "1",
             ),
             Note(
                 id = "4",
@@ -45,6 +49,7 @@ class NoteDataSource {
                 project = "Urban Mobility",
                 updatedLabel = "Updated 4d ago",
                 isPinned = false,
+                spaceId = "2",
             ),
             Note(
                 id = "5",
@@ -52,6 +57,15 @@ class NoteDataSource {
                 project = null,
                 updatedLabel = "Updated 5d ago",
                 isPinned = false,
+                spaceId = "4",
+            ),
+            Note(
+                id = "6",
+                title = "Archival methods memo",
+                project = "History of Science",
+                updatedLabel = "Updated 6d ago",
+                isPinned = true,
+                spaceId = "3",
             ),
         )
     }

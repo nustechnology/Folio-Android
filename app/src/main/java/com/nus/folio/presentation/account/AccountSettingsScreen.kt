@@ -51,12 +51,14 @@ fun AccountSettingsScreen(
     displayName: String,
     email: String,
     onSignOut: () -> Unit,
+    onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     AccountSettingsContent(
         displayName = displayName,
         email = email,
         onSignOutClick = onSignOut,
+        onBackClick = onBackClick,
         modifier = modifier,
     )
 }
@@ -66,6 +68,7 @@ private fun AccountSettingsContent(
     displayName: String,
     email: String,
     onSignOutClick: () -> Unit,
+    onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -77,7 +80,7 @@ private fun AccountSettingsContent(
             .padding(horizontal = 20.dp)
             .padding(top = 12.dp, bottom = 28.dp),
     ) {
-        AccountHeaderRow()
+        AccountHeaderRow(onBackClick = onBackClick)
 
         Spacer(modifier = Modifier.height(36.dp))
 
@@ -98,12 +101,37 @@ private fun AccountSettingsContent(
 }
 
 @Composable
-private fun AccountHeaderRow() {
+private fun AccountHeaderRow(
+    onBackClick: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .border(1.dp, AccountCardBorder, CircleShape)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onBackClick,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_back),
+                contentDescription = stringResource(R.string.home_back),
+                tint = AccountTextPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
             Text(
                 text = stringResource(R.string.account_title),
                 fontFamily = CormorantGaramond,
@@ -218,6 +246,7 @@ private fun AccountSettingsContentPreview() {
             displayName = "Alex Nguyen",
             email = "alex@folio.app",
             onSignOutClick = {},
+            onBackClick = {},
         )
     }
 }

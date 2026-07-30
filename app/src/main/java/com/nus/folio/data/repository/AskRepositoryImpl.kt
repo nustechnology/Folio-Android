@@ -9,9 +9,9 @@ class AskRepositoryImpl(
     private val dataSource: AskDataSource,
 ) : AskRepository {
 
-    override suspend fun getAskTopics(): Result<List<AskTopic>> =
+    override suspend fun getAskTopics(spaceId: String): Result<List<AskTopic>> =
         try {
-            Result.success(dataSource.fetchAskTopics())
+            Result.success(dataSource.fetchAskTopics(spaceId))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

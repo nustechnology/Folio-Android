@@ -5,36 +5,47 @@ import kotlinx.coroutines.delay
 
 class AskDataSource {
 
-    suspend fun fetchAskTopics(): List<AskTopic> {
+    suspend fun fetchAskTopics(spaceId: String): List<AskTopic> {
         delay(200)
-        return sampleTopics
+        return sampleTopics.filter { it.spaceId == spaceId }
     }
 
     companion object {
         private val sampleTopics = listOf(
             AskTopic(
-                id = "1",
-                title = "Dissertation Research",
-                sourceCount = 128,
-                noteCount = 32,
+                id = "1a",
+                title = "Core dissertation arguments",
+                sourceCount = 4,
+                noteCount = 2,
+                spaceId = "1",
             ),
             AskTopic(
-                id = "2",
-                title = "Public Policy Insights",
-                sourceCount = 64,
-                noteCount = 18,
+                id = "1b",
+                title = "Turing and modern AI",
+                sourceCount = 3,
+                noteCount = 1,
+                spaceId = "1",
             ),
             AskTopic(
-                id = "3",
-                title = "History of Science",
-                sourceCount = 42,
-                noteCount = 12,
+                id = "2a",
+                title = "Policy brief themes",
+                sourceCount = 2,
+                noteCount = 2,
+                spaceId = "2",
             ),
             AskTopic(
-                id = "4",
-                title = "Teaching Prep",
-                sourceCount = 27,
-                noteCount = 8,
+                id = "3a",
+                title = "Scientific manuscripts timeline",
+                sourceCount = 1,
+                noteCount = 1,
+                spaceId = "3",
+            ),
+            AskTopic(
+                id = "4a",
+                title = "Week 7 lecture prep",
+                sourceCount = 2,
+                noteCount = 1,
+                spaceId = "4",
             ),
         )
     }

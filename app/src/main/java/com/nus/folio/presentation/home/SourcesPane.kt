@@ -1,9 +1,11 @@
 package com.nus.folio.presentation.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,26 +13,43 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
@@ -43,8 +62,6 @@ import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeCardBorder
-import com.nus.folio.ui.theme.HomeChipBorder
-import com.nus.folio.ui.theme.HomeChipSelected
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeStatusFailedBackground
 import com.nus.folio.ui.theme.HomeStatusFailedText
@@ -55,12 +72,19 @@ import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.HomeTypeBadgeBackground
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+
+private val SourceSwipeActionWidth = 64.dp
 
 @Composable
 internal fun SourcesPane(
     uiState: HomeUiState,
     onRetry: () -> Unit,
+    onAddClick: () -> Unit,
     onFilterSelected: (SourceFilter) -> Unit,
+    onSourceEditClick: (Source) -> Unit,
+    onSourceDeleteClick: (Source) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -99,11 +123,52 @@ internal fun SourcesPane(
             }
             uiState.visibleSources.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.home_empty_sources),
-                        color = HomeTextSecondary,
-                        fontSize = 14.sp,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .border(1.dp, HomeCardBorder, CircleShape)
+                                .clip(CircleShape)
+                                .background(HomeCardBackground),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_document),
+                                contentDescription = null,
+                                tint = HomeTextSecondary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.home_empty_sources),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = HomeTextPrimary,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.home_empty_sources_subtitle),
+                            fontSize = 14.sp,
+                            color = HomeTextSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = onAddClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = HomeHeader,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_empty_sources_action),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                 }
             }
             else -> {
@@ -113,7 +178,11 @@ internal fun SourcesPane(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(uiState.visibleSources, key = { it.id }) { source ->
-                        SourceCard(source = source)
+                        SourceCard(
+                            source = source,
+                            onEditClick = { onSourceEditClick(source) },
+                            onDeleteClick = { onSourceDeleteClick(source) },
+                        )
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -127,49 +196,37 @@ private fun HomeFilterChips(
     uiState: HomeUiState,
     onFilterSelected: (SourceFilter) -> Unit,
 ) {
+    val filters = listOf(
+        SourceFilter.ALL to stringResource(R.string.home_filter_all_label),
+        SourceFilter.PDF to stringResource(R.string.home_type_pdf),
+        SourceFilter.WEB to stringResource(R.string.home_type_web),
+        SourceFilter.TEXT to stringResource(R.string.home_type_text),
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        FilterChip(
-            label = stringResource(R.string.home_filter_all, uiState.allCount),
-            selected = uiState.selectedFilter == SourceFilter.ALL,
-            onClick = { onFilterSelected(SourceFilter.ALL) },
-        )
-        FilterChip(
-            label = stringResource(R.string.home_filter_papers, uiState.papersCount),
-            selected = uiState.selectedFilter == SourceFilter.PAPERS,
-            onClick = { onFilterSelected(SourceFilter.PAPERS) },
-        )
-        FilterChip(
-            label = stringResource(R.string.home_filter_books, uiState.booksCount),
-            selected = uiState.selectedFilter == SourceFilter.BOOKS,
-            onClick = { onFilterSelected(SourceFilter.BOOKS) },
-        )
-        FilterChip(
-            label = stringResource(R.string.home_filter_web, uiState.webCount),
-            selected = uiState.selectedFilter == SourceFilter.WEB,
-            onClick = { onFilterSelected(SourceFilter.WEB) },
-        )
-        FilterChip(
-            label = stringResource(R.string.home_filter_text, uiState.textCount),
-            selected = uiState.selectedFilter == SourceFilter.TEXT,
-            onClick = { onFilterSelected(SourceFilter.TEXT) },
-        )
+        filters.forEach { (filter, label) ->
+            SourceFilterChip(
+                label = label,
+                selected = uiState.selectedFilter == filter,
+                onClick = { onFilterSelected(filter) },
+            )
+        }
     }
 }
 
 @Composable
-private fun FilterChip(
+private fun SourceFilterChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) HomeChipSelected else Color.Transparent
-    val border = if (selected) Color.Transparent else HomeChipBorder
+    val background = if (selected) HomeSourceFilterChipSelected else HomeCardBackground
+    val border = if (selected) HomeSourceFilterChipSelectedBorder else HomeCardBorder
     Text(
         text = label,
         modifier = Modifier
@@ -181,7 +238,7 @@ private fun FilterChip(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         fontSize = 13.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         color = HomeTextPrimary,
@@ -189,11 +246,130 @@ private fun FilterChip(
 }
 
 @Composable
-private fun SourceCard(source: Source) {
-    Row(
+private fun SourceCard(
+    source: Source,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val revealWidthPx = with(density) { (SourceSwipeActionWidth * 2).toPx() }
+    val offsetX = remember { Animatable(0f) }
+    val editActionLabel = stringResource(R.string.source_swipe_edit)
+    val deleteActionLabel = stringResource(R.string.source_swipe_delete)
+
+    fun settle(targetOpen: Boolean) {
+        scope.launch {
+            offsetX.animateTo(
+                targetValue = if (targetOpen) -revealWidthPx else 0f,
+                animationSpec = tween(durationMillis = 220),
+            )
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(HomeCardShape)
+            .clip(HomeCardShape),
+    ) {
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .align(Alignment.CenterEnd)
+                .clearAndSetSemantics { },
+            horizontalArrangement = Arrangement.End,
+        ) {
+            SourceSwipeAction(
+                iconRes = R.drawable.ic_edit,
+                contentDescription = null,
+                background = HomeHeader,
+                contentColor = Color.White,
+                onClick = {
+                    settle(targetOpen = false)
+                    onEditClick()
+                },
+            )
+            SourceSwipeAction(
+                iconRes = R.drawable.ic_delete,
+                contentDescription = null,
+                background = HomeStatusFailedBackground,
+                contentColor = HomeStatusFailedText,
+                onClick = {
+                    settle(targetOpen = false)
+                    onDeleteClick()
+                },
+            )
+        }
+        SourceCardContent(
+            source = source,
+            modifier = Modifier
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(editActionLabel) {
+                            onEditClick()
+                            true
+                        },
+                        CustomAccessibilityAction(deleteActionLabel) {
+                            onDeleteClick()
+                            true
+                        },
+                    )
+                }
+                .pointerInput(revealWidthPx) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val shouldOpen = offsetX.value <= -revealWidthPx / 2f
+                            settle(targetOpen = shouldOpen)
+                        },
+                        onDragCancel = {
+                            settle(targetOpen = offsetX.value <= -revealWidthPx / 2f)
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            scope.launch {
+                                val next = (offsetX.value + dragAmount).coerceIn(-revealWidthPx, 0f)
+                                offsetX.snapTo(next)
+                            }
+                        },
+                    )
+                },
+        )
+    }
+}
+
+@Composable
+private fun SourceSwipeAction(
+    iconRes: Int,
+    contentDescription: String?,
+    background: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .width(SourceSwipeActionWidth)
+            .fillMaxHeight()
+            .background(background)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun SourceCardContent(
+    source: Source,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
             .background(HomeCardBackground)
             .border(1.dp, HomeCardBorder, HomeCardShape)
             .padding(horizontal = 12.dp, vertical = 14.dp),
@@ -279,11 +455,11 @@ private fun SourcesPanePreview() {
         SourcesPane(
             uiState = HomeUiState(
                 visibleSources = listOf(
-                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Added 2d ago", SourceStatus.READY),
-                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Added 2d ago", SourceStatus.READY),
-                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Added 2d ago", SourceStatus.PROCESSING),
-                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Added 2d ago", SourceStatus.FAILED),
-                    Source("5", "Attention Is All You Need", SourceType.PDF, "Added 2d ago", SourceStatus.READY),
+                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Added 2d ago", SourceStatus.PROCESSING, "1"),
+                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Added 2d ago", SourceStatus.FAILED, "1"),
+                    Source("5", "Attention Is All You Need", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
                 ),
                 allCount = 128,
                 papersCount = 80,
@@ -292,7 +468,10 @@ private fun SourcesPanePreview() {
                 textCount = 6,
             ),
             onRetry = {},
+            onAddClick = {},
             onFilterSelected = {},
+            onSourceEditClick = {},
+            onSourceDeleteClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }
@@ -305,7 +484,10 @@ private fun SourcesPaneEmptyPreview() {
         SourcesPane(
             uiState = HomeUiState(visibleSources = emptyList()),
             onRetry = {},
+            onAddClick = {},
             onFilterSelected = {},
+            onSourceEditClick = {},
+            onSourceDeleteClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }

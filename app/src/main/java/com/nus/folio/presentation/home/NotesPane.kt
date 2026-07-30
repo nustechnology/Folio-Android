@@ -19,8 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -31,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -53,7 +59,9 @@ import com.nus.folio.ui.theme.HomeTextSecondary
 internal fun NotesPane(
     uiState: HomeUiState,
     onRetry: () -> Unit,
+    onAddClick: () -> Unit,
     onFilterSelected: (NoteFilter) -> Unit,
+    onNoteMoreClick: (Note) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -63,10 +71,13 @@ internal fun NotesPane(
             onFilterSelected = onFilterSelected,
         )
         Spacer(modifier = Modifier.height(12.dp))
+        val contentModifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
 
         when {
             uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = contentModifier, contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = HomeHeader)
                 }
             }
@@ -91,22 +102,66 @@ internal fun NotesPane(
                 }
             }
             uiState.visibleNotes.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.home_empty_notes),
-                        color = HomeTextSecondary,
-                        fontSize = 14.sp,
-                    )
+                Box(modifier = contentModifier, contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .border(1.dp, HomeCardBorder, CircleShape)
+                                .clip(CircleShape)
+                                .background(HomeCardBackground),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_nav_notes),
+                                contentDescription = null,
+                                tint = HomeTextSecondary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.home_empty_notes),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = HomeTextPrimary,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.home_empty_notes_subtitle),
+                            fontSize = 14.sp,
+                            color = HomeTextSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = onAddClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = HomeHeader,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_empty_notes_action),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                 }
             }
             else -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = contentModifier,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(uiState.visibleNotes, key = { it.id }) { note ->
-                        NoteCard(note = note)
+                        NoteCard(
+                            note = note,
+                            onMoreClick = { onNoteMoreClick(note) },
+                        )
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -172,7 +227,10 @@ private fun NoteFilterChip(
 }
 
 @Composable
-private fun NoteCard(note: Note) {
+private fun NoteCard(
+    note: Note,
+    onMoreClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -207,12 +265,17 @@ private fun NoteCard(note: Note) {
                 color = HomeTextSecondary,
             )
         }
-        Icon(
-            painter = painterResource(R.drawable.ic_more),
-            contentDescription = null,
-            tint = HomeTextPrimary,
-            modifier = Modifier.size(20.dp),
-        )
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_more_vertical),
+                contentDescription = stringResource(R.string.home_notes_more),
+                tint = HomeTextPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
@@ -223,18 +286,20 @@ private fun NotesPanePreview() {
         NotesPane(
             uiState = HomeUiState(
                 visibleNotes = listOf(
-                    Note("1", "Research Question Draft", "Urban Mobility", "Updated 1d ago", true),
-                    Note("2", "Literature Review Outline", "Dissertation Research", "Updated 2d ago", true),
-                    Note("3", "Turing Test — Key Takeaways", "Dissertation Research", "Updated 3d ago", false),
-                    Note("4", "Policy Implications", "Urban Mobility", "Updated 4d ago", false),
-                    Note("5", "Teaching Prep — Week 7", "Urban Mobility", "Updated 5d ago", false),
+                    Note("1", "Research Question Draft", "Urban Mobility", "Updated 1d ago", true, "1"),
+                    Note("2", "Literature Review Outline", "Dissertation Research", "Updated 2d ago", true, "1"),
+                    Note("3", "Turing Test — Key Takeaways", "Dissertation Research", "Updated 3d ago", false, "1"),
+                    Note("4", "Policy Implications", "Urban Mobility", "Updated 4d ago", false, "1"),
+                    Note("5", "Teaching Prep — Week 7", "Urban Mobility", "Updated 5d ago", false, "1"),
                 ),
                 notesAllCount = 32,
                 notesPinnedCount = 8,
                 notesUnfiledCount = 4,
             ),
             onRetry = {},
+            onAddClick = {},
             onFilterSelected = {},
+            onNoteMoreClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }
@@ -252,7 +317,9 @@ private fun NotesPaneEmptyPreview() {
                 notesUnfiledCount = 0,
             ),
             onRetry = {},
+            onAddClick = {},
             onFilterSelected = {},
+            onNoteMoreClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }

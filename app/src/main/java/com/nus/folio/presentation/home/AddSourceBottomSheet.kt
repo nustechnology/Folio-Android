@@ -8,7 +8,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.view.WindowManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -31,7 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -69,6 +67,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
+import com.nus.folio.presentation.common.AnimatedModalSheet
+import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeChipBorder
@@ -85,7 +85,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val AddSourceContentHeight = 160.dp
-private val AddSourceScrim = Color.Black.copy(alpha = 0.32f)
 private val AddSourceButtonShape = RoundedCornerShape(12.dp)
 
 enum class AddSourceTab {
@@ -94,10 +93,29 @@ enum class AddSourceTab {
     TEXT,
 }
 
+sealed interface AddSourceDraft {
+    data class Pdf(
+        val displayName: String,
+        val uri: Uri?,
+    ) : AddSourceDraft
+
+    data class Web(
+        val url: String,
+        val title: String,
+        val author: String,
+    ) : AddSourceDraft
+
+    data class Text(
+        val title: String,
+        val author: String,
+        val content: String,
+    ) : AddSourceDraft
+}
+
 @Composable
 internal fun AddSourceBottomSheet(
     onDismiss: () -> Unit,
-    onSubmit: (AddSourceTab, Uri?, String) -> Unit = { _, _, _ -> },
+    onSubmit: (AddSourceDraft) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -139,41 +157,24 @@ internal fun AddSourceBottomSheet(
         }
     }
 
-    BackHandler(onBack = onDismiss)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AddSourceScrim)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                ),
+    AnimatedModalSheet(
+        onDismiss = onDismiss,
+        contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
+    ) { requestDismiss ->
+        AddSourceDragHandle()
+        AddSourceSheetContent(
+            selectedPdfUri = selectedPdfUri,
+            selectedPdfName = selectedPdfName,
+            onCancelClick = { requestDismiss() },
+            onUploadPdfClick = {
+                pdfPicker.launch(arrayOf("application/pdf"))
+            },
+            onSubmit = { draft ->
+                requestDismiss {
+                    onSubmit(draft)
+                }
+            },
         )
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(HomeSheetBackground, HomeSheetShape)
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 20.dp),
-        ) {
-            AddSourceDragHandle()
-            AddSourceSheetContent(
-                selectedPdfUri = selectedPdfUri,
-                selectedPdfName = selectedPdfName,
-                onCancelClick = onDismiss,
-                onUploadPdfClick = {
-                    pdfPicker.launch(arrayOf("application/pdf"))
-                },
-                onSubmit = { tab, textValue ->
-                    onSubmit(tab, selectedPdfUri, textValue)
-                },
-            )
-        }
     }
 }
 
@@ -189,7 +190,7 @@ private fun Context.findActivityOrNull(): Activity? {
 @Composable
 internal fun AddSourceSheetContent(
     onUploadPdfClick: () -> Unit,
-    onSubmit: (AddSourceTab, String) -> Unit,
+    onSubmit: (AddSourceDraft) -> Unit,
     onCancelClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     initialTab: AddSourceTab = AddSourceTab.PDF,
@@ -198,6 +199,10 @@ internal fun AddSourceSheetContent(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(initialTab) }
     var webUrl by rememberSaveable { mutableStateOf("") }
+    var webTitle by rememberSaveable { mutableStateOf("") }
+    var webAuthor by rememberSaveable { mutableStateOf("") }
+    var textTitle by rememberSaveable { mutableStateOf("") }
+    var textAuthor by rememberSaveable { mutableStateOf("") }
     var textContent by rememberSaveable { mutableStateOf("") }
     var webUrlTouched by rememberSaveable { mutableStateOf(false) }
 
@@ -207,18 +212,26 @@ internal fun AddSourceSheetContent(
     val canSubmit = when (selectedTab) {
         AddSourceTab.PDF -> selectedPdfUri != null
         AddSourceTab.WEB -> webUrlValid
-        AddSourceTab.TEXT -> textContent.isNotBlank()
+        AddSourceTab.TEXT -> textTitle.isNotBlank() && textContent.isNotBlank()
     }
 
     Column(modifier = modifier) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.add_source_title),
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            fontFamily = CormorantGaramond,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.SemiBold,
             color = HomeTextPrimary,
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.add_source_description),
+            fontSize = 14.sp,
+            color = HomeTextPrimary,
+            lineHeight = 20.sp,
+        )
+        Spacer(modifier = Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -243,52 +256,43 @@ internal fun AddSourceSheetContent(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(AddSourceContentHeight),
-        ) {
-            when (selectedTab) {
-                AddSourceTab.PDF -> PdfUploadZone(
-                    selectedFileName = selectedPdfName,
-                    onClick = onUploadPdfClick,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                AddSourceTab.WEB, AddSourceTab.TEXT -> {
-                    val isTextTab = selectedTab == AddSourceTab.TEXT
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        AddSourceTextField(
-                            value = if (isTextTab) textContent else webUrl,
-                            onValueChange = { value ->
-                                if (isTextTab) {
-                                    textContent = value
-                                } else {
-                                    webUrl = value
-                                    webUrlTouched = true
-                                }
-                            },
-                            hint = stringResource(
-                                if (isTextTab) {
-                                    R.string.add_source_text_hint
-                                } else {
-                                    R.string.add_source_web_hint
-                                },
-                            ),
-                            singleLine = !isTextTab,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                        )
-                        if (showWebError) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = stringResource(R.string.add_source_web_invalid_url),
-                                fontSize = 12.sp,
-                                color = HomeStatusFailedText,
-                            )
-                        }
-                    }
+        when (selectedTab) {
+            AddSourceTab.PDF -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(AddSourceContentHeight),
+                ) {
+                    PdfUploadZone(
+                        selectedFileName = selectedPdfName,
+                        onClick = onUploadPdfClick,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
+            }
+            AddSourceTab.WEB -> {
+                AddSourceWebFields(
+                    url = webUrl,
+                    title = webTitle,
+                    author = webAuthor,
+                    showUrlError = showWebError,
+                    onUrlChange = {
+                        webUrl = it
+                        webUrlTouched = true
+                    },
+                    onTitleChange = { webTitle = it },
+                    onAuthorChange = { webAuthor = it },
+                )
+            }
+            AddSourceTab.TEXT -> {
+                AddSourceTextFields(
+                    title = textTitle,
+                    author = textAuthor,
+                    content = textContent,
+                    onTitleChange = { textTitle = it },
+                    onAuthorChange = { textAuthor = it },
+                    onContentChange = { textContent = it },
+                )
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -303,12 +307,23 @@ internal fun AddSourceSheetContent(
             AddSourceSubmitButton(
                 enabled = canSubmit,
                 onClick = {
-                    val value = when (selectedTab) {
-                        AddSourceTab.PDF -> selectedPdfName.orEmpty()
-                        AddSourceTab.WEB -> webUrl.trim()
-                        AddSourceTab.TEXT -> textContent.trim()
+                    val draft = when (selectedTab) {
+                        AddSourceTab.PDF -> AddSourceDraft.Pdf(
+                            displayName = selectedPdfName.orEmpty(),
+                            uri = selectedPdfUri,
+                        )
+                        AddSourceTab.WEB -> AddSourceDraft.Web(
+                            url = webUrl.trim(),
+                            title = webTitle.trim(),
+                            author = webAuthor.trim(),
+                        )
+                        AddSourceTab.TEXT -> AddSourceDraft.Text(
+                            title = textTitle.trim(),
+                            author = textAuthor.trim(),
+                            content = textContent.trim(),
+                        )
                     }
-                    onSubmit(selectedTab, value)
+                    onSubmit(draft)
                 },
                 modifier = Modifier.weight(1f),
             )
@@ -317,7 +332,7 @@ internal fun AddSourceSheetContent(
 }
 
 @Composable
-private fun AddSourceCancelButton(
+internal fun AddSourceCancelButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -340,10 +355,11 @@ private fun AddSourceCancelButton(
 }
 
 @Composable
-private fun AddSourceSubmitButton(
+internal fun AddSourceSubmitButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    labelRes: Int = R.string.add_source_submit,
 ) {
     Button(
         onClick = onClick,
@@ -358,7 +374,7 @@ private fun AddSourceSubmitButton(
         ),
     ) {
         Text(
-            text = stringResource(R.string.add_source_submit),
+            text = stringResource(labelRes),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -366,7 +382,7 @@ private fun AddSourceSubmitButton(
 }
 
 @Composable
-private fun AddSourceDragHandle() {
+internal fun AddSourceDragHandle() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -493,12 +509,126 @@ private fun PdfUploadZone(
 }
 
 @Composable
+private fun AddSourceWebFields(
+    url: String,
+    title: String,
+    author: String,
+    showUrlError: Boolean,
+    onUrlChange: (String) -> Unit,
+    onTitleChange: (String) -> Unit,
+    onAuthorChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            AddSourceLabeledField(
+                label = stringResource(R.string.add_source_web_url_label),
+                value = url,
+                onValueChange = onUrlChange,
+                placeholder = stringResource(R.string.add_source_web_url_placeholder),
+            )
+            if (showUrlError) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.add_source_web_invalid_url),
+                    fontSize = 12.sp,
+                    color = HomeStatusFailedText,
+                )
+            }
+        }
+        AddSourceLabeledField(
+            label = stringResource(R.string.add_source_web_title_label),
+            value = title,
+            onValueChange = onTitleChange,
+            placeholder = stringResource(R.string.add_source_web_title_placeholder),
+        )
+        AddSourceLabeledField(
+            label = stringResource(R.string.add_source_web_author_label),
+            value = author,
+            onValueChange = onAuthorChange,
+            placeholder = stringResource(R.string.add_source_web_author_placeholder),
+        )
+    }
+}
+
+@Composable
+private fun AddSourceTextFields(
+    title: String,
+    author: String,
+    content: String,
+    onTitleChange: (String) -> Unit,
+    onAuthorChange: (String) -> Unit,
+    onContentChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        AddSourceLabeledField(
+            label = stringResource(R.string.add_source_text_title_label),
+            value = title,
+            onValueChange = onTitleChange,
+            placeholder = stringResource(R.string.add_source_text_title_placeholder),
+        )
+        AddSourceLabeledField(
+            label = stringResource(R.string.add_source_text_author_label),
+            value = author,
+            onValueChange = onAuthorChange,
+            placeholder = stringResource(R.string.add_source_text_author_placeholder),
+        )
+        AddSourceLabeledField(
+            label = stringResource(R.string.add_source_text_content_label),
+            value = content,
+            onValueChange = onContentChange,
+            placeholder = stringResource(R.string.add_source_text_content_placeholder),
+            singleLine = false,
+            fieldModifier = Modifier
+                .fillMaxWidth()
+                .height(AddSourceContentHeight),
+            showResizeHint = true,
+        )
+    }
+}
+
+@Composable
+private fun AddSourceLabeledField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = true,
+    fieldModifier: Modifier = Modifier.fillMaxWidth(),
+    showResizeHint: Boolean = false,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = HomeTextPrimary,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        AddSourceTextField(
+            value = value,
+            onValueChange = onValueChange,
+            hint = placeholder,
+            singleLine = singleLine,
+            showResizeHint = showResizeHint,
+            modifier = fieldModifier,
+        )
+    }
+}
+
+@Composable
 private fun AddSourceTextField(
     value: String,
     onValueChange: (String) -> Unit,
     hint: String,
     singleLine: Boolean,
     modifier: Modifier = Modifier,
+    showResizeHint: Boolean = false,
 ) {
     val scrollState = rememberScrollState()
     Box(
@@ -523,15 +653,57 @@ private fun AddSourceTextField(
             textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
             cursorBrush = SolidColor(HomeTextPrimary),
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .then(
                     if (singleLine) {
                         Modifier
                     } else {
-                        Modifier.verticalScroll(scrollState)
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
                     },
                 ),
         )
+        if (showResizeHint) {
+            AddSourceResizeHint(modifier = Modifier.align(Alignment.BottomEnd))
+        }
+    }
+}
+
+@Composable
+private fun AddSourceResizeHint(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(2.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(1.dp)
+                    .background(HomeChipBorder),
+            )
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(1.dp)
+                    .background(HomeChipBorder),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(1.dp)
+                    .background(HomeChipBorder),
+            )
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(1.dp)
+                    .background(HomeChipBorder),
+            )
+        }
     }
 }
 
@@ -554,9 +726,26 @@ private fun Uri.displayName(context: android.content.Context): String? {
         }
 }
 
-@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — PDF")
 @Composable
-private fun AddSourceSheetContentPreview() {
+private fun AddSourceSheetContentPdfPreview() {
+    AddSourceSheetContentPreviewScaffold(initialTab = AddSourceTab.PDF)
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — Web")
+@Composable
+private fun AddSourceSheetContentWebPreview() {
+    AddSourceSheetContentPreviewScaffold(initialTab = AddSourceTab.WEB)
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — Text")
+@Composable
+private fun AddSourceSheetContentTextPreview() {
+    AddSourceSheetContentPreviewScaffold(initialTab = AddSourceTab.TEXT)
+}
+
+@Composable
+private fun AddSourceSheetContentPreviewScaffold(initialTab: AddSourceTab) {
     FolioAndroidTheme(dynamicColor = false) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -569,7 +758,8 @@ private fun AddSourceSheetContentPreview() {
             ) {
                 AddSourceSheetContent(
                     onUploadPdfClick = {},
-                    onSubmit = { _, _ -> },
+                    onSubmit = {},
+                    initialTab = initialTab,
                 )
             }
         }

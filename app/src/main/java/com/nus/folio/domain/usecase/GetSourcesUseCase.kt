@@ -6,5 +6,6 @@ import com.nus.folio.domain.repository.SourceRepository
 class GetSourcesUseCase(
     private val repository: SourceRepository,
 ) {
-    suspend operator fun invoke(): Result<SourceLibrary> = repository.getSources()
+    suspend operator fun invoke(spaceId: String): Result<SourceLibrary> =
+        repository.getSources(spaceId)
 }

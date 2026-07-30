@@ -20,12 +20,20 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class HomeViewModel(
+    private val spaceId: String,
+    spaceTitle: String,
     private val getSourcesUseCase: GetSourcesUseCase,
     private val getAskTopicsUseCase: GetAskTopicsUseCase,
     private val getNotesUseCase: GetNotesUseCase,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(
+        HomeUiState(
+            spaceId = spaceId,
+            spaceTitle = spaceTitle,
+            isLoading = true,
+        ),
+    )
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
@@ -42,9 +50,9 @@ class HomeViewModel(
                 it.copy(isLoading = true, sourcesError = null, askError = null, notesError = null)
             }
 
-            val sourcesDeferred = async { getSourcesUseCase() }
-            val askDeferred = async { getAskTopicsUseCase() }
-            val notesDeferred = async { getNotesUseCase() }
+            val sourcesDeferred = async { getSourcesUseCase(spaceId) }
+            val askDeferred = async { getAskTopicsUseCase(spaceId) }
+            val notesDeferred = async { getNotesUseCase(spaceId) }
 
             val sourcesResult = sourcesDeferred.await()
             val askResult = askDeferred.await()
@@ -158,12 +166,87 @@ class HomeViewModel(
     }
 
     fun onAddSourceSubmit(
-        @Suppress("UNUSED_PARAMETER") tab: AddSourceTab,
-        @Suppress("UNUSED_PARAMETER") uriString: String?,
-        @Suppress("UNUSED_PARAMETER") value: String,
+        @Suppress("UNUSED_PARAMETER") draft: AddSourceDraft,
     ) {
         _uiState.update {
             it.copy(userMessage = HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED)
+        }
+    }
+
+    fun onAddNoteSubmit(
+        @Suppress("UNUSED_PARAMETER") title: String,
+        @Suppress("UNUSED_PARAMETER") content: String,
+    ) {
+        _uiState.update {
+            it.copy(userMessage = HomeUserMessage.ADD_NOTE_NOT_SUPPORTED)
+        }
+    }
+
+    fun onAskSubmit() {
+        _uiState.update {
+            it.copy(userMessage = HomeUserMessage.ASK_NOT_SUPPORTED)
+        }
+    }
+
+    fun onNotebookAddClick() {
+        _uiState.update {
+            it.copy(userMessage = HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED)
+        }
+    }
+
+    fun onEditSourceClick(source: Source) {
+        _uiState.update {
+            it.copy(userMessage = HomeUserMessage.EDIT_SOURCE_NOT_SUPPORTED)
+        }
+    }
+
+    fun onDeleteSourceClick(source: Source) {
+        _uiState.update {
+            it.copy(userMessage = HomeUserMessage.DELETE_SOURCE_NOT_SUPPORTED)
+        }
+    }
+
+    fun onNoteOptionsClick(note: Note) {
+        _uiState.update { it.copy(optionsNote = note) }
+    }
+
+    fun onNoteOptionsDismiss() {
+        _uiState.update { it.copy(optionsNote = null) }
+    }
+
+    fun onViewNoteClick() {
+        _uiState.update {
+            it.copy(
+                optionsNote = null,
+                userMessage = HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED,
+            )
+        }
+    }
+
+    fun onEditNoteClick() {
+        _uiState.update {
+            it.copy(
+                optionsNote = null,
+                userMessage = HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
+            )
+        }
+    }
+
+    fun onConvertNoteClick() {
+        _uiState.update {
+            it.copy(
+                optionsNote = null,
+                userMessage = HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED,
+            )
+        }
+    }
+
+    fun onDeleteNoteClick() {
+        _uiState.update {
+            it.copy(
+                optionsNote = null,
+                userMessage = HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED,
+            )
         }
     }
 
@@ -174,8 +257,7 @@ class HomeViewModel(
     private fun filterSources(state: HomeUiState): List<Source> {
         val byType = when (state.selectedFilter) {
             SourceFilter.ALL -> state.allSources
-            SourceFilter.PAPERS -> state.allSources.filter { it.type == SourceType.PDF }
-            SourceFilter.BOOKS -> state.allSources.filter { it.type == SourceType.BOOK }
+            SourceFilter.PDF -> state.allSources.filter { it.type == SourceType.PDF }
             SourceFilter.WEB -> state.allSources.filter { it.type == SourceType.WEB }
             SourceFilter.TEXT -> state.allSources.filter { it.type == SourceType.TEXT }
         }
@@ -205,13 +287,21 @@ class HomeViewModel(
     }
 
     class Factory(
+        private val spaceId: String,
+        private val spaceTitle: String,
         private val getSourcesUseCase: GetSourcesUseCase,
         private val getAskTopicsUseCase: GetAskTopicsUseCase,
         private val getNotesUseCase: GetNotesUseCase,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return HomeViewModel(getSourcesUseCase, getAskTopicsUseCase, getNotesUseCase) as T
+            return HomeViewModel(
+                spaceId = spaceId,
+                spaceTitle = spaceTitle,
+                getSourcesUseCase = getSourcesUseCase,
+                getAskTopicsUseCase = getAskTopicsUseCase,
+                getNotesUseCase = getNotesUseCase,
+            ) as T
         }
     }
 }
