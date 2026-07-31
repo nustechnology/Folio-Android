@@ -76,6 +76,7 @@
     <string name="home_type_book">BOOK</string>
     <string name="home_type_web">WEB</string>
     <string name="home_type_text">TEXT</string>
+    <string name="home_source_meta">%1$s · %2$s</string>
     <string name="home_status_ready">Ready</string>
     <string name="home_status_processing">Processing</string>
     <string name="home_status_failed">Failed</string>
@@ -123,6 +124,12 @@
     <string name="add_source_pdf_selected">Selected: %1$s</string>
     <string name="add_source_change_pdf">Tap to choose a different PDF</string>
     <string name="add_source_web_invalid_url">Enter a valid http:// or https:// URL.</string>
+    <string name="edit_source_title">Edit source</string>
+    <string name="edit_source_title_label">Title</string>
+    <string name="edit_source_title_placeholder">Source title</string>
+    <string name="edit_source_author_label">Author</string>
+    <string name="edit_source_author_placeholder">Author name</string>
+    <string name="edit_source_save">Save</string>
 
     <string name="add_space_title">New space</string>
     <string name="add_space_description">Create a focused archive for sources, notes and grounded answers.</string>
@@ -170,8 +177,20 @@
 
     <string name="source_swipe_edit">Edit</string>
     <string name="source_swipe_delete">Delete</string>
-    <string name="source_edit_not_supported">Editing sources is not supported yet.</string>
-    <string name="source_delete_not_supported">Deleting sources is not supported yet.</string>
+    <string name="source_delete_title">Delete source?</string>
+    <string name="source_delete_message">This permanently removes the source and its retrieval data.</string>
+    <string name="source_delete_confirm">Delete</string>
+
+    <string name="toast_source_created">Source added</string>
+    <string name="toast_source_updated">Source updated</string>
+    <string name="toast_source_deleted">Source deleted</string>
+    <string name="toast_source_update_failed">Could not update source. Please try again.</string>
+    <string name="toast_source_delete_failed">Could not delete source. Please try again.</string>
+    <string name="toast_note_created">Note saved</string>
+    <string name="toast_note_deleted">Note deleted</string>
+    <string name="toast_space_created">Space created</string>
+    <string name="toast_space_updated">Space renamed</string>
+    <string name="toast_space_deleted">Space deleted</string>
 
     <string name="space_brand_title">Folio</string>
     <string name="space_subtitle">My Spaces</string>

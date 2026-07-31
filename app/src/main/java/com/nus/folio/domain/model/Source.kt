@@ -4,6 +4,7 @@ data class Source(
     val id: String,
     val title: String,
     val type: SourceType,
+    val author: String,
     val addedLabel: String,
     val status: SourceStatus,
     val spaceId: String,

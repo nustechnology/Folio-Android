@@ -9,9 +9,11 @@ import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,8 @@ class HomeViewModel(
     private val spaceId: String,
     spaceTitle: String,
     private val getSourcesUseCase: GetSourcesUseCase,
+    private val updateSourceUseCase: UpdateSourceUseCase,
+    private val deleteSourceUseCase: DeleteSourceUseCase,
     private val getAskTopicsUseCase: GetAskTopicsUseCase,
     private val getNotesUseCase: GetNotesUseCase,
 ) : ViewModel() {
@@ -195,14 +199,75 @@ class HomeViewModel(
     }
 
     fun onEditSourceClick(source: Source) {
-        _uiState.update {
-            it.copy(userMessage = HomeUserMessage.EDIT_SOURCE_NOT_SUPPORTED)
+        _uiState.update { it.copy(editingSource = source) }
+    }
+
+    fun onEditSourceDismiss() {
+        _uiState.update { it.copy(editingSource = null) }
+    }
+
+    fun onEditSourceSave(title: String, author: String) {
+        if (title.isBlank()) return
+        val editing = _uiState.value.editingSource ?: return
+        val updated = editing.copy(title = title.trim(), author = author.trim())
+
+        viewModelScope.launch {
+            updateSourceUseCase(updated)
+                .onSuccess { saved ->
+                    _uiState.update { state ->
+                        val updatedSources = state.allSources.map { source ->
+                            if (source.id == saved.id) saved else source
+                        }
+                        val next = state.copy(
+                            allSources = updatedSources,
+                            editingSource = null,
+                            userMessage = HomeUserMessage.SOURCE_UPDATED,
+                        )
+                        next.copy(visibleSources = filterSources(next))
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(userMessage = HomeUserMessage.SOURCE_UPDATE_FAILED)
+                    }
+                }
         }
     }
 
     fun onDeleteSourceClick(source: Source) {
-        _uiState.update {
-            it.copy(userMessage = HomeUserMessage.DELETE_SOURCE_NOT_SUPPORTED)
+        _uiState.update { it.copy(deletingSource = source) }
+    }
+
+    fun onDeleteSourceDismiss() {
+        _uiState.update { it.copy(deletingSource = null) }
+    }
+
+    fun onDeleteSourceConfirm() {
+        val deleting = _uiState.value.deletingSource ?: return
+
+        viewModelScope.launch {
+            deleteSourceUseCase(deleting.id)
+                .onSuccess {
+                    _uiState.update { state ->
+                        val updatedSources = state.allSources.filterNot { it.id == deleting.id }
+                        val next = state.copy(
+                            allSources = updatedSources,
+                            allCount = updatedSources.size,
+                            papersCount = updatedSources.count { it.type == SourceType.PDF },
+                            booksCount = updatedSources.count { it.type == SourceType.BOOK },
+                            webCount = updatedSources.count { it.type == SourceType.WEB },
+                            textCount = updatedSources.count { it.type == SourceType.TEXT },
+                            deletingSource = null,
+                            userMessage = HomeUserMessage.SOURCE_DELETED,
+                        )
+                        next.copy(visibleSources = filterSources(next))
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(userMessage = HomeUserMessage.SOURCE_DELETE_FAILED)
+                    }
+                }
         }
     }
 
@@ -290,6 +355,8 @@ class HomeViewModel(
         private val spaceId: String,
         private val spaceTitle: String,
         private val getSourcesUseCase: GetSourcesUseCase,
+        private val updateSourceUseCase: UpdateSourceUseCase,
+        private val deleteSourceUseCase: DeleteSourceUseCase,
         private val getAskTopicsUseCase: GetAskTopicsUseCase,
         private val getNotesUseCase: GetNotesUseCase,
     ) : ViewModelProvider.Factory {
@@ -299,6 +366,8 @@ class HomeViewModel(
                 spaceId = spaceId,
                 spaceTitle = spaceTitle,
                 getSourcesUseCase = getSourcesUseCase,
+                updateSourceUseCase = updateSourceUseCase,
+                deleteSourceUseCase = deleteSourceUseCase,
                 getAskTopicsUseCase = getAskTopicsUseCase,
                 getNotesUseCase = getNotesUseCase,
             ) as T

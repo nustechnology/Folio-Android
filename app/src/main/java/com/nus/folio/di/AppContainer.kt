@@ -20,6 +20,7 @@ import com.nus.folio.domain.repository.NoteRepository
 import com.nus.folio.domain.repository.SourceRepository
 import com.nus.folio.domain.repository.SpaceRepository
 import com.nus.folio.domain.usecase.ClearAuthSessionUseCase
+import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetGreetingUseCase
@@ -30,6 +31,7 @@ import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
+import com.nus.folio.domain.usecase.UpdateSourceUseCase
 
 class AppContainer {
 
@@ -58,6 +60,14 @@ class AppContainer {
 
     val getSourcesUseCase: GetSourcesUseCase by lazy {
         GetSourcesUseCase(sourceRepository)
+    }
+
+    val updateSourceUseCase: UpdateSourceUseCase by lazy {
+        UpdateSourceUseCase(sourceRepository)
+    }
+
+    val deleteSourceUseCase: DeleteSourceUseCase by lazy {
+        DeleteSourceUseCase(sourceRepository)
     }
 
     private val askDataSource: AskDataSource by lazy { AskDataSource() }

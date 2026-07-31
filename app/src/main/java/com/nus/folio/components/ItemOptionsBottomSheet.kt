@@ -1,4 +1,4 @@
-package com.nus.folio.presentation.common
+package com.nus.folio.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -23,9 +23,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.presentation.home.AddSourceDragHandle
-import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
+import com.nus.folio.ui.theme.FolioSheetShape
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeChipBorder
 import com.nus.folio.ui.theme.HomeSheetBackground
@@ -182,7 +182,7 @@ private fun ItemOptionsSheetPreviewScaffold(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(HomeSheetBackground, HomeSheetShape)
+                .background(HomeSheetBackground, FolioSheetShape)
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 20.dp),
         ) {

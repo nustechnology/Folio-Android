@@ -67,7 +67,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
-import com.nus.folio.presentation.common.AnimatedModalSheet
+import com.nus.folio.components.AnimatedModalSheet
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
@@ -77,9 +77,10 @@ import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeSheetHandle
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeUploadDash
+import com.nus.folio.ui.theme.HomeStatusFailedBackground
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeUploadIcon
+import com.nus.folio.ui.theme.LoginCopper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -355,6 +356,29 @@ internal fun AddSourceCancelButton(
 }
 
 @Composable
+internal fun AddSourceDestructiveButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    labelRes: Int = R.string.source_delete_confirm,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(52.dp),
+        shape = AddSourceButtonShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = HomeStatusFailedBackground,
+            contentColor = HomeStatusFailedText,
+        ),
+    ) {
+        Text(
+            text = stringResource(labelRes),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
 internal fun AddSourceSubmitButton(
     enabled: Boolean,
     onClick: () -> Unit,
@@ -456,7 +480,7 @@ private fun PdfUploadZone(
                     ),
                 )
                 drawRoundRect(
-                    color = HomeUploadDash,
+                    color = HomeSheetInputBorder,
                     style = stroke,
                     cornerRadius = CornerRadius(16.dp.toPx()),
                 )
@@ -593,7 +617,7 @@ private fun AddSourceTextFields(
 }
 
 @Composable
-private fun AddSourceLabeledField(
+internal fun AddSourceLabeledField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -607,7 +631,7 @@ private fun AddSourceLabeledField(
             text = label,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            color = HomeTextPrimary,
+            color = LoginCopper,
         )
         Spacer(modifier = Modifier.height(8.dp))
         AddSourceTextField(
@@ -635,7 +659,7 @@ private fun AddSourceTextField(
         modifier = modifier
             .fillMaxWidth()
             .clip(HomeUploadZoneShape)
-            .border(1.dp, HomeChipBorder, HomeUploadZoneShape)
+            .border(1.dp, HomeSheetInputBorder, HomeUploadZoneShape)
             .background(HomeCardBackground)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {

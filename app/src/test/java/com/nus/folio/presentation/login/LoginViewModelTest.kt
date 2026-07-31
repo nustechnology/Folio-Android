@@ -21,6 +21,7 @@ class LoginViewModelTest {
     private fun createViewModel(isAuthAvailable: Boolean = true): LoginViewModel = LoginViewModel(
         signInUseCase = SignInUseCase(repository),
         isAuthAvailable = isAuthAvailable,
+        signInLoadingDelayMs = 0L,
     )
 
     @Test

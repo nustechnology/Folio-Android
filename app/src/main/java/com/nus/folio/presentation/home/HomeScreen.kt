@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,9 +38,13 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
-import com.nus.folio.presentation.common.ItemOptionAction
-import com.nus.folio.presentation.common.ItemOptionStyle
-import com.nus.folio.presentation.common.ItemOptionsBottomSheet
+import com.nus.folio.components.FolioToastHost
+import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.FolioToastVisuals
+import com.nus.folio.components.ItemOptionAction
+import com.nus.folio.components.ItemOptionStyle
+import com.nus.folio.components.ItemOptionsBottomSheet
+import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
@@ -59,6 +61,8 @@ fun HomeScreen(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
             getSourcesUseCase = LocalAppContainer.current.getSourcesUseCase,
+            updateSourceUseCase = LocalAppContainer.current.updateSourceUseCase,
+            deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
             getAskTopicsUseCase = LocalAppContainer.current.getAskTopicsUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
         ),
@@ -69,33 +73,11 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddSourceSheet by remember { mutableStateOf(false) }
     var showAddNoteSheet by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.userMessage) {
-        val message = when (uiState.userMessage) {
-            HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED ->
-                context.getString(R.string.home_add_source_not_supported)
-            HomeUserMessage.ASK_NOT_SUPPORTED ->
-                context.getString(R.string.home_ask_not_supported)
-            HomeUserMessage.ADD_NOTE_NOT_SUPPORTED ->
-                context.getString(R.string.add_note_not_supported)
-            HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED ->
-                context.getString(R.string.home_add_notebook_not_supported)
-            HomeUserMessage.EDIT_SOURCE_NOT_SUPPORTED ->
-                context.getString(R.string.source_edit_not_supported)
-            HomeUserMessage.DELETE_SOURCE_NOT_SUPPORTED ->
-                context.getString(R.string.source_delete_not_supported)
-            HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED ->
-                context.getString(R.string.note_view_not_supported)
-            HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED ->
-                context.getString(R.string.note_edit_not_supported)
-            HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED ->
-                context.getString(R.string.note_convert_not_supported)
-            HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED ->
-                context.getString(R.string.note_delete_not_supported)
-            null -> return@LaunchedEffect
-        }
-        snackbarHostState.showSnackbar(message)
+        val message = uiState.userMessage ?: return@LaunchedEffect
+        toastHostState.showToast(message.toHomeToastVisuals(context))
         viewModel.onUserMessageShown()
     }
 
@@ -127,12 +109,12 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        SnackbarHost(
-            hostState = snackbarHostState,
+        FolioToastHost(
+            hostState = toastHostState,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = HomeBottomNavClearance),
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
         )
 
         if (showAddSourceSheet) {
@@ -148,6 +130,21 @@ fun HomeScreen(
                 onSubmit = { title, content ->
                     viewModel.onAddNoteSubmit(title, content)
                 },
+            )
+        }
+
+        uiState.editingSource?.let { source ->
+            EditSourceBottomSheet(
+                source = source,
+                onDismiss = viewModel::onEditSourceDismiss,
+                onSave = viewModel::onEditSourceSave,
+            )
+        }
+
+        uiState.deletingSource?.let {
+            DeleteSourceBottomSheet(
+                onDismiss = viewModel::onDeleteSourceDismiss,
+                onConfirm = viewModel::onDeleteSourceConfirm,
             )
         }
 
@@ -291,11 +288,11 @@ private fun HomeContentPreview() {
         HomeContent(
             uiState = HomeUiState(
                 visibleSources = listOf(
-                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Added 2d ago", SourceStatus.PROCESSING, "1"),
-                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Added 2d ago", SourceStatus.FAILED, "1"),
-                    Source("5", "Attention Is All You Need", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1"),
+                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1"),
+                    Source("5", "Attention Is All You Need", SourceType.PDF, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1"),
                 ),
                 spaceTitle = "Dissertation Research",
                 allCount = 128,
@@ -411,4 +408,49 @@ private fun HomeNotesPreview() {
             onSignOut = {},
         )
     }
+}
+
+private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context): FolioToastVisuals {
+    val messageRes = when (this) {
+        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created
+        HomeUserMessage.SOURCE_UPDATED -> R.string.toast_source_updated
+        HomeUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
+        HomeUserMessage.SOURCE_UPDATE_FAILED -> R.string.toast_source_update_failed
+        HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
+        HomeUserMessage.NOTE_CREATED -> R.string.toast_note_created
+        HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
+        HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED -> R.string.home_add_source_not_supported
+        HomeUserMessage.ASK_NOT_SUPPORTED -> R.string.home_ask_not_supported
+        HomeUserMessage.ADD_NOTE_NOT_SUPPORTED -> R.string.add_note_not_supported
+        HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED -> R.string.home_add_notebook_not_supported
+        HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED -> R.string.note_view_not_supported
+        HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED -> R.string.note_edit_not_supported
+        HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED -> R.string.note_convert_not_supported
+        HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED -> R.string.note_delete_not_supported
+    }
+    val style = when (this) {
+        HomeUserMessage.SOURCE_CREATED,
+        HomeUserMessage.SOURCE_UPDATED,
+        HomeUserMessage.SOURCE_DELETED,
+        HomeUserMessage.NOTE_CREATED,
+        HomeUserMessage.NOTE_DELETED,
+        -> FolioToastStyle.Success
+        HomeUserMessage.ASK_NOT_SUPPORTED,
+        HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED,
+        -> FolioToastStyle.Info
+        HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED,
+        HomeUserMessage.ADD_NOTE_NOT_SUPPORTED,
+        HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED,
+        HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
+        HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED,
+        -> FolioToastStyle.Warning
+        HomeUserMessage.SOURCE_UPDATE_FAILED,
+        HomeUserMessage.SOURCE_DELETE_FAILED,
+        HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED,
+        -> FolioToastStyle.Error
+    }
+    return FolioToastVisuals(
+        message = context.getString(messageRes),
+        style = style,
+    )
 }
