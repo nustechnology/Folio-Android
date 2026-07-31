@@ -15,6 +15,9 @@ data class SpaceUiState(
 )
 
 enum class SpaceUserMessage {
+    SPACE_CREATED,
+    SPACE_UPDATED,
+    SPACE_DELETED,
     ADD_SPACE_NOT_SUPPORTED,
     RENAME_SPACE_NOT_SUPPORTED,
     DELETE_SPACE_NOT_SUPPORTED,

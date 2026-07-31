@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.usecase.SignInUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 class LoginViewModel(
     private val signInUseCase: SignInUseCase,
     private val isAuthAvailable: Boolean,
+    private val signInLoadingDelayMs: Long = SIGN_IN_LOADING_DELAY_MS,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -55,6 +57,7 @@ class LoginViewModel(
 
     private fun performSignIn(email: String, password: String) {
         launchExclusive {
+            val loadingStartedAt = System.currentTimeMillis()
             _uiState.update {
                 it.copy(isLoading = true, error = null, shouldNavigateToHome = false)
             }
@@ -64,6 +67,9 @@ class LoginViewModel(
 
             result
                 .onSuccess {
+                    val elapsed = System.currentTimeMillis() - loadingStartedAt
+                    delay((signInLoadingDelayMs - elapsed).coerceAtLeast(0))
+                    ensureActive()
                     _uiState.update { it.copy(isLoading = false, shouldNavigateToHome = true) }
                 }
                 .onFailure {
@@ -89,5 +95,9 @@ class LoginViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return LoginViewModel(signInUseCase, isAuthAvailable) as T
         }
+    }
+
+    private companion object {
+        const val SIGN_IN_LOADING_DELAY_MS = 2_000L
     }
 }

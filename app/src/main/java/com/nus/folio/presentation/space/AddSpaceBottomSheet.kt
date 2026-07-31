@@ -41,14 +41,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
-import com.nus.folio.presentation.common.AnimatedModalSheet
+import com.nus.folio.components.AnimatedModalSheet
 import com.nus.folio.presentation.home.AddSourceCancelButton
 import com.nus.folio.presentation.home.AddSourceDragHandle
 import com.nus.folio.presentation.home.AddSourceSubmitButton
-import com.nus.folio.presentation.home.HomeSheetShape
+import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
+import com.nus.folio.ui.theme.FolioSheetShape
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeChipBorder
 import com.nus.folio.ui.theme.HomeSheetBackground
@@ -162,7 +163,7 @@ private fun AddSpaceNameField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(HomeUploadZoneShape)
-                .border(1.dp, HomeChipBorder, HomeUploadZoneShape)
+                .border(1.dp, HomeSheetInputBorder, HomeUploadZoneShape)
                 .background(HomeCardBackground)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
@@ -204,7 +205,7 @@ private fun AddSpaceObjectiveField(
                 .fillMaxWidth()
                 .height(AddSpaceObjectiveHeight)
                 .clip(HomeUploadZoneShape)
-                .border(1.dp, HomeChipBorder, HomeUploadZoneShape)
+                .border(1.dp, HomeSheetInputBorder, HomeUploadZoneShape)
                 .background(HomeCardBackground)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
@@ -282,7 +283,7 @@ private fun AddSpaceSheetContentPreview() {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(HomeSheetBackground, HomeSheetShape)
+                    .background(HomeSheetBackground, FolioSheetShape)
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 20.dp),
             ) {

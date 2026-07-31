@@ -30,8 +30,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,9 +57,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.Space
-import com.nus.folio.presentation.common.ItemOptionAction
-import com.nus.folio.presentation.common.ItemOptionStyle
-import com.nus.folio.presentation.common.ItemOptionsBottomSheet
+import com.nus.folio.components.FolioToastHost
+import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.FolioToastVisuals
+import com.nus.folio.components.ItemOptionAction
+import com.nus.folio.components.ItemOptionStyle
+import com.nus.folio.components.ItemOptionsBottomSheet
+import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.ui.theme.AccountAvatar
 import com.nus.folio.ui.theme.AccountTextPrimary
 import com.nus.folio.ui.theme.CormorantGaramond
@@ -97,19 +99,11 @@ fun SpaceScreen(
         ).orEmpty()
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.userMessage) {
-        val message = when (uiState.userMessage) {
-            SpaceUserMessage.ADD_SPACE_NOT_SUPPORTED ->
-                context.getString(R.string.space_add_not_supported)
-            SpaceUserMessage.RENAME_SPACE_NOT_SUPPORTED ->
-                context.getString(R.string.space_rename_not_supported)
-            SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED ->
-                context.getString(R.string.space_delete_not_supported)
-            null -> return@LaunchedEffect
-        }
-        snackbarHostState.showSnackbar(message)
+        val message = uiState.userMessage ?: return@LaunchedEffect
+        toastHostState.showToast(message.toSpaceToastVisuals(context))
         viewModel.onUserMessageShown()
     }
 
@@ -134,12 +128,12 @@ fun SpaceScreen(
                 .padding(end = 20.dp, bottom = 24.dp),
         )
 
-        SnackbarHost(
-            hostState = snackbarHostState,
+        FolioToastHost(
+            hostState = toastHostState,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 88.dp),
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
         )
 
         if (uiState.showAddSheet) {
@@ -542,4 +536,30 @@ private fun SpaceContentEmptyPreview() {
             onSpaceMoreClick = {},
         )
     }
+}
+
+private fun SpaceUserMessage.toSpaceToastVisuals(context: android.content.Context): FolioToastVisuals {
+    val messageRes = when (this) {
+        SpaceUserMessage.SPACE_CREATED -> R.string.toast_space_created
+        SpaceUserMessage.SPACE_UPDATED -> R.string.toast_space_updated
+        SpaceUserMessage.SPACE_DELETED -> R.string.toast_space_deleted
+        SpaceUserMessage.ADD_SPACE_NOT_SUPPORTED -> R.string.space_add_not_supported
+        SpaceUserMessage.RENAME_SPACE_NOT_SUPPORTED -> R.string.space_rename_not_supported
+        SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED -> R.string.space_delete_not_supported
+    }
+    val style = when (this) {
+        SpaceUserMessage.SPACE_CREATED,
+        SpaceUserMessage.SPACE_UPDATED,
+        SpaceUserMessage.SPACE_DELETED,
+        -> FolioToastStyle.Success
+        SpaceUserMessage.ADD_SPACE_NOT_SUPPORTED,
+        SpaceUserMessage.RENAME_SPACE_NOT_SUPPORTED,
+        -> FolioToastStyle.Warning
+        SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED,
+        -> FolioToastStyle.Error
+    }
+    return FolioToastVisuals(
+        message = context.getString(messageRes),
+        style = style,
+    )
 }

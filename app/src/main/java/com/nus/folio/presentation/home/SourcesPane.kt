@@ -399,9 +399,15 @@ private fun SourceCardContent(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = source.addedLabel,
+                text = if (source.author.isBlank()) {
+                    source.addedLabel
+                } else {
+                    stringResource(R.string.home_source_meta, source.author, source.addedLabel)
+                },
                 fontSize = 12.sp,
                 color = HomeTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
@@ -455,11 +461,11 @@ private fun SourcesPanePreview() {
         SourcesPane(
             uiState = HomeUiState(
                 visibleSources = listOf(
-                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Added 2d ago", SourceStatus.PROCESSING, "1"),
-                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Added 2d ago", SourceStatus.FAILED, "1"),
-                    Source("5", "Attention Is All You Need", SourceType.PDF, "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1"),
+                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1"),
+                    Source("5", "Attention Is All You Need", SourceType.PDF, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1"),
                 ),
                 allCount = 128,
                 papersCount = 80,

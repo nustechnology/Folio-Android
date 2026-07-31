@@ -34,6 +34,30 @@ class SourceRepositoryImplTest {
         assertEquals(4, result.getOrNull()?.sources?.size)
         assertEquals(0, result.getOrNull()?.textCount)
     }
+
+    @Test
+    fun `updateSource returns success and persists`() = runTest {
+        val original = repository.getSources("1").getOrNull()!!.sources.first { it.id == "1" }
+        val updated = original.copy(title = "Updated title", author = "Updated author")
+
+        val result = repository.updateSource(updated)
+
+        assertTrue(result.isSuccess)
+        assertEquals(updated, result.getOrNull())
+        assertEquals(
+            updated,
+            repository.getSources("1").getOrNull()!!.sources.first { it.id == "1" },
+        )
+    }
+
+    @Test
+    fun `deleteSource returns success and persists`() = runTest {
+        val result = repository.deleteSource("1")
+
+        assertTrue(result.isSuccess)
+        assertEquals(3, repository.getSources("1").getOrNull()?.allCount)
+        assertTrue(repository.getSources("1").getOrNull()!!.sources.none { it.id == "1" })
+    }
 }
 
 class AskRepositoryImplTest {
