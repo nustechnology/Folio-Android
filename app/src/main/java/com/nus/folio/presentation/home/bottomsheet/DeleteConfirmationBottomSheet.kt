@@ -1,5 +1,6 @@
-package com.nus.folio.presentation.home
+package com.nus.folio.presentation.home.bottomsheet
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,21 +22,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
 
 @Composable
-internal fun DeleteSourceBottomSheet(
+internal fun DeleteConfirmationBottomSheet(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit = {},
+    @StringRes titleRes: Int = R.string.source_delete_title,
+    @StringRes messageRes: Int = R.string.source_delete_message,
 ) {
     AnimatedModalSheet(
         onDismiss = onDismiss,
     ) { requestDismiss ->
         AddSourceDragHandle()
-        DeleteSourceSheetContent(
+        DeleteConfirmationSheetContent(
+            titleRes = titleRes,
+            messageRes = messageRes,
             onCancelClick = { requestDismiss() },
             onConfirm = { requestDismiss { onConfirm() } },
         )
@@ -43,14 +49,16 @@ internal fun DeleteSourceBottomSheet(
 }
 
 @Composable
-internal fun DeleteSourceSheetContent(
+internal fun DeleteConfirmationSheetContent(
     onCancelClick: () -> Unit,
     onConfirm: () -> Unit,
+    @StringRes titleRes: Int = R.string.source_delete_title,
+    @StringRes messageRes: Int = R.string.source_delete_message,
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.source_delete_title),
+            text = stringResource(titleRes),
             fontFamily = CormorantGaramond,
             fontSize = 28.sp,
             fontWeight = FontWeight.SemiBold,
@@ -58,7 +66,7 @@ internal fun DeleteSourceSheetContent(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.source_delete_message),
+            text = stringResource(messageRes),
             fontSize = 14.sp,
             color = HomeTextPrimary,
             lineHeight = 20.sp,
@@ -82,7 +90,7 @@ internal fun DeleteSourceSheetContent(
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
 @Composable
-private fun DeleteSourceSheetContentPreview() {
+private fun DeleteSourceConfirmationPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -94,7 +102,32 @@ private fun DeleteSourceSheetContentPreview() {
                     .padding(bottom = 20.dp),
             ) {
                 AddSourceDragHandle()
-                DeleteSourceSheetContent(
+                DeleteConfirmationSheetContent(
+                    onCancelClick = {},
+                    onConfirm = {},
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
+@Composable
+private fun DeleteNoteConfirmationPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(HomeSheetBackground, HomeSheetShape)
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+            ) {
+                AddSourceDragHandle()
+                DeleteConfirmationSheetContent(
+                    titleRes = R.string.note_delete_title,
+                    messageRes = R.string.note_delete_message,
                     onCancelClick = {},
                     onConfirm = {},
                 )

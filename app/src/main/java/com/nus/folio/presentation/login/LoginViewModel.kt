@@ -32,7 +32,7 @@ class LoginViewModel(
     }
 
     fun onNavigationHandled() {
-        _uiState.update { it.copy(shouldNavigateToHome = false) }
+        _uiState.update { it.copy(shouldNavigateToHome = false, isLoading = false) }
     }
 
     fun onTogglePasswordVisibility() {
@@ -70,7 +70,7 @@ class LoginViewModel(
                     val elapsed = System.currentTimeMillis() - loadingStartedAt
                     delay((signInLoadingDelayMs - elapsed).coerceAtLeast(0))
                     ensureActive()
-                    _uiState.update { it.copy(isLoading = false, shouldNavigateToHome = true) }
+                    _uiState.update { it.copy(shouldNavigateToHome = true) }
                 }
                 .onFailure {
                     _uiState.update {

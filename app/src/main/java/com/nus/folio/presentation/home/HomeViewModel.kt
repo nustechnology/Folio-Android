@@ -9,12 +9,17 @@ import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +34,9 @@ class HomeViewModel(
     private val deleteSourceUseCase: DeleteSourceUseCase,
     private val getAskTopicsUseCase: GetAskTopicsUseCase,
     private val getNotesUseCase: GetNotesUseCase,
+    private val updateNoteUseCase: UpdateNoteUseCase,
+    private val deleteNoteUseCase: DeleteNoteUseCase,
+    private val openSourceDelayMs: Long = OPEN_SOURCE_DELAY_MS,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -39,6 +47,8 @@ class HomeViewModel(
         ),
     )
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    private var openSourceJob: Job? = null
 
     init {
         loadHome()
@@ -124,22 +134,6 @@ class HomeViewModel(
         }
     }
 
-    fun onSearchClick() {
-        _uiState.update { state ->
-            val showingSearch = !state.isSearchVisible
-            if (showingSearch) {
-                state.copy(isSearchVisible = true)
-            } else {
-                val next = state.copy(isSearchVisible = false, searchQuery = "")
-                next.copy(
-                    visibleSources = filterSources(next),
-                    visibleAskTopics = filterAskTopics(next),
-                    visibleNotes = filterNotes(next),
-                )
-            }
-        }
-    }
-
     fun onFilterSelected(filter: SourceFilter) {
         _uiState.update { state ->
             val next = state.copy(selectedFilter = filter)
@@ -158,7 +152,6 @@ class HomeViewModel(
         _uiState.update { state ->
             val next = state.copy(
                 selectedTab = tab,
-                isSearchVisible = false,
                 searchQuery = "",
             )
             next.copy(
@@ -169,11 +162,33 @@ class HomeViewModel(
         }
     }
 
-    fun onAddSourceSubmit(
-        @Suppress("UNUSED_PARAMETER") draft: AddSourceDraft,
-    ) {
+    fun onAddSourceSubmit(draft: AddSourceDraft) {
+        val title = when (draft) {
+            is AddSourceDraft.Pdf -> draft.displayName.ifBlank {
+                "Untitled PDF"
+            }
+            is AddSourceDraft.Web -> draft.title.ifBlank { draft.url }
+            is AddSourceDraft.Text -> draft.title
+        }
         _uiState.update {
-            it.copy(userMessage = HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED)
+            it.copy(processingSourceTitle = title)
+        }
+    }
+
+    fun onSourceProcessingDismiss() {
+        _uiState.update { it.copy(processingSourceTitle = null) }
+    }
+
+    fun onSourceProcessingOpenSource() {
+        _uiState.update { it.copy(processingSourceTitle = null) }
+    }
+
+    fun onSourceProcessingAsk() {
+        _uiState.update {
+            it.copy(
+                processingSourceTitle = null,
+                selectedTab = HomeTab.ASK,
+            )
         }
     }
 
@@ -192,14 +207,80 @@ class HomeViewModel(
         }
     }
 
-    fun onNotebookAddClick() {
+    fun onAskScopeSelected(scope: AskScope) {
+        _uiState.update { it.copy(askScope = scope) }
+    }
+
+    fun onAskSourceSelected(sourceId: String) {
         _uiState.update {
-            it.copy(userMessage = HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED)
+            it.copy(
+                askSourceId = sourceId,
+                askScope = AskScope.CURRENT_SOURCE,
+            )
+        }
+    }
+
+    fun onNotebookAddClick() {
+        _uiState.update { it.copy(showNotebookActions = true) }
+    }
+
+    fun onNotebookActionsDismiss() {
+        _uiState.update { it.copy(showNotebookActions = false) }
+    }
+
+    fun onCopyNotebookClick() {
+        _uiState.update {
+            it.copy(
+                showNotebookActions = false,
+                userMessage = HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED,
+            )
+        }
+    }
+
+    fun onExportNotebookClick() {
+        _uiState.update {
+            it.copy(
+                showNotebookActions = false,
+                showNotebookExport = true,
+            )
+        }
+    }
+
+    fun onNotebookExportDismiss() {
+        _uiState.update { it.copy(showNotebookExport = false) }
+    }
+
+    fun onNotebookExportConfirm(
+        @Suppress("UNUSED_PARAMETER") format: NotebookExportFormat,
+    ) {
+        _uiState.update {
+            it.copy(
+                showNotebookExport = false,
+                userMessage = HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED,
+            )
         }
     }
 
     fun onEditSourceClick(source: Source) {
         _uiState.update { it.copy(editingSource = source) }
+    }
+
+    fun onSourceClick(source: Source) {
+        if (_uiState.value.isOpeningSource) return
+        openSourceJob?.cancel()
+        openSourceJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(isOpeningSource = true, openSourceDetailId = null)
+            }
+            delay(openSourceDelayMs)
+            _uiState.update {
+                it.copy(isOpeningSource = false, openSourceDetailId = source.id)
+            }
+        }
+    }
+
+    fun onOpenSourceDetailHandled() {
+        _uiState.update { it.copy(openSourceDetailId = null) }
     }
 
     fun onEditSourceDismiss() {
@@ -271,6 +352,14 @@ class HomeViewModel(
         }
     }
 
+    fun onNoteClick(note: Note) {
+        _uiState.update { it.copy(viewingNote = note) }
+    }
+
+    fun onViewNoteDismiss() {
+        _uiState.update { it.copy(viewingNote = null) }
+    }
+
     fun onNoteOptionsClick(note: Note) {
         _uiState.update { it.copy(optionsNote = note) }
     }
@@ -280,38 +369,126 @@ class HomeViewModel(
     }
 
     fun onViewNoteClick() {
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val note = state.optionsNote ?: return@update state
+            state.copy(
                 optionsNote = null,
-                userMessage = HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED,
+                viewingNote = note,
             )
         }
     }
 
     fun onEditNoteClick() {
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val note = state.viewingNote ?: state.optionsNote ?: return@update state
+            state.copy(
                 optionsNote = null,
-                userMessage = HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
+                editingNote = note,
             )
         }
     }
 
+    fun onEditNoteDismiss() {
+        _uiState.update { it.copy(editingNote = null, viewingNote = null) }
+    }
+
+    fun onEditNoteSave(title: String, content: String) {
+        if (title.isBlank() || content.isBlank()) return
+        val editing = _uiState.value.editingNote ?: return
+        val updated = editing.copy(title = title.trim(), content = content.trim())
+
+        viewModelScope.launch {
+            updateNoteUseCase(updated)
+                .onSuccess { saved ->
+                    _uiState.update { state ->
+                        val updatedNotes = state.allNotes.map { note ->
+                            if (note.id == saved.id) saved else note
+                        }
+                        val next = state.copy(
+                            allNotes = updatedNotes,
+                            editingNote = null,
+                            viewingNote = if (state.viewingNote?.id == saved.id) saved else state.viewingNote,
+                            userMessage = HomeUserMessage.NOTE_UPDATED,
+                        )
+                        next.copy(visibleNotes = filterNotes(next))
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(userMessage = HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED)
+                    }
+                }
+        }
+    }
+
     fun onConvertNoteClick() {
+        _uiState.update { state ->
+            val note = state.viewingNote ?: state.optionsNote ?: return@update state
+            state.copy(
+                optionsNote = null,
+                convertingNote = note,
+            )
+        }
+    }
+
+    fun onConvertNoteDismiss() {
+        _uiState.update { it.copy(convertingNote = null, viewingNote = null) }
+    }
+
+    fun onConvertNoteCreate(
+        @Suppress("UNUSED_PARAMETER") title: String,
+        @Suppress("UNUSED_PARAMETER") snapshot: String,
+    ) {
         _uiState.update {
             it.copy(
-                optionsNote = null,
+                convertingNote = null,
+                viewingNote = null,
                 userMessage = HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED,
             )
         }
     }
 
     fun onDeleteNoteClick() {
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val note = state.editingNote ?: state.optionsNote ?: return@update state
+            state.copy(
                 optionsNote = null,
-                userMessage = HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED,
+                editingNote = null,
+                deletingNote = note,
             )
+        }
+    }
+
+    fun onDeleteNoteDismiss() {
+        _uiState.update { it.copy(deletingNote = null, viewingNote = null) }
+    }
+
+    fun onDeleteNoteConfirm() {
+        val deleting = _uiState.value.deletingNote ?: return
+
+        viewModelScope.launch {
+            deleteNoteUseCase(deleting.id)
+                .onSuccess {
+                    _uiState.update { state ->
+                        val updatedNotes = state.allNotes.filterNot { it.id == deleting.id }
+                        val next = state.copy(
+                            allNotes = updatedNotes,
+                            notesAllCount = updatedNotes.size,
+                            notesPinnedCount = updatedNotes.count { it.isPinned },
+                            notesUnfiledCount = updatedNotes.count { it.project.isNullOrBlank() },
+                            deletingNote = null,
+                            viewingNote = null,
+                            editingNote = null,
+                            userMessage = HomeUserMessage.NOTE_DELETED,
+                        )
+                        next.copy(visibleNotes = filterNotes(next))
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(userMessage = HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED)
+                    }
+                }
         }
     }
 
@@ -347,6 +524,7 @@ class HomeViewModel(
         if (query.isEmpty()) return byFilter
         return byFilter.filter { note ->
             note.title.contains(query, ignoreCase = true) ||
+                note.content.contains(query, ignoreCase = true) ||
                 note.project.orEmpty().contains(query, ignoreCase = true)
         }
     }
@@ -359,6 +537,8 @@ class HomeViewModel(
         private val deleteSourceUseCase: DeleteSourceUseCase,
         private val getAskTopicsUseCase: GetAskTopicsUseCase,
         private val getNotesUseCase: GetNotesUseCase,
+        private val updateNoteUseCase: UpdateNoteUseCase,
+        private val deleteNoteUseCase: DeleteNoteUseCase,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -370,7 +550,13 @@ class HomeViewModel(
                 deleteSourceUseCase = deleteSourceUseCase,
                 getAskTopicsUseCase = getAskTopicsUseCase,
                 getNotesUseCase = getNotesUseCase,
+                updateNoteUseCase = updateNoteUseCase,
+                deleteNoteUseCase = deleteNoteUseCase,
             ) as T
         }
+    }
+
+    companion object {
+        private const val OPEN_SOURCE_DELAY_MS = 1_500L
     }
 }

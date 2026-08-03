@@ -37,6 +37,7 @@
     <string name="signup_error_sign_up_failed">Could not create account. Please try again.</string>
     <string name="signup_show_password">Show password</string>
     <string name="signup_hide_password">Hide password</string>
+    <string name="signup_loading">Creating account</string>
 
     <string name="reset_password_back">Back</string>
     <string name="reset_password_headline">Reset password</string>
@@ -60,7 +61,11 @@
     <string name="home_notebook_title">Notebook</string>
     <string name="home_notebook_subtitle">Research workspace</string>
     <string name="home_search_sources">Search sources</string>
+    <string name="home_search_notes">Search notes</string>
     <string name="home_search">Search</string>
+    <string name="search_clear">Clear search</string>
+    <string name="search_empty_title">No results found</string>
+    <string name="search_empty_message">Try a different search term or clear your search.</string>
     <string name="home_back">Back</string>
     <string name="home_add">Add</string>
     <string name="home_add_source_not_supported">Adding sources is not supported yet.</string>
@@ -94,6 +99,12 @@
     <string name="home_ask_suggestion_2">Where does the evidence disagree?</string>
     <string name="home_ask_suggestion_3">Summarize the current evidence.</string>
     <string name="home_ask_not_supported">Asking questions is not supported yet.</string>
+    <string name="conversation_title">Conversation</string>
+    <string name="conversation_new">New conversation</string>
+    <string name="answer_scope_title">Answer scope</string>
+    <string name="answer_scope_entire_space">Entire space</string>
+    <string name="answer_scope_entire_space_subtitle">%1$d sources</string>
+    <string name="answer_scope_current_source">Current source</string>
     <string name="home_error_load_failed">Could not load sources. Please try again.</string>
     <string name="home_error_generic">Something went wrong. Please try again.</string>
     <string name="home_retry">Retry</string>
@@ -120,6 +131,14 @@
     <string name="add_source_text_content_label">Content</string>
     <string name="add_source_text_content_placeholder">Frontline coordinators described repeated entry across scheduling, incident, and compliance systems.</string>
     <string name="add_source_submit">Add source</string>
+    <string name="source_processing_title">Processing</string>
+    <string name="source_processing_step_added">Added</string>
+    <string name="source_processing_step_extract">Extract text</string>
+    <string name="source_processing_step_index">Index evidence</string>
+    <string name="source_processing_step_ready">Ready</string>
+    <string name="source_processing_percent">%d%%</string>
+    <string name="source_processing_open">Open source</string>
+
     <string name="add_source_cancel">Cancel</string>
     <string name="add_source_pdf_selected">Selected: %1$s</string>
     <string name="add_source_change_pdf">Tap to choose a different PDF</string>
@@ -149,12 +168,24 @@
     <string name="add_note_content_placeholder">What stood out, and why does it matter for this research?</string>
     <string name="add_note_submit">Save</string>
     <string name="add_note_not_supported">Adding notes is not supported yet.</string>
+    <string name="edit_note_title">Edit note</string>
+    <string name="edit_note_description">Update the title and content for this note.</string>
 
     <string name="home_empty_ask">No topics match your search.</string>
     <string name="home_empty_notes">No notes yet</string>
     <string name="home_empty_notes_subtitle">Create a note to start capturing ideas.</string>
     <string name="home_empty_notes_action">Add note</string>
     <string name="home_placeholder_notebook">Notebook coming soon</string>
+    <string name="notebook_actions_title">Notebook actions</string>
+    <string name="notebook_actions_copy">Copy notebook</string>
+    <string name="notebook_actions_export">Export</string>
+    <string name="notebook_export_title">Export notebook</string>
+    <string name="notebook_export_markdown">Markdown</string>
+    <string name="notebook_export_markdown_subtitle">.md file</string>
+    <string name="notebook_export_print_pdf">Print / PDF</string>
+    <string name="notebook_export_print_pdf_subtitle">System print</string>
+    <string name="notebook_copy_not_supported">Copying notebooks is not supported yet.</string>
+    <string name="notebook_export_not_supported">Exporting notebooks is not supported yet.</string>
     <string name="home_add_notebook_not_supported">Adding notebooks is not supported yet.</string>
     <string name="home_ask_meta">%1$d sources · %2$d notes</string>
     <string name="home_ask_more">More options</string>
@@ -163,16 +194,36 @@
     <string name="note_options_edit">Edit</string>
     <string name="note_options_convert">Convert to source</string>
     <string name="note_options_delete">Delete</string>
+    <string name="note_view_close">Close</string>
     <string name="note_view_not_supported">Viewing notes is not supported yet.</string>
     <string name="note_edit_not_supported">Editing notes is not supported yet.</string>
+    <string name="note_convert_title">Convert to source</string>
+    <string name="note_convert_banner_lead">A fixed snapshot will be created.</string>
+    <string name="note_convert_banner_rest">Later note edits will not change the source.</string>
+    <string name="note_convert_source_title">Source title</string>
+    <string name="note_convert_snapshot">Snapshot</string>
+    <string name="note_convert_create">Create source</string>
     <string name="note_convert_not_supported">Converting notes is not supported yet.</string>
+    <string name="note_delete_title">Delete notes?</string>
+    <string name="note_delete_message">This does not change the notebook or an existing source snapshot.</string>
     <string name="note_delete_not_supported">Deleting notes is not supported yet.</string>
     <string name="home_notes_unfiled">Unfiled</string>
+    <string name="home_note_badge_user_created">User-created</string>
+    <string name="home_note_badge_saved_answer">Saved answer</string>
+    <string name="home_note_badge_citations">%d citations</string>
 
     <string name="account_title">Profile</string>
     <string name="account_subtitle">Account settings</string>
     <string name="account_search">Search</string>
     <string name="account_sign_out">Sign out</string>
+    <string name="account_profile_settings">Profile settings</string>
+    <string name="account_security">Security</string>
+    <string name="account_privacy_data">Privacy &amp; data</string>
+    <string name="account_export_data">Export account data</string>
+    <string name="account_profile_settings_not_supported">Profile settings are not supported yet.</string>
+    <string name="account_security_not_supported">Security settings are not supported yet.</string>
+    <string name="account_privacy_data_not_supported">Privacy &amp; data settings are not supported yet.</string>
+    <string name="account_export_data_not_supported">Exporting account data is not supported yet.</string>
     <string name="account_navigate">Navigate</string>
 
     <string name="source_swipe_edit">Edit</string>
@@ -180,6 +231,14 @@
     <string name="source_delete_title">Delete source?</string>
     <string name="source_delete_message">This permanently removes the source and its retrieval data.</string>
     <string name="source_delete_confirm">Delete</string>
+    <string name="source_detail_title">Source</string>
+    <string name="source_detail_processing">This source is still being processed. Check back soon.</string>
+    <string name="source_detail_failed">We couldn\u2019t extract content from this source.</string>
+    <string name="source_detail_sheet_label">Sheet</string>
+    <string name="source_detail_ask_source">Ask source</string>
+    <string name="source_detail_open_original">Open original ↗</string>
+    <string name="source_detail_open_original_no_app">No app found to open this file.</string>
+    <string name="source_detail_open_original_failed">Could not open the original file.</string>
 
     <string name="toast_source_created">Source added</string>
     <string name="toast_source_updated">Source updated</string>
@@ -187,6 +246,7 @@
     <string name="toast_source_update_failed">Could not update source. Please try again.</string>
     <string name="toast_source_delete_failed">Could not delete source. Please try again.</string>
     <string name="toast_note_created">Note saved</string>
+    <string name="toast_note_updated">Note updated</string>
     <string name="toast_note_deleted">Note deleted</string>
     <string name="toast_space_created">Space created</string>
     <string name="toast_space_updated">Space renamed</string>
@@ -196,16 +256,22 @@
     <string name="space_subtitle">My Spaces</string>
     <string name="space_search">Search</string>
     <string name="space_search_hint">Search spaces</string>
-    <string name="space_add">Add space</string>
-    <string name="space_account">Account settings</string>
+    <string name="space_add">Create space</string>
+    <string name="space_account">Account</string>
+    <string name="space_account_sheet_title">Account</string>
+    <string name="space_account_open_settings">Account settings</string>
     <string name="space_add_not_supported">Adding spaces is not supported yet.</string>
     <string name="space_meta">%1$d sources · %2$d notes</string>
     <string name="space_more">More options</string>
     <string name="space_options_rename">Rename</string>
     <string name="space_options_delete">Delete space</string>
+    <string name="rename_space_title">Rename space</string>
     <string name="space_rename_not_supported">Renaming spaces is not supported yet.</string>
     <string name="space_delete_not_supported">Deleting spaces is not supported yet.</string>
     <string name="space_empty">No spaces match your search.</string>
+    <string name="space_empty_no_spaces">No spaces yet</string>
+    <string name="space_empty_no_spaces_subtitle">Create a space to organize your sources and notes.</string>
+    <string name="space_empty_no_spaces_action">Create space</string>
     <string name="space_retry">Retry</string>
     <string name="space_error_load_failed">Could not load spaces. Please try again.</string>
 </resources>

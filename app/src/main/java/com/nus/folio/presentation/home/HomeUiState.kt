@@ -1,5 +1,6 @@
 package com.nus.folio.presentation.home
 
+import com.nus.folio.R
 import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
@@ -14,7 +15,6 @@ data class HomeUiState(
     val askError: String? = null,
     val notesError: String? = null,
     val searchQuery: String = "",
-    val isSearchVisible: Boolean = false,
     val selectedFilter: SourceFilter = SourceFilter.ALL,
     val selectedNoteFilter: NoteFilter = NoteFilter.ALL,
     val selectedTab: HomeTab = HomeTab.SOURCES,
@@ -33,10 +33,36 @@ data class HomeUiState(
     val notesPinnedCount: Int = 0,
     val notesUnfiledCount: Int = 0,
     val optionsNote: Note? = null,
+    val viewingNote: Note? = null,
+    val editingNote: Note? = null,
+    val convertingNote: Note? = null,
+    val deletingNote: Note? = null,
     val editingSource: Source? = null,
     val deletingSource: Source? = null,
+    val showNotebookActions: Boolean = false,
+    val showNotebookExport: Boolean = false,
+    val processingSourceTitle: String? = null,
+    val isOpeningSource: Boolean = false,
+    val openSourceDetailId: String? = null,
     val userMessage: HomeUserMessage? = null,
+    val askScope: AskScope = AskScope.CURRENT_SOURCE,
+    val askSourceId: String? = null,
 )
+
+enum class AskScope {
+    ENTIRE_SPACE,
+    CURRENT_SOURCE,
+}
+
+fun HomeUiState.askSourceTitle(): String =
+    askSourceId
+        ?.let { id -> allSources.find { it.id == id }?.title }
+        ?: allSources.firstOrNull()?.title.orEmpty()
+
+fun HomeUiState.askScopeChipLabelRes(): Int = when (askScope) {
+    AskScope.ENTIRE_SPACE -> R.string.answer_scope_entire_space
+    AskScope.CURRENT_SOURCE -> R.string.home_ask_current_source
+}
 
 enum class HomeUserMessage {
     SOURCE_CREATED,
@@ -45,11 +71,14 @@ enum class HomeUserMessage {
     SOURCE_UPDATE_FAILED,
     SOURCE_DELETE_FAILED,
     NOTE_CREATED,
+    NOTE_UPDATED,
     NOTE_DELETED,
     ADD_SOURCE_NOT_SUPPORTED,
     ASK_NOT_SUPPORTED,
     ADD_NOTE_NOT_SUPPORTED,
     ADD_NOTEBOOK_NOT_SUPPORTED,
+    COPY_NOTEBOOK_NOT_SUPPORTED,
+    EXPORT_NOTEBOOK_NOT_SUPPORTED,
     VIEW_NOTE_NOT_SUPPORTED,
     EDIT_NOTE_NOT_SUPPORTED,
     CONVERT_NOTE_NOT_SUPPORTED,
@@ -61,4 +90,9 @@ enum class HomeTab {
     ASK,
     NOTES,
     NOTEBOOK,
+}
+
+enum class NotebookExportFormat {
+    MARKDOWN,
+    PRINT_PDF,
 }

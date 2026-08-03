@@ -2,37 +2,128 @@ package com.nus.folio.testing
 
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
+import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.repository.NoteRepository
 
 class FakeNoteRepository : NoteRepository {
 
     var getNotesResult: Result<NoteLibrary>? = null
+    var updateNoteResult: Result<Note>? = null
+    var deleteNoteResult: Result<Unit>? = null
     var getNotesCallCount = 0
+    var updateNoteCallCount = 0
+    var deleteNoteCallCount = 0
     var lastSpaceId: String? = null
+    var lastUpdatedNote: Note? = null
+    var lastDeletedNoteId: String? = null
+
+    private val notes: MutableList<Note> = sampleNotes.toMutableList()
 
     override suspend fun getNotes(spaceId: String): Result<NoteLibrary> {
         getNotesCallCount++
         lastSpaceId = spaceId
         getNotesResult?.let { return it }
-        val notes = sampleNotes.filter { it.spaceId == spaceId }
-        return Result.success(
-            NoteLibrary(
-                notes = notes,
-                allCount = notes.size,
-                pinnedCount = notes.count { it.isPinned },
-                unfiledCount = notes.count { it.project.isNullOrBlank() },
-            ),
+        return Result.success(libraryFor(spaceId))
+    }
+
+    override suspend fun updateNote(note: Note): Result<Note> {
+        updateNoteCallCount++
+        lastUpdatedNote = note
+        updateNoteResult?.let { return it }
+        val index = notes.indexOfFirst { it.id == note.id }
+        if (index < 0) {
+            return Result.failure(NoSuchElementException("Note not found: ${note.id}"))
+        }
+        notes[index] = note
+        return Result.success(note)
+    }
+
+    override suspend fun deleteNote(noteId: String): Result<Unit> {
+        deleteNoteCallCount++
+        lastDeletedNoteId = noteId
+        deleteNoteResult?.let { return it }
+        val removed = notes.removeAll { it.id == noteId }
+        if (!removed) {
+            return Result.failure(NoSuchElementException("Note not found: $noteId"))
+        }
+        return Result.success(Unit)
+    }
+
+    private fun libraryFor(spaceId: String): NoteLibrary {
+        val scoped = notes.filter { it.spaceId == spaceId }
+        return NoteLibrary(
+            notes = scoped,
+            allCount = scoped.size,
+            pinnedCount = scoped.count { it.isPinned },
+            unfiledCount = scoped.count { it.project.isNullOrBlank() },
         )
     }
 
     companion object {
-        private val sampleNotes = listOf(
-            Note("1", "Research Question Draft", "Urban Mobility", "Updated 1d ago", true, "2"),
-            Note("2", "Literature Review Outline", "Dissertation Research", "Updated 2d ago", true, "1"),
-            Note("3", "Turing Test — Key Takeaways", "Dissertation Research", "Updated 3d ago", false, "1"),
-            Note("4", "Policy Implications", "Urban Mobility", "Updated 4d ago", false, "2"),
-            Note("5", "Teaching Prep — Week 7", null, "Updated 5d ago", false, "4"),
-            Note("6", "Archival methods memo", "History of Science", "Updated 6d ago", true, "3"),
+        val sampleNotes = listOf(
+            Note(
+                id = "1",
+                title = "Research Question Draft",
+                content = "How do informal transit networks reshape access in mid-sized cities?",
+                project = "Urban Mobility",
+                updatedLabel = "Updated 1d ago",
+                isPinned = true,
+                spaceId = "2",
+                origin = NoteOrigin.USER_CREATED,
+            ),
+            Note(
+                id = "2",
+                title = "Literature Review Outline",
+                content = "Map debates on machine intelligence, imitation games, and measurement.",
+                project = "Dissertation Research",
+                updatedLabel = "Updated 2d ago",
+                isPinned = true,
+                spaceId = "1",
+                origin = NoteOrigin.USER_CREATED,
+            ),
+            Note(
+                id = "3",
+                title = "Turing Test — Key Takeaways",
+                content = "The imitation game reframes intelligence as observable linguistic behavior.",
+                project = "Dissertation Research",
+                updatedLabel = "Updated 3d ago",
+                isPinned = false,
+                spaceId = "1",
+                origin = NoteOrigin.SAVED_ANSWER,
+                citationCount = 4,
+            ),
+            Note(
+                id = "4",
+                title = "Policy Implications",
+                content = "Zoning reform alone underestimates last-mile coordination costs.",
+                project = "Urban Mobility",
+                updatedLabel = "Updated 4d ago",
+                isPinned = false,
+                spaceId = "2",
+                origin = NoteOrigin.SAVED_ANSWER,
+                citationCount = 2,
+            ),
+            Note(
+                id = "5",
+                title = "Teaching Prep — Week 7",
+                content = "Seminar prompts on archival silence and source criticism.",
+                project = null,
+                updatedLabel = "Updated 5d ago",
+                isPinned = false,
+                spaceId = "4",
+                origin = NoteOrigin.USER_CREATED,
+            ),
+            Note(
+                id = "6",
+                title = "Archival methods memo",
+                content = "Prioritize provenance notes before transcription decisions.",
+                project = "History of Science",
+                updatedLabel = "Updated 6d ago",
+                isPinned = true,
+                spaceId = "3",
+                origin = NoteOrigin.SAVED_ANSWER,
+                citationCount = 6,
+            ),
         )
 
         val sampleLibrary = NoteLibrary(

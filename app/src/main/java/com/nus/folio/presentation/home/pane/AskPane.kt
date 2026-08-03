@@ -1,5 +1,17 @@
-package com.nus.folio.presentation.home
+package com.nus.folio.presentation.home.pane
 
+import com.nus.folio.presentation.home.AskButtonBackground
+import com.nus.folio.presentation.home.AskInputMaxHeight
+import com.nus.folio.presentation.home.AskInputMinHeight
+import com.nus.folio.presentation.home.AskInputShape
+import com.nus.folio.presentation.home.AskSourceChipBackground
+import com.nus.folio.presentation.home.AskSourceChipShape
+import com.nus.folio.presentation.home.AskSparkleBorder
+import com.nus.folio.presentation.home.AskSparkleCircleShape
+import com.nus.folio.presentation.home.AskSubmitShape
+import com.nus.folio.presentation.home.AskSuggestionShape
+import com.nus.folio.presentation.home.HomeUiState
+import com.nus.folio.presentation.home.askScopeChipLabelRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,6 +69,7 @@ internal fun AskPane(
     uiState: HomeUiState,
     onRetry: () -> Unit,
     onAskSubmit: () -> Unit,
+    onScopeChipClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when {
@@ -87,6 +100,8 @@ internal fun AskPane(
         }
         else -> {
             AskPaneContent(
+                scopeChipLabelRes = uiState.askScopeChipLabelRes(),
+                onScopeChipClick = onScopeChipClick,
                 onAskSubmit = onAskSubmit,
                 modifier = modifier,
             )
@@ -96,6 +111,8 @@ internal fun AskPane(
 
 @Composable
 private fun AskPaneContent(
+    scopeChipLabelRes: Int,
+    onScopeChipClick: () -> Unit,
     onAskSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -135,6 +152,8 @@ private fun AskPaneContent(
         AskInputPanel(
             query = askQuery,
             onQueryChange = { askQuery = it },
+            scopeChipLabelRes = scopeChipLabelRes,
+            onScopeChipClick = onScopeChipClick,
             onAskSubmit = {
                 if (askQuery.isNotBlank()) {
                     onAskSubmit()
@@ -197,6 +216,8 @@ private fun AskSuggestionCard(
 private fun AskInputPanel(
     query: String,
     onQueryChange: (String) -> Unit,
+    scopeChipLabelRes: Int,
+    onScopeChipClick: () -> Unit,
     onAskSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -245,7 +266,10 @@ private fun AskInputPanel(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AskSourceScopeChip()
+            AskSourceScopeChip(
+                labelRes = scopeChipLabelRes,
+                onClick = onScopeChipClick,
+            )
             Spacer(modifier = Modifier.weight(1f))
             AskSubmitButton(
                 enabled = canSubmit,
@@ -256,17 +280,32 @@ private fun AskInputPanel(
 }
 
 @Composable
-private fun AskSourceScopeChip() {
-    Text(
-        text = stringResource(R.string.home_ask_current_source),
+private fun AskSourceScopeChip(
+    labelRes: Int,
+    onClick: () -> Unit,
+) {
+    Row(
         modifier = Modifier
             .clip(AskSourceChipShape)
             .background(AskSourceChipBackground)
+            .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-        color = HomeTextPrimary,
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = stringResource(labelRes),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = HomeTextPrimary,
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_down),
+            contentDescription = null,
+            tint = HomeTextPrimary,
+            modifier = Modifier.size(16.dp),
+        )
+    }
 }
 
 @Composable
@@ -359,6 +398,7 @@ private fun AskPanePreview() {
             uiState = HomeUiState(),
             onRetry = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }
@@ -372,6 +412,7 @@ private fun AskPaneLoadingPreview() {
             uiState = HomeUiState(isLoading = true),
             onRetry = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }

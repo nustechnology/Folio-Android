@@ -1,4 +1,4 @@
-package com.nus.folio.presentation.home
+package com.nus.folio.presentation.home.bottomsheet
 
 import android.app.Activity
 import android.content.Context
@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.presentation.home.HomeSheetInputBorder
+import com.nus.folio.presentation.home.HomeSheetShape
+import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
@@ -147,7 +150,7 @@ private fun AddNoteSheetContent(
 }
 
 @Composable
-private fun AddNoteLabeledField(
+internal fun AddNoteLabeledField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -174,7 +177,7 @@ private fun AddNoteLabeledField(
 }
 
 @Composable
-private fun AddNoteField(
+internal fun AddNoteField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
@@ -217,6 +220,9 @@ private fun AddNoteField(
         )
     }
 }
+
+internal val NoteSheetContentHeight = AddNoteContentHeight
+
 
 private fun Context.findActivityOrNull(): Activity? {
     var current: Context? = this

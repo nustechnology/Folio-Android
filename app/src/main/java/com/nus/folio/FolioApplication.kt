@@ -10,6 +10,6 @@ class FolioApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        appContainer = AppContainer()
+        appContainer = AppContainer(applicationContext)
     }
 }

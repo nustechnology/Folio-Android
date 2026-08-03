@@ -1,6 +1,9 @@
 package com.nus.folio.testing
 
 import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.SourceContentFormat
+import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceLibrary
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
@@ -19,6 +22,13 @@ class FakeSourceRepository : SourceRepository {
     var lastDeletedSourceId: String? = null
 
     private val sources: MutableList<Source> = sampleSources.toMutableList()
+
+    var getSourceDetailResult: Result<SourceDetail>? = null
+    var getSourceDetailCallCount = 0
+    var lastSourceId: String? = null
+
+    var getOriginalFileResult: Result<SourceFileLocation>? = null
+    var getOriginalFileCallCount = 0
 
     override suspend fun getSources(spaceId: String): Result<SourceLibrary> {
         getSourcesCallCount++
@@ -62,6 +72,44 @@ class FakeSourceRepository : SourceRepository {
         )
     }
 
+    override suspend fun getSourceDetail(spaceId: String, sourceId: String): Result<SourceDetail> {
+        getSourceDetailCallCount++
+        lastSpaceId = spaceId
+        lastSourceId = sourceId
+        getSourceDetailResult?.let { return it }
+        val source = sampleSources.find { it.id == sourceId && it.spaceId == spaceId }
+            ?: return Result.failure(NoSuchElementException("Source not found"))
+        return Result.success(
+            SourceDetail(
+                id = source.id,
+                title = source.title,
+                author = source.author,
+                addedLabel = source.addedLabel,
+                type = source.type,
+                status = source.status,
+                spaceId = source.spaceId,
+                fileExtension = "pdf",
+                contentFormat = SourceContentFormat.DOCUMENT,
+                originalFileName = "source.pdf",
+                htmlContent = "<h1>${source.title}</h1><p>Preview content.</p>",
+            ),
+        )
+    }
+
+    override suspend fun getOriginalFile(spaceId: String, sourceId: String): Result<SourceFileLocation> {
+        getOriginalFileCallCount++
+        lastSpaceId = spaceId
+        lastSourceId = sourceId
+        getOriginalFileResult?.let { return it }
+        return Result.success(
+            SourceFileLocation.Local(
+                absolutePath = "/tmp/$sourceId.pdf",
+                fileName = "source.pdf",
+                mimeType = "application/pdf",
+            ),
+        )
+    }
+
     companion object {
         val sampleSources = listOf(
             Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1"),
@@ -73,6 +121,7 @@ class FakeSourceRepository : SourceRepository {
             Source("7", "Lecture slides: Week 7", SourceType.PDF, "Teaching staff", "Added 3d ago", SourceStatus.READY, "4"),
             Source("8", "Course syllabus draft", SourceType.TEXT, "Teaching staff", "Added 3d ago", SourceStatus.READY, "4"),
             Source("9", "Wikipedia: Neural Networks", SourceType.WEB, "Wikipedia", "Added 2d ago", SourceStatus.READY, "1"),
+            Source("10", "Research metrics dashboard", SourceType.PDF, "Research team", "Added 1d ago", SourceStatus.READY, "1"),
         )
 
         /** Unscoped snapshot used by older assertions that override results. */

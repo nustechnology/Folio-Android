@@ -42,9 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
-import com.nus.folio.presentation.home.AddSourceCancelButton
-import com.nus.folio.presentation.home.AddSourceDragHandle
-import com.nus.folio.presentation.home.AddSourceSubmitButton
+import com.nus.folio.presentation.home.bottomsheet.AddSourceCancelButton
+import com.nus.folio.presentation.home.bottomsheet.AddSourceDragHandle
+import com.nus.folio.presentation.home.bottomsheet.AddSourceSubmitButton
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.ui.theme.CormorantGaramond

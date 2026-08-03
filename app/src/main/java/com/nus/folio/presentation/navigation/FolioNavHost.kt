@@ -4,7 +4,10 @@ import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -13,9 +16,11 @@ import androidx.navigation.navArgument
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.presentation.account.AccountSettingsScreen
 import com.nus.folio.presentation.home.HomeScreen
+import com.nus.folio.presentation.home.HomeTab
 import com.nus.folio.presentation.login.LoginScreen
 import com.nus.folio.presentation.resetpassword.ResetPasswordScreen
 import com.nus.folio.presentation.signup.SignUpScreen
+import com.nus.folio.presentation.sourcedetail.SourceDetailScreen
 import com.nus.folio.presentation.space.SpaceScreen
 
 object FolioDestination {
@@ -25,13 +30,23 @@ object FolioDestination {
     const val SPACES = "spaces"
     const val ACCOUNT = "account"
     const val HOME = "home"
+    const val SOURCE_DETAIL = "source_detail"
+    const val HOME_TAB_RESULT = "home_tab_result"
+    const val HOME_ASK_SOURCE_RESULT = "home_ask_source_result"
 
     fun resetPassword(email: String = ""): String =
         "$RESET_PASSWORD?email=${Uri.encode(email)}"
 
     fun home(spaceId: String, spaceTitle: String = ""): String =
         "$HOME/${Uri.encode(spaceId)}?title=${Uri.encode(spaceTitle)}"
+
+    fun sourceDetail(spaceId: String, sourceId: String): String =
+        "$SOURCE_DETAIL/${Uri.encode(sourceId)}?spaceId=${Uri.encode(spaceId)}"
 }
+
+/** Pops only when there is a destination underneath; avoids an empty (blank) NavHost. */
+private fun NavHostController.popBackStackOrIgnore(): Boolean =
+    previousBackStackEntry != null && popBackStack()
 
 @Composable
 fun FolioNavHost(modifier: Modifier = Modifier) {
@@ -61,7 +76,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         composable(FolioDestination.SIGN_UP) {
             val isAuthAvailable = LocalAppContainer.current.isAuthAvailable
             LaunchedEffect(isAuthAvailable) {
-                if (!isAuthAvailable) navController.popBackStack()
+                if (!isAuthAvailable) navController.popBackStackOrIgnore()
             }
             SignUpScreen(
                 onNavigateToSpaces = {
@@ -70,7 +85,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                     }
                 },
                 onNavigateToLogin = {
-                    navController.popBackStack()
+                    navController.popBackStackOrIgnore()
                 },
             )
         }
@@ -85,7 +100,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         ) { entry ->
             ResetPasswordScreen(
                 initialEmail = entry.arguments?.getString("email").orEmpty(),
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popBackStackOrIgnore() },
             )
         }
         composable(FolioDestination.SPACES) {
@@ -102,11 +117,13 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         }
         composable(FolioDestination.ACCOUNT) {
             val container = LocalAppContainer.current
-            val session = container.getCurrentSessionUseCase()
             AccountSettingsScreen(
-                displayName = session?.displayName.orEmpty(),
-                email = session?.email.orEmpty(),
-                onBackClick = { navController.popBackStack() },
+                onBackClick = {
+                    // Prefer Spaces as the post-auth root; never pop it away on a double tap.
+                    if (!navController.popBackStack(FolioDestination.SPACES, inclusive = false)) {
+                        navController.popBackStackOrIgnore()
+                    }
+                },
                 onSignOut = {
                     container.clearAuthSessionUseCase()
                     navController.navigate(FolioDestination.LOGIN) {
@@ -125,14 +142,65 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 },
             ),
         ) { entry ->
+            val pendingTab by entry.savedStateHandle
+                .getStateFlow<String?>(FolioDestination.HOME_TAB_RESULT, null)
+                .collectAsStateWithLifecycle()
+            val pendingAskSourceId by entry.savedStateHandle
+                .getStateFlow<String?>(FolioDestination.HOME_ASK_SOURCE_RESULT, null)
+                .collectAsStateWithLifecycle()
+
             HomeScreen(
                 spaceId = entry.arguments?.getString("spaceId").orEmpty(),
                 spaceTitle = entry.arguments?.getString("title").orEmpty(),
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = {
+                    // Double-tapping back must not pop Spaces (post-auth root) and blank the app.
+                    if (!navController.popBackStack(FolioDestination.SPACES, inclusive = false)) {
+                        navController.popBackStackOrIgnore()
+                    }
+                },
+                onNavigateToSourceDetail = { sourceId ->
+                    navController.navigate(
+                        FolioDestination.sourceDetail(
+                            spaceId = entry.arguments?.getString("spaceId").orEmpty(),
+                            sourceId = sourceId,
+                        ),
+                    )
+                },
+                initialTab = pendingTab?.let { runCatching { HomeTab.valueOf(it) }.getOrNull() },
+                onInitialTabHandled = {
+                    entry.savedStateHandle.remove<String>(FolioDestination.HOME_TAB_RESULT)
+                },
+                initialAskSourceId = pendingAskSourceId,
+                onInitialAskSourceHandled = {
+                    entry.savedStateHandle.remove<String>(FolioDestination.HOME_ASK_SOURCE_RESULT)
+                },
                 onSignOut = {
                     navController.navigate(FolioDestination.LOGIN) {
                         popUpTo(FolioDestination.SPACES) { inclusive = true }
                     }
+                },
+            )
+        }
+        composable(
+            route = "${FolioDestination.SOURCE_DETAIL}/{sourceId}?spaceId={spaceId}",
+            arguments = listOf(
+                navArgument("sourceId") { type = NavType.StringType },
+                navArgument("spaceId") { type = NavType.StringType },
+            ),
+        ) { entry ->
+            SourceDetailScreen(
+                spaceId = entry.arguments?.getString("spaceId").orEmpty(),
+                sourceId = entry.arguments?.getString("sourceId").orEmpty(),
+                onBackClick = { navController.popBackStackOrIgnore() },
+                onAskSourceClick = {
+                    val sourceId = entry.arguments?.getString("sourceId").orEmpty()
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.apply {
+                            set(FolioDestination.HOME_TAB_RESULT, HomeTab.ASK.name)
+                            set(FolioDestination.HOME_ASK_SOURCE_RESULT, sourceId)
+                        }
+                    navController.popBackStackOrIgnore()
                 },
             )
         }

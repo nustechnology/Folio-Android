@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,10 +23,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -33,69 +38,134 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
+import com.nus.folio.components.FolioToastHost
+import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.FolioToastVisuals
+import com.nus.folio.components.rememberFolioToastHostState
+import com.nus.folio.di.LocalAppContainer
+import com.nus.folio.domain.model.initialsFromDisplayName
+import com.nus.folio.presentation.home.HomeBackButton
 import com.nus.folio.ui.theme.AccountAvatar
-import com.nus.folio.ui.theme.AccountBackground
 import com.nus.folio.ui.theme.AccountCardBackground
 import com.nus.folio.ui.theme.AccountCardBorder
-import com.nus.folio.ui.theme.AccountSubtitle
 import com.nus.folio.ui.theme.AccountTextPrimary
 import com.nus.folio.ui.theme.AccountTextSecondary
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
+import com.nus.folio.ui.theme.HomeBackground
+import com.nus.folio.ui.theme.HomeHeader
+import com.nus.folio.ui.theme.HomeSearchPlaceholder
 
 private val MenuItemShape = RoundedCornerShape(14.dp)
 
 @Composable
 fun AccountSettingsScreen(
-    displayName: String,
-    email: String,
     onSignOut: () -> Unit,
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    viewModel: AccountViewModel = viewModel(
+        factory = AccountViewModel.Factory(
+            getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
+        ),
+    ),
 ) {
-    AccountSettingsContent(
-        displayName = displayName,
-        email = email,
-        onSignOutClick = onSignOut,
-        onBackClick = onBackClick,
-        modifier = modifier,
-    )
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val toastHostState = rememberFolioToastHostState()
+
+    LaunchedEffect(uiState.userMessage) {
+        val message = uiState.userMessage ?: return@LaunchedEffect
+        toastHostState.showToast(message.toAccountToastVisuals(context))
+        viewModel.onUserMessageShown()
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        AccountSettingsContent(
+            uiState = uiState,
+            onSignOutClick = onSignOut,
+            onBackClick = onBackClick,
+            onProfileSettingsClick = viewModel::onProfileSettingsClick,
+            onSecurityClick = viewModel::onSecurityClick,
+            onPrivacyDataClick = viewModel::onPrivacyDataClick,
+            onExportDataClick = viewModel::onExportDataClick,
+        )
+
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
+    }
 }
 
 @Composable
 private fun AccountSettingsContent(
-    displayName: String,
-    email: String,
+    uiState: AccountUiState,
     onSignOutClick: () -> Unit,
-    onBackClick: () -> Unit = {},
+    onBackClick: () -> Unit,
+    onProfileSettingsClick: () -> Unit,
+    onSecurityClick: () -> Unit,
+    onPrivacyDataClick: () -> Unit,
+    onExportDataClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(AccountBackground)
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 28.dp),
+            .background(HomeBackground),
     ) {
-        AccountHeaderRow(onBackClick = onBackClick)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(HomeBackground)
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(top = 12.dp, bottom = 16.dp),
+        ) {
+            AccountHeaderRow(onBackClick = onBackClick)
+        }
 
-        Spacer(modifier = Modifier.height(36.dp))
-
-        AccountProfileSection(
-            displayName = displayName,
-            email = email,
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AccountMenuItem(
-                label = stringResource(R.string.account_sign_out),
-                onClick = onSignOutClick,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(top = 28.dp, bottom = 28.dp),
+        ) {
+            AccountProfileSection(
+                displayName = uiState.displayName,
+                email = uiState.email,
             )
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                AccountMenuItem(
+                    label = stringResource(R.string.account_profile_settings),
+                    onClick = onProfileSettingsClick,
+                )
+                AccountMenuItem(
+                    label = stringResource(R.string.account_security),
+                    onClick = onSecurityClick,
+                )
+                AccountMenuItem(
+                    label = stringResource(R.string.account_privacy_data),
+                    onClick = onPrivacyDataClick,
+                )
+                AccountMenuItem(
+                    label = stringResource(R.string.account_export_data),
+                    onClick = onExportDataClick,
+                )
+                AccountMenuItem(
+                    label = stringResource(R.string.account_sign_out),
+                    onClick = onSignOutClick,
+                )
+            }
         }
     }
 }
@@ -108,46 +178,25 @@ private fun AccountHeaderRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .border(1.dp, AccountCardBorder, CircleShape)
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onBackClick,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_back),
-                contentDescription = stringResource(R.string.home_back),
-                tint = AccountTextPrimary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.account_title),
-                fontFamily = CormorantGaramond,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontStyle = FontStyle.Italic,
-                color = AccountAvatar,
-                letterSpacing = (-0.4).sp,
-            )
-            Text(
-                text = stringResource(R.string.account_subtitle),
-                fontFamily = CormorantGaramond,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AccountSubtitle,
-            )
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HomeBackButton(onClick = onBackClick)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.account_subtitle),
+                    modifier = Modifier.weight(1f),
+                    fontFamily = CormorantGaramond,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Italic,
+                    color = HomeHeader,
+                    letterSpacing = (-0.4).sp,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -157,10 +206,7 @@ private fun AccountProfileSection(
     displayName: String,
     email: String,
 ) {
-    val initial = (
-        displayName.firstOrNull()?.uppercaseChar()?.toString()
-            ?: email.firstOrNull()?.uppercaseChar()?.toString()
-        ).orEmpty()
+    val initial = initialsFromDisplayName(displayName, email)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -238,15 +284,34 @@ private fun AccountMenuItem(
     }
 }
 
+private fun AccountUserMessage.toAccountToastVisuals(context: android.content.Context): FolioToastVisuals {
+    val messageRes = when (this) {
+        AccountUserMessage.PROFILE_SETTINGS_NOT_SUPPORTED -> R.string.account_profile_settings_not_supported
+        AccountUserMessage.SECURITY_NOT_SUPPORTED -> R.string.account_security_not_supported
+        AccountUserMessage.PRIVACY_DATA_NOT_SUPPORTED -> R.string.account_privacy_data_not_supported
+        AccountUserMessage.EXPORT_DATA_NOT_SUPPORTED -> R.string.account_export_data_not_supported
+    }
+    return FolioToastVisuals(
+        message = context.getString(messageRes),
+        style = FolioToastStyle.Warning,
+    )
+}
+
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
 private fun AccountSettingsContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         AccountSettingsContent(
-            displayName = "Alex Nguyen",
-            email = "alex@folio.app",
+            uiState = AccountUiState(
+                displayName = "Alex Nguyen",
+                email = "alex@folio.app",
+            ),
             onSignOutClick = {},
             onBackClick = {},
+            onProfileSettingsClick = {},
+            onSecurityClick = {},
+            onPrivacyDataClick = {},
+            onExportDataClick = {},
         )
     }
 }

@@ -51,7 +51,7 @@ class LoginViewModelTest {
 
         viewModel.onSignInClick("user@folio.app", "secret")
 
-        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.shouldNavigateToHome)
         assertNull(viewModel.uiState.value.error)
         assertEquals("user@folio.app", repository.lastSignInEmail)
@@ -109,5 +109,6 @@ class LoginViewModelTest {
         viewModel.onNavigationHandled()
 
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 }

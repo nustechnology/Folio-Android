@@ -1,10 +1,5 @@
 package com.nus.folio.presentation.space
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,10 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,13 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +49,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.Space
+import com.nus.folio.domain.model.initialsFromDisplayName
+import com.nus.folio.components.FolioEmptyState
+import com.nus.folio.components.FolioSearchField
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
@@ -64,8 +59,6 @@ import com.nus.folio.components.ItemOptionAction
 import com.nus.folio.components.ItemOptionStyle
 import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.components.rememberFolioToastHostState
-import com.nus.folio.ui.theme.AccountAvatar
-import com.nus.folio.ui.theme.AccountTextPrimary
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
@@ -88,18 +81,17 @@ fun SpaceScreen(
     viewModel: SpaceViewModel = viewModel(
         factory = SpaceViewModel.Factory(
             getSpacesUseCase = LocalAppContainer.current.getSpacesUseCase,
+            getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
         ),
     ),
 ) {
-    val container = LocalAppContainer.current
-    val session = container.getCurrentSessionUseCase()
-    val avatarInitial = (
-        session?.displayName?.firstOrNull()?.uppercaseChar()?.toString()
-            ?: session?.email?.firstOrNull()?.uppercaseChar()?.toString()
-        ).orEmpty()
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
+    val selectedAccount = uiState.accounts.firstOrNull { it.isSelected }
+    val avatarInitial = selectedAccount?.let {
+        initialsFromDisplayName(it.displayName, it.email)
+    }.orEmpty()
 
     LaunchedEffect(uiState.userMessage) {
         val message = uiState.userMessage ?: return@LaunchedEffect
@@ -112,9 +104,9 @@ fun SpaceScreen(
             uiState = uiState,
             avatarInitial = avatarInitial,
             onRetry = viewModel::loadSpaces,
-            onSearchClick = viewModel::onSearchClick,
             onSearchQueryChange = viewModel::onSearchQueryChange,
-            onAvatarClick = onNavigateToAccount,
+            onAvatarClick = viewModel::onAccountClick,
+            onAddClick = viewModel::onAddClick,
             onSpaceClick = onSpaceSelected,
             onSpaceMoreClick = viewModel::onSpaceOptionsClick,
             modifier = Modifier.fillMaxSize(),
@@ -162,6 +154,23 @@ fun SpaceScreen(
                 onDismiss = viewModel::onSpaceOptionsDismiss,
             )
         }
+
+        uiState.renamingSpace?.let { space ->
+            RenameSpaceBottomSheet(
+                space = space,
+                onDismiss = viewModel::onRenameSpaceDismiss,
+                onSave = viewModel::onRenameSpaceSave,
+            )
+        }
+
+        if (uiState.showAccountSheet) {
+            AccountListBottomSheet(
+                accounts = uiState.accounts,
+                onDismiss = viewModel::onAccountSheetDismiss,
+                onOpenSettings = onNavigateToAccount,
+                onAccountSelected = viewModel::onAccountSelected,
+            )
+        }
     }
 }
 
@@ -170,9 +179,9 @@ internal fun SpaceContent(
     uiState: SpaceUiState,
     avatarInitial: String,
     onRetry: () -> Unit,
-    onSearchClick: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onAvatarClick: () -> Unit,
+    onAddClick: () -> Unit,
     onSpaceClick: (Space) -> Unit,
     onSpaceMoreClick: (Space) -> Unit,
     modifier: Modifier = Modifier,
@@ -192,22 +201,14 @@ internal fun SpaceContent(
         ) {
             SpaceHeaderRow(
                 avatarInitial = avatarInitial,
-                onSearchClick = onSearchClick,
                 onAvatarClick = onAvatarClick,
             )
-            AnimatedVisibility(
-                visible = uiState.isSearchVisible,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    SpaceSearchField(
-                        query = uiState.searchQuery,
-                        onQueryChange = onSearchQueryChange,
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+            FolioSearchField(
+                query = uiState.searchQuery,
+                onQueryChange = onSearchQueryChange,
+                placeholder = stringResource(R.string.space_search_hint),
+            )
         }
 
         when {
@@ -235,11 +236,19 @@ internal fun SpaceContent(
                 }
             }
             uiState.visibleSpaces.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.space_empty),
-                        color = HomeTextSecondary,
-                        fontSize = 14.sp,
+                if (uiState.searchQuery.isNotBlank()) {
+                    FolioEmptyState(
+                        iconRes = R.drawable.ic_search,
+                        title = stringResource(R.string.search_empty_title),
+                        message = stringResource(R.string.search_empty_message),
+                    )
+                } else {
+                    FolioEmptyState(
+                        iconRes = R.drawable.ic_space,
+                        title = stringResource(R.string.space_empty_no_spaces),
+                        message = stringResource(R.string.space_empty_no_spaces_subtitle),
+                        actionLabel = stringResource(R.string.space_empty_no_spaces_action),
+                        onActionClick = onAddClick,
                     )
                 }
             }
@@ -271,7 +280,6 @@ internal fun SpaceContent(
 @Composable
 private fun SpaceHeaderRow(
     avatarInitial: String,
-    onSearchClick: () -> Unit,
     onAvatarClick: () -> Unit,
 ) {
     val accountLabel = stringResource(R.string.space_account)
@@ -295,40 +303,29 @@ private fun SpaceHeaderRow(
                 color = HomeSearchPlaceholder,
             )
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .border(1.dp, Color.White, CircleShape)
+                .background(HomeSearchField)
+                .semantics {
+                    contentDescription = accountLabel
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onAvatarClick,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            IconButton(onClick = onSearchClick, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_search),
-                    contentDescription = stringResource(R.string.space_search),
-                    tint = Color.White,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(AccountAvatar)
-                    .semantics {
-                        contentDescription = accountLabel
-                    }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onAvatarClick,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = avatarInitial,
-                    fontFamily = CormorantGaramond,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AccountTextPrimary,
-                )
-            }
+            Text(
+                text = avatarInitial,
+                fontFamily = CormorantGaramond,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+            )
         }
     }
 }
@@ -356,38 +353,6 @@ private fun SpaceAddFab(
             contentDescription = stringResource(R.string.space_add),
             tint = Color.White,
             modifier = Modifier.size(24.dp),
-        )
-    }
-}
-
-@Composable
-private fun SpaceSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(SpaceSearchShape)
-            .background(HomeSearchField)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        if (query.isEmpty()) {
-            Text(
-                text = stringResource(R.string.space_search_hint),
-                color = HomeSearchPlaceholder,
-                fontSize = 15.sp,
-            )
-        }
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-            cursorBrush = SolidColor(Color.White),
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -510,11 +475,11 @@ private fun SpaceContentPreview() {
                     Space("4", "Teaching Prep", "Course materials and lecture notes", 27, 8, "Updated 3d ago"),
                 ),
             ),
-            avatarInitial = "A",
+            avatarInitial = "AN",
             onRetry = {},
-            onSearchClick = {},
             onSearchQueryChange = {},
             onAvatarClick = {},
+            onAddClick = {},
             onSpaceClick = {},
             onSpaceMoreClick = {},
         )
@@ -527,11 +492,11 @@ private fun SpaceContentEmptyPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         SpaceContent(
             uiState = SpaceUiState(visibleSpaces = emptyList()),
-            avatarInitial = "A",
+            avatarInitial = "AN",
             onRetry = {},
-            onSearchClick = {},
             onSearchQueryChange = {},
             onAvatarClick = {},
+            onAddClick = {},
             onSpaceClick = {},
             onSpaceMoreClick = {},
         )

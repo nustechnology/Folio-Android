@@ -96,20 +96,19 @@ fun LoginScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        LoginContent(
+            uiState = uiState,
+            initialEmail = LocalAppContainer.current.defaultLoginEmail,
+            initialPassword = LocalAppContainer.current.defaultLoginPassword,
+            onClearFeedback = viewModel::clearFeedback,
+            onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
+            onSignInClick = viewModel::onSignInClick,
+            onForgotPasswordClick = onNavigateToResetPassword,
+            onSignUpClick = onNavigateToSignUp,
+            modifier = Modifier.fillMaxSize(),
+        )
         if (uiState.isLoading) {
             LoginLoadingScreen(modifier = Modifier.fillMaxSize())
-        } else {
-            LoginContent(
-                uiState = uiState,
-                initialEmail = LocalAppContainer.current.defaultLoginEmail,
-                initialPassword = LocalAppContainer.current.defaultLoginPassword,
-                onClearFeedback = viewModel::clearFeedback,
-                onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
-                onSignInClick = viewModel::onSignInClick,
-                onForgotPasswordClick = onNavigateToResetPassword,
-                onSignUpClick = onNavigateToSignUp,
-                modifier = Modifier.fillMaxSize(),
-            )
         }
     }
 }
@@ -437,21 +436,15 @@ private fun LoginLoadingScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(LoginBackground),
+            .background(Color.Black.copy(alpha = 0.48f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = stringResource(R.string.app_name),
-                fontFamily = CormorantGaramond,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = LoginTextPrimary,
-                letterSpacing = (-0.5).sp,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            BouncingDotsIndicator()
-        }
+        BouncingDotsIndicator()
     }
 }
 
@@ -508,6 +501,16 @@ private fun LoginContentPreview() {
 @Composable
 private fun LoginLoadingScreenPreview() {
     FolioAndroidTheme(dynamicColor = false) {
-        LoginLoadingScreen()
+        Box(modifier = Modifier.fillMaxSize()) {
+            LoginContent(
+                uiState = LoginUiState(isLoading = true),
+                onClearFeedback = {},
+                onTogglePasswordVisibility = {},
+                onSignInClick = { _, _ -> },
+                onForgotPasswordClick = {},
+                onSignUpClick = {},
+            )
+            LoginLoadingScreen()
+        }
     }
 }
