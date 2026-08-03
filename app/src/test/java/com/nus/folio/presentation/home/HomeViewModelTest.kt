@@ -3,11 +3,14 @@ package com.nus.folio.presentation.home
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
 import com.nus.folio.testing.FakeAskRepository
 import com.nus.folio.testing.FakeNoteRepository
 import com.nus.folio.testing.FakeSourceRepository
@@ -31,6 +34,7 @@ class HomeViewModelTest {
     private fun createViewModel(
         spaceId: String = "1",
         spaceTitle: String = "Dissertation Research",
+        openSourceDelayMs: Long = 0L,
     ): HomeViewModel =
         HomeViewModel(
             spaceId = spaceId,
@@ -40,6 +44,9 @@ class HomeViewModelTest {
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
             getAskTopicsUseCase = GetAskTopicsUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
+            updateNoteUseCase = UpdateNoteUseCase(noteRepository),
+            deleteNoteUseCase = DeleteNoteUseCase(noteRepository),
+            openSourceDelayMs = openSourceDelayMs,
         )
 
     @Test
@@ -52,8 +59,8 @@ class HomeViewModelTest {
         assertNull(viewModel.uiState.value.sourcesError)
         assertNull(viewModel.uiState.value.askError)
         assertNull(viewModel.uiState.value.notesError)
-        assertEquals(4, viewModel.uiState.value.visibleSources.size)
-        assertEquals(4, viewModel.uiState.value.allCount)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
+        assertEquals(5, viewModel.uiState.value.allCount)
         assertEquals(0, viewModel.uiState.value.textCount)
         assertEquals(1, sourceRepository.getSourcesCallCount)
         assertEquals("1", sourceRepository.lastSpaceId)
@@ -71,7 +78,7 @@ class HomeViewModelTest {
         val dissertation = createViewModel(spaceId = "1")
         val teaching = createViewModel(spaceId = "4", spaceTitle = "Teaching Prep")
 
-        assertEquals(4, dissertation.uiState.value.visibleSources.size)
+        assertEquals(5, dissertation.uiState.value.visibleSources.size)
         assertEquals(2, teaching.uiState.value.visibleSources.size)
         assertEquals(2, dissertation.uiState.value.visibleAskTopics.size)
         assertEquals(1, teaching.uiState.value.visibleAskTopics.size)
@@ -100,7 +107,7 @@ class HomeViewModelTest {
         viewModel.onFilterSelected(SourceFilter.PDF)
 
         assertEquals(SourceFilter.PDF, viewModel.uiState.value.selectedFilter)
-        assertEquals(3, viewModel.uiState.value.visibleSources.size)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
         assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.PDF })
     }
 
@@ -175,51 +182,40 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onSearchClick toggles search visibility`() {
-        val viewModel = createViewModel()
+    fun `onSourceClick opens source detail after delay`() {
+        val viewModel = createViewModel(openSourceDelayMs = 0L)
+        val source = viewModel.uiState.value.visibleSources.first()
 
-        viewModel.onSearchClick()
-        assertTrue(viewModel.uiState.value.isSearchVisible)
+        viewModel.onSourceClick(source)
 
-        viewModel.onSearchClick()
-        assertFalse(viewModel.uiState.value.isSearchVisible)
+        assertFalse(viewModel.uiState.value.isOpeningSource)
+        assertEquals(source.id, viewModel.uiState.value.openSourceDetailId)
+
+        viewModel.onOpenSourceDetailHandled()
+
+        assertNull(viewModel.uiState.value.openSourceDetailId)
     }
 
     @Test
-    fun `onSearchClick dismiss clears query and restores lists`() {
+    fun `onTabSelected clears search query`() {
         val viewModel = createViewModel()
-        viewModel.onSearchClick()
         viewModel.onSearchQueryChange("Turing")
-        assertEquals(1, viewModel.uiState.value.visibleSources.size)
-
-        viewModel.onSearchClick()
-
-        assertFalse(viewModel.uiState.value.isSearchVisible)
-        assertEquals("", viewModel.uiState.value.searchQuery)
-        assertEquals(4, viewModel.uiState.value.visibleSources.size)
-    }
-
-    @Test
-    fun `onTabSelected hides search field`() {
-        val viewModel = createViewModel()
-        viewModel.onSearchClick()
 
         viewModel.onTabSelected(HomeTab.NOTES)
 
-        assertFalse(viewModel.uiState.value.isSearchVisible)
+        assertEquals("", viewModel.uiState.value.searchQuery)
         assertEquals(HomeTab.NOTES, viewModel.uiState.value.selectedTab)
     }
 
     @Test
     fun `onTabSelected clears query and restores lists`() {
         val viewModel = createViewModel()
-        viewModel.onSearchClick()
         viewModel.onSearchQueryChange("Turing")
 
         viewModel.onTabSelected(HomeTab.ASK)
 
         assertEquals("", viewModel.uiState.value.searchQuery)
-        assertEquals(4, viewModel.uiState.value.visibleSources.size)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
         assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
     }
 
@@ -230,13 +226,13 @@ class HomeViewModelTest {
         viewModel.loadSources()
 
         assertTrue(sourceRepository.getSourcesCallCount >= 2)
-        assertEquals(4, viewModel.uiState.value.visibleSources.size)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
         assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
         assertEquals(2, viewModel.uiState.value.visibleNotes.size)
     }
 
     @Test
-    fun `onAddSourceSubmit surfaces not-supported message`() {
+    fun `onAddSourceSubmit shows processing sheet with source title`() {
         val viewModel = createViewModel()
 
         viewModel.onAddSourceSubmit(
@@ -246,10 +242,25 @@ class HomeViewModelTest {
             ),
         )
 
-        assertEquals(
-            HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED,
-            viewModel.uiState.value.userMessage,
+        assertEquals("paper.pdf", viewModel.uiState.value.processingSourceTitle)
+        assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onSourceProcessingAsk dismisses sheet and opens ask tab`() {
+        val viewModel = createViewModel()
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Text(
+                title = "Memo",
+                author = "Author",
+                content = "Body",
+            ),
         )
+
+        viewModel.onSourceProcessingAsk()
+
+        assertNull(viewModel.uiState.value.processingSourceTitle)
+        assertEquals(HomeTab.ASK, viewModel.uiState.value.selectedTab)
     }
 
     @Test
@@ -428,7 +439,17 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onViewNoteClick dismisses options and sets message`() {
+    fun `onNoteClick shows view note sheet`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+
+        viewModel.onNoteClick(note)
+
+        assertEquals(note, viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onViewNoteClick opens view sheet from options`() {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteOptionsClick(note)
@@ -436,19 +457,227 @@ class HomeViewModelTest {
         viewModel.onViewNoteClick()
 
         assertNull(viewModel.uiState.value.optionsNote)
-        assertEquals(HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertEquals(note, viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onEditNoteClick opens edit sheet from viewing note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+
+        viewModel.onEditNoteClick()
+
+        assertEquals(note, viewModel.uiState.value.viewingNote)
+        assertEquals(note, viewModel.uiState.value.editingNote)
+    }
+
+    @Test
+    fun `onEditNoteDismiss clears editing and viewing note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+
+        viewModel.onEditNoteDismiss()
+
+        assertNull(viewModel.uiState.value.editingNote)
+        assertNull(viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onEditNoteSave updates note title and content`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+
+        viewModel.onEditNoteSave("Updated title", "Updated content")
+
+        assertNull(viewModel.uiState.value.editingNote)
+        val updated = viewModel.uiState.value.allNotes.first { it.id == note.id }
+        assertEquals("Updated title", updated.title)
+        assertEquals("Updated content", updated.content)
+        assertEquals("Updated title", viewModel.uiState.value.viewingNote?.title)
+        assertEquals("Updated content", viewModel.uiState.value.viewingNote?.content)
+        assertEquals(HomeUserMessage.NOTE_UPDATED, viewModel.uiState.value.userMessage)
+        assertEquals(1, noteRepository.updateNoteCallCount)
+        assertEquals(note.id, noteRepository.lastUpdatedNote?.id)
+    }
+
+    @Test
+    fun `onEditNoteSave keeps list unchanged when update fails`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+        noteRepository.updateNoteResult = Result.failure(IllegalStateException("offline"))
+
+        viewModel.onEditNoteSave("Updated title", "Updated content")
+
+        assertEquals(HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        val unchanged = viewModel.uiState.value.allNotes.first { it.id == note.id }
+        assertEquals(note.title, unchanged.title)
+        assertEquals(note.content, unchanged.content)
+    }
+
+    @Test
+    fun `onEditNoteSave retains edited fields after loadHome reload`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        val loadsBeforeReload = noteRepository.getNotesCallCount
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+
+        viewModel.onEditNoteSave("Persisted title", "Persisted content")
+        viewModel.onUserMessageShown()
+        viewModel.loadHome()
+
+        assertEquals(loadsBeforeReload + 1, noteRepository.getNotesCallCount)
+        assertEquals(1, noteRepository.updateNoteCallCount)
+        val reloaded = viewModel.uiState.value.allNotes.first { it.id == note.id }
+        assertEquals("Persisted title", reloaded.title)
+        assertEquals("Persisted content", reloaded.content)
+    }
+
+    @Test
+    fun `onDeleteNoteClick opens delete confirmation`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+
+        viewModel.onDeleteNoteClick()
+
+        assertNull(viewModel.uiState.value.editingNote)
+        assertEquals(note, viewModel.uiState.value.deletingNote)
+        assertEquals(note, viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onDeleteNoteDismiss clears deleting and viewing note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+        viewModel.onDeleteNoteClick()
+
+        viewModel.onDeleteNoteDismiss()
+
+        assertNull(viewModel.uiState.value.deletingNote)
+        assertNull(viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onDeleteNoteConfirm removes note and clears sheets`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        val beforeCount = viewModel.uiState.value.notesAllCount
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+        viewModel.onDeleteNoteClick()
+
+        viewModel.onDeleteNoteConfirm()
+
+        assertNull(viewModel.uiState.value.deletingNote)
+        assertNull(viewModel.uiState.value.viewingNote)
+        assertTrue(viewModel.uiState.value.allNotes.none { it.id == note.id })
+        assertEquals(beforeCount - 1, viewModel.uiState.value.notesAllCount)
+        assertEquals(HomeUserMessage.NOTE_DELETED, viewModel.uiState.value.userMessage)
+        assertEquals(1, noteRepository.deleteNoteCallCount)
+        assertEquals(note.id, noteRepository.lastDeletedNoteId)
+    }
+
+    @Test
+    fun `onDeleteNoteConfirm keeps list unchanged when delete fails`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        val beforeCount = viewModel.uiState.value.notesAllCount
+        viewModel.onNoteClick(note)
+        viewModel.onEditNoteClick()
+        viewModel.onDeleteNoteClick()
+        noteRepository.deleteNoteResult = Result.failure(IllegalStateException("offline"))
+
+        viewModel.onDeleteNoteConfirm()
+
+        assertEquals(HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertTrue(viewModel.uiState.value.allNotes.any { it.id == note.id })
+        assertEquals(beforeCount, viewModel.uiState.value.notesAllCount)
+        assertEquals(note, viewModel.uiState.value.deletingNote)
+    }
+
+    @Test
+    fun `onConvertNoteClick opens convert sheet from viewing note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+
+        viewModel.onConvertNoteClick()
+
+        assertEquals(note, viewModel.uiState.value.viewingNote)
+        assertEquals(note, viewModel.uiState.value.convertingNote)
+    }
+
+    @Test
+    fun `onConvertNoteDismiss clears converting and viewing note`() {
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onConvertNoteClick()
+
+        viewModel.onConvertNoteDismiss()
+
+        assertNull(viewModel.uiState.value.convertingNote)
+        assertNull(viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onNotebookAddClick shows notebook actions sheet`() {
+        val viewModel = createViewModel()
+
+        viewModel.onNotebookAddClick()
+
+        assertTrue(viewModel.uiState.value.showNotebookActions)
+    }
+
+    @Test
+    fun `onCopyNotebookClick dismisses actions and sets message`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookAddClick()
+
+        viewModel.onCopyNotebookClick()
+
+        assertFalse(viewModel.uiState.value.showNotebookActions)
+        assertEquals(HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onExportNotebookClick opens export sheet`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookAddClick()
+
+        viewModel.onExportNotebookClick()
+
+        assertFalse(viewModel.uiState.value.showNotebookActions)
+        assertTrue(viewModel.uiState.value.showNotebookExport)
+    }
+
+    @Test
+    fun `onNotebookExportConfirm dismisses export and sets message`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.MARKDOWN)
+
+        assertFalse(viewModel.uiState.value.showNotebookExport)
+        assertEquals(HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
     }
 
     @Test
     fun `onUserMessageShown clears message`() {
         val viewModel = createViewModel()
-        viewModel.onAddSourceSubmit(
-            AddSourceDraft.Web(
-                url = "https://example.com",
-                title = "Example",
-                author = "Author",
-            ),
-        )
+        viewModel.onCopyNotebookClick()
 
         viewModel.onUserMessageShown()
 

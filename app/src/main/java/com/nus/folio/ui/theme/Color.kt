@@ -43,6 +43,8 @@ val HomeSheetBackground = Color(0xFFFFFBF5)
 val HomeSheetHandle = Color(0xFFD9CEBC)
 val HomeUploadDash = Color(0xFFD4C7B0)
 val HomeUploadIcon = Color(0xFF4A433A)
+val HomeReadOnlyFieldBackground = Color(0xFFF3F1EC)
+val HomeReadOnlyFieldBorder = Color(0xFFD9CEBC)
 
 
 val AccountBackground = Color(0xFFF7F1E6)

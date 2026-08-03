@@ -16,8 +16,8 @@ class GetSourcesUseCaseTest {
         val result = useCase("1")
 
         assertTrue(result.isSuccess)
-        assertEquals(4, result.getOrNull()?.allCount)
-        assertEquals(4, result.getOrNull()?.sources?.size)
+        assertEquals(5, result.getOrNull()?.allCount)
+        assertEquals(5, result.getOrNull()?.sources?.size)
         assertEquals(0, result.getOrNull()?.textCount)
         assertEquals(1, repository.getSourcesCallCount)
         assertEquals("1", repository.lastSpaceId)

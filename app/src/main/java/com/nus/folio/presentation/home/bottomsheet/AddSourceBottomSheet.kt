@@ -1,4 +1,4 @@
-package com.nus.folio.presentation.home
+package com.nus.folio.presentation.home.bottomsheet
 
 import android.util.Patterns
 import android.app.Activity
@@ -10,6 +10,15 @@ import android.provider.OpenableColumns
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -81,12 +90,23 @@ import com.nus.folio.ui.theme.HomeStatusFailedBackground
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeUploadIcon
 import com.nus.folio.ui.theme.LoginCopper
+import com.nus.folio.presentation.home.HomeSheetInputBorder
+import com.nus.folio.presentation.home.HomeSheetShape
+import com.nus.folio.presentation.home.HomeSheetTabShape
+import com.nus.folio.presentation.home.HomeUploadZoneShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val AddSourceContentHeight = 160.dp
-private val AddSourceButtonShape = RoundedCornerShape(12.dp)
+private val AddSourceTabEnterMillis = 280
+private val AddSourceTabExitMillis = 200
+
+private val AddSourceTabOrder = listOf(
+    AddSourceTab.PDF,
+    AddSourceTab.WEB,
+    AddSourceTab.TEXT,
+)
 
 enum class AddSourceTab {
     PDF,
@@ -257,43 +277,87 @@ internal fun AddSourceSheetContent(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-        when (selectedTab) {
-            AddSourceTab.PDF -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(AddSourceContentHeight),
-                ) {
-                    PdfUploadZone(
-                        selectedFileName = selectedPdfName,
-                        onClick = onUploadPdfClick,
-                        modifier = Modifier.fillMaxSize(),
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                val fromIndex = AddSourceTabOrder.indexOf(initialState)
+                val toIndex = AddSourceTabOrder.indexOf(targetState)
+                val forward = toIndex >= fromIndex
+                val slideOffset = { width: Int -> width / 5 }
+                if (forward) {
+                    (
+                        slideInHorizontally(
+                            animationSpec = tween(AddSourceTabEnterMillis),
+                            initialOffsetX = slideOffset,
+                        ) + fadeIn(animationSpec = tween(AddSourceTabEnterMillis))
+                        ) togetherWith (
+                        slideOutHorizontally(
+                            animationSpec = tween(AddSourceTabExitMillis),
+                            targetOffsetX = { -slideOffset(it) },
+                        ) + fadeOut(animationSpec = tween(AddSourceTabExitMillis))
+                        )
+                } else {
+                    (
+                        slideInHorizontally(
+                            animationSpec = tween(AddSourceTabEnterMillis),
+                            initialOffsetX = { -slideOffset(it) },
+                        ) + fadeIn(animationSpec = tween(AddSourceTabEnterMillis))
+                        ) togetherWith (
+                        slideOutHorizontally(
+                            animationSpec = tween(AddSourceTabExitMillis),
+                            targetOffsetX = slideOffset,
+                        ) + fadeOut(animationSpec = tween(AddSourceTabExitMillis))
+                        )
+                }.using(
+                    SizeTransform(
+                        clip = false,
+                        sizeAnimationSpec = { _, _ ->
+                            tween(AddSourceTabEnterMillis)
+                        },
+                    ),
+                )
+            },
+            label = "addSourceTabContent",
+            modifier = Modifier.fillMaxWidth(),
+        ) { tab ->
+            when (tab) {
+                AddSourceTab.PDF -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(AddSourceContentHeight),
+                    ) {
+                        PdfUploadZone(
+                            selectedFileName = selectedPdfName,
+                            onClick = onUploadPdfClick,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+                AddSourceTab.WEB -> {
+                    AddSourceWebFields(
+                        url = webUrl,
+                        title = webTitle,
+                        author = webAuthor,
+                        showUrlError = showWebError,
+                        onUrlChange = {
+                            webUrl = it
+                            webUrlTouched = true
+                        },
+                        onTitleChange = { webTitle = it },
+                        onAuthorChange = { webAuthor = it },
                     )
                 }
-            }
-            AddSourceTab.WEB -> {
-                AddSourceWebFields(
-                    url = webUrl,
-                    title = webTitle,
-                    author = webAuthor,
-                    showUrlError = showWebError,
-                    onUrlChange = {
-                        webUrl = it
-                        webUrlTouched = true
-                    },
-                    onTitleChange = { webTitle = it },
-                    onAuthorChange = { webAuthor = it },
-                )
-            }
-            AddSourceTab.TEXT -> {
-                AddSourceTextFields(
-                    title = textTitle,
-                    author = textAuthor,
-                    content = textContent,
-                    onTitleChange = { textTitle = it },
-                    onAuthorChange = { textAuthor = it },
-                    onContentChange = { textContent = it },
-                )
+                AddSourceTab.TEXT -> {
+                    AddSourceTextFields(
+                        title = textTitle,
+                        author = textAuthor,
+                        content = textContent,
+                        onTitleChange = { textTitle = it },
+                        onAuthorChange = { textAuthor = it },
+                        onContentChange = { textContent = it },
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -333,106 +397,27 @@ internal fun AddSourceSheetContent(
 }
 
 @Composable
-internal fun AddSourceCancelButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(52.dp),
-        shape = AddSourceButtonShape,
-        border = BorderStroke(1.dp, HomeChipBorder),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = HomeCardBackground,
-            contentColor = HomeTextPrimary,
-        ),
-    ) {
-        Text(
-            text = stringResource(R.string.add_source_cancel),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-internal fun AddSourceDestructiveButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    labelRes: Int = R.string.source_delete_confirm,
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(52.dp),
-        shape = AddSourceButtonShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = HomeStatusFailedBackground,
-            contentColor = HomeStatusFailedText,
-        ),
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-internal fun AddSourceSubmitButton(
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    labelRes: Int = R.string.add_source_submit,
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.height(52.dp),
-        shape = AddSourceButtonShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = HomeHeader,
-            contentColor = Color.White,
-            disabledContainerColor = HomeHeader.copy(alpha = 0.35f),
-            disabledContentColor = Color.White.copy(alpha = 0.7f),
-        ),
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-internal fun AddSourceDragHandle() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp, bottom = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .width(40.dp)
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(HomeSheetHandle),
-        )
-    }
-}
-
-@Composable
 private fun AddSourceTabChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background = if (selected) HomeHeader else HomeCardBackground
-    val border = if (selected) Color.Transparent else HomeChipBorder
-    val contentColor = if (selected) Color.White else HomeTextPrimary
+    val background by animateColorAsState(
+        targetValue = if (selected) HomeHeader else HomeCardBackground,
+        animationSpec = tween(durationMillis = 220),
+        label = "addSourceTabBackground",
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected) Color.Transparent else HomeChipBorder,
+        animationSpec = tween(durationMillis = 220),
+        label = "addSourceTabBorder",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else HomeTextPrimary,
+        animationSpec = tween(durationMillis = 220),
+        label = "addSourceTabContent",
+    )
     Box(
         modifier = modifier
             .clip(HomeSheetTabShape)

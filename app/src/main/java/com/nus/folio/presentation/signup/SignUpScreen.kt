@@ -21,7 +21,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +40,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -56,18 +59,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
+import com.nus.folio.components.BouncingDotsIndicator
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.LoginBackground
 import com.nus.folio.ui.theme.LoginBorder
 import com.nus.folio.ui.theme.LoginButtonGlow
+import com.nus.folio.ui.theme.LoginCopper
 import com.nus.folio.ui.theme.LoginPlaceholder
 import com.nus.folio.ui.theme.LoginPrimary
 import com.nus.folio.ui.theme.LoginTextMuted
 import com.nus.folio.ui.theme.LoginTextPrimary
 import com.nus.folio.ui.theme.LoginTextSecondary
-import com.nus.folio.ui.theme.LoginCopper
 
 private val FieldShape = RoundedCornerShape(12.dp)
 private val ButtonShape = RoundedCornerShape(12.dp)
@@ -94,19 +98,24 @@ fun SignUpScreen(
         }
     }
 
-    SignUpContent(
-        uiState = uiState,
-        onClearError = viewModel::clearError,
-        onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
-        onSignUpClick = viewModel::onSignUpClick,
-        onContinueWithAppleClick = viewModel::onContinueWithAppleClick,
-        onSignInClick = onNavigateToLogin,
-        modifier = modifier,
-    )
+    Box(modifier = modifier.fillMaxSize()) {
+        SignUpContent(
+            uiState = uiState,
+            onClearError = viewModel::clearError,
+            onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
+            onSignUpClick = viewModel::onSignUpClick,
+            onContinueWithAppleClick = viewModel::onContinueWithAppleClick,
+            onSignInClick = onNavigateToLogin,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (uiState.isLoading) {
+            SignUpLoadingScreen(modifier = Modifier.fillMaxSize())
+        }
+    }
 }
 
 @Composable
-private fun SignUpContent(
+internal fun SignUpContent(
     uiState: SignUpUiState,
     onClearError: () -> Unit,
     onTogglePasswordVisibility: () -> Unit,
@@ -118,7 +127,7 @@ private fun SignUpContent(
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val inputsEnabled = !uiState.isLoading && !uiState.authUnavailable
+    val inputsEnabled = !uiState.authUnavailable && !uiState.isLoading
 
     Box(
         modifier = modifier
@@ -184,7 +193,6 @@ private fun SignUpContent(
 
             SignUpPrimaryButton(
                 onClick = { onSignUpClick(name, email, password) },
-                isLoading = uiState.isLoading,
                 enabled = inputsEnabled,
             )
 
@@ -198,7 +206,7 @@ private fun SignUpContent(
 
         SignUpFooter(
             onSignInClick = onSignInClick,
-            enabled = !uiState.isLoading,
+            enabled = inputsEnabled,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 28.dp, start = 28.dp, end = 28.dp),
@@ -383,12 +391,11 @@ private fun SignUpErrorFeedback(uiState: SignUpUiState) {
 @Composable
 private fun SignUpPrimaryButton(
     onClick: () -> Unit,
-    isLoading: Boolean,
     enabled: Boolean,
 ) {
     Button(
         onClick = onClick,
-        enabled = enabled && !isLoading,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
@@ -405,19 +412,11 @@ private fun SignUpPrimaryButton(
             contentColor = Color.White,
         ),
     ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                color = Color.White,
-                strokeWidth = 2.dp,
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.signup_create_account),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        }
+        Text(
+            text = stringResource(R.string.signup_create_account),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
@@ -483,6 +482,25 @@ private fun SignUpFooter(
     )
 }
 
+@Composable
+internal fun SignUpLoadingScreen(
+    modifier: Modifier = Modifier,
+) {
+    val loadingLabel = stringResource(R.string.signup_loading)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.48f))
+            .semantics {
+                contentDescription = loadingLabel
+                progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        BouncingDotsIndicator()
+    }
+}
+
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
 private fun SignUpContentPreview() {
@@ -495,5 +513,23 @@ private fun SignUpContentPreview() {
             onContinueWithAppleClick = {},
             onSignInClick = {},
         )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sign Up Loading")
+@Composable
+private fun SignUpLoadingScreenPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            SignUpContent(
+                uiState = SignUpUiState(isLoading = true),
+                onClearError = {},
+                onTogglePasswordVisibility = {},
+                onSignUpClick = { _, _, _ -> },
+                onContinueWithAppleClick = {},
+                onSignInClick = {},
+            )
+            SignUpLoadingScreen()
+        }
     }
 }

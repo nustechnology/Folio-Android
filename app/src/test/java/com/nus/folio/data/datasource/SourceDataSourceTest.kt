@@ -14,12 +14,12 @@ class SourceDataSourceTest {
     fun `fetchSources returns space-scoped library`() = runTest {
         val library = dataSource.fetchSources("1")
 
-        assertEquals(4, library.allCount)
-        assertEquals(3, library.papersCount)
+        assertEquals(5, library.allCount)
+        assertEquals(4, library.papersCount)
         assertEquals(0, library.booksCount)
         assertEquals(1, library.webCount)
         assertEquals(0, library.textCount)
-        assertEquals(4, library.sources.size)
+        assertEquals(5, library.sources.size)
         assertTrue(library.sources.all { it.spaceId == "1" })
         assertTrue(library.sources.any { it.title.contains("Turing") })
     }
@@ -53,7 +53,26 @@ class SourceDataSourceTest {
         dataSource.deleteSource("1")
         val library = dataSource.fetchSources("1")
 
-        assertEquals(3, library.allCount)
+        assertEquals(4, library.allCount)
         assertTrue(library.sources.none { it.id == "1" })
+    }
+
+    @Test
+    fun `fetchSourceDetail returns detail for known source`() = runTest {
+        val detail = dataSource.fetchSourceDetail("1", "10")
+
+        assertEquals("Research metrics dashboard", detail.title)
+        assertEquals("xlsx", detail.fileExtension)
+        assertEquals(SourceType.PDF, detail.type)
+    }
+
+    @Test
+    fun `fetchSourceDetail throws for unknown source`() = runTest {
+        try {
+            dataSource.fetchSourceDetail("1", "missing")
+            throw AssertionError("Expected NoSuchElementException")
+        } catch (_: NoSuchElementException) {
+            // expected
+        }
     }
 }

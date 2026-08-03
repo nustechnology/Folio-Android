@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,9 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -25,10 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,7 +41,6 @@ import com.nus.folio.ui.theme.LoginCopper
 internal fun HomeHeaderRow(
     selectedTab: HomeTab,
     onBackClick: () -> Unit,
-    onSearchClick: () -> Unit,
     onAddClick: () -> Unit,
     spaceTitle: String = "",
 ) {
@@ -95,27 +89,13 @@ internal fun HomeHeaderRow(
                 maxLines = 1,
             )
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        if (
+            selectedTab == HomeTab.SOURCES ||
+            selectedTab == HomeTab.ASK ||
+            selectedTab == HomeTab.NOTES ||
+            selectedTab == HomeTab.NOTEBOOK
         ) {
-            if (selectedTab == HomeTab.SOURCES || selectedTab == HomeTab.NOTES) {
-                IconButton(onClick = onSearchClick, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_search),
-                        contentDescription = stringResource(R.string.home_search),
-                        tint = Color.White,
-                    )
-                }
-            }
-            if (
-                selectedTab == HomeTab.SOURCES ||
-                selectedTab == HomeTab.ASK ||
-                selectedTab == HomeTab.NOTES ||
-                selectedTab == HomeTab.NOTEBOOK
-            ) {
-                HomeHeaderAddButton(onClick = onAddClick)
-            }
+            HomeHeaderAddButton(onClick = onAddClick)
         }
     }
 }
@@ -147,7 +127,7 @@ private fun HomeHeaderAddButton(
 }
 
 @Composable
-private fun HomeBackButton(
+internal fun HomeBackButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -174,42 +154,8 @@ private fun HomeBackButton(
 }
 
 @Composable
-internal fun HomeSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(HomeSearchShape)
-            .background(HomeSearchField)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        if (query.isEmpty()) {
-            Text(
-                text = stringResource(R.string.home_search_sources),
-                color = HomeSearchPlaceholder,
-                fontSize = 15.sp,
-            )
-        }
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-            cursorBrush = SolidColor(Color.White),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
 private fun HomeHeaderPreviewContent(
     selectedTab: HomeTab,
-    showSearch: Boolean = false,
-    searchQuery: String = "",
 ) {
     Column(
         modifier = Modifier
@@ -221,16 +167,8 @@ private fun HomeHeaderPreviewContent(
         HomeHeaderRow(
             selectedTab = selectedTab,
             onBackClick = {},
-            onSearchClick = {},
             onAddClick = {},
         )
-        if (showSearch) {
-            Spacer(modifier = Modifier.height(16.dp))
-            HomeSearchField(
-                query = searchQuery,
-                onQueryChange = {},
-            )
-        }
     }
 }
 
@@ -255,17 +193,5 @@ private fun HomeHeaderAskPreview() {
 private fun HomeHeaderNotebookPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         HomeHeaderPreviewContent(selectedTab = HomeTab.NOTEBOOK)
-    }
-}
-
-@Preview(showBackground = true, widthDp = 393, name = "Header — Sources search")
-@Composable
-private fun HomeHeaderSourcesSearchPreview() {
-    FolioAndroidTheme(dynamicColor = false) {
-        HomeHeaderPreviewContent(
-            selectedTab = HomeTab.SOURCES,
-            showSearch = true,
-            searchQuery = "Turing",
-        )
     }
 }

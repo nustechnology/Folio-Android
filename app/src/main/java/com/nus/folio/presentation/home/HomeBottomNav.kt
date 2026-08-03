@@ -56,7 +56,7 @@ internal fun HomeBottomNav(
     val tabs = listOf(
         Triple(HomeTab.SOURCES, R.drawable.ic_nav_sources, R.string.home_tab_sources),
         Triple(HomeTab.ASK, R.drawable.ic_nav_ask, R.string.home_tab_ask),
-        Triple(HomeTab.NOTES, R.drawable.ic_nav_notes, R.string.home_tab_notes),
+        Triple(HomeTab.NOTES, R.drawable.ic_note, R.string.home_tab_notes),
         Triple(HomeTab.NOTEBOOK, R.drawable.ic_nav_notebook, R.string.home_tab_notebook),
     )
     val selectedIndex = tabs.indexOfFirst { it.first == selectedTab }.coerceAtLeast(0)

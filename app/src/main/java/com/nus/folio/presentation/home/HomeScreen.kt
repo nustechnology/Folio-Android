@@ -1,11 +1,8 @@
 package com.nus.folio.presentation.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,14 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
-import com.nus.folio.di.LocalAppContainer
-import com.nus.folio.domain.model.AskTopic
-import com.nus.folio.domain.model.Note
-import com.nus.folio.domain.model.NoteFilter
-import com.nus.folio.domain.model.Source
-import com.nus.folio.domain.model.SourceFilter
-import com.nus.folio.domain.model.SourceStatus
-import com.nus.folio.domain.model.SourceType
+import com.nus.folio.components.BouncingDotsIndicator
+import com.nus.folio.components.FolioSearchField
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
@@ -45,6 +38,30 @@ import com.nus.folio.components.ItemOptionAction
 import com.nus.folio.components.ItemOptionStyle
 import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.components.rememberFolioToastHostState
+import com.nus.folio.di.LocalAppContainer
+import com.nus.folio.domain.model.AskTopic
+import com.nus.folio.domain.model.Note
+import com.nus.folio.domain.model.NoteFilter
+import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.SourceType
+import com.nus.folio.presentation.home.bottomsheet.AddNoteBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.AddSourceBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.AnswerScopeBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.ConversationBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.ConvertNoteBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.EditNoteBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.ExportNotebookBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.SourceProcessingBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.ViewNoteBottomSheet
+import com.nus.folio.presentation.home.pane.AskPane
+import com.nus.folio.presentation.home.pane.NotebookPane
+import com.nus.folio.presentation.home.pane.NotesPane
+import com.nus.folio.presentation.home.pane.SourcesPane
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
@@ -54,7 +71,12 @@ fun HomeScreen(
     spaceId: String,
     spaceTitle: String,
     onNavigateBack: () -> Unit,
+    onNavigateToSourceDetail: (sourceId: String) -> Unit,
     onSignOut: () -> Unit,
+    initialTab: HomeTab? = null,
+    onInitialTabHandled: () -> Unit = {},
+    initialAskSourceId: String? = null,
+    onInitialAskSourceHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(
@@ -65,6 +87,8 @@ fun HomeScreen(
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
             getAskTopicsUseCase = LocalAppContainer.current.getAskTopicsUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
+            updateNoteUseCase = LocalAppContainer.current.updateNoteUseCase,
+            deleteNoteUseCase = LocalAppContainer.current.deleteNoteUseCase,
         ),
     ),
 ) {
@@ -73,6 +97,8 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddSourceSheet by remember { mutableStateOf(false) }
     var showAddNoteSheet by remember { mutableStateOf(false) }
+    var showConversationSheet by remember { mutableStateOf(false) }
+    var showAnswerScopeSheet by remember { mutableStateOf(false) }
     val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.userMessage) {
@@ -81,26 +107,47 @@ fun HomeScreen(
         viewModel.onUserMessageShown()
     }
 
+    LaunchedEffect(initialTab) {
+        val tab = initialTab ?: return@LaunchedEffect
+        viewModel.onTabSelected(tab)
+        onInitialTabHandled()
+    }
+
+    LaunchedEffect(initialAskSourceId) {
+        val sourceId = initialAskSourceId ?: return@LaunchedEffect
+        viewModel.onAskSourceSelected(sourceId)
+        onInitialAskSourceHandled()
+    }
+
+    LaunchedEffect(uiState.openSourceDetailId) {
+        val sourceId = uiState.openSourceDetailId ?: return@LaunchedEffect
+        onNavigateToSourceDetail(sourceId)
+        viewModel.onOpenSourceDetailHandled()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         HomeContent(
             uiState = uiState,
             onRetry = viewModel::loadSources,
             onSearchQueryChange = viewModel::onSearchQueryChange,
-            onSearchClick = viewModel::onSearchClick,
             onFilterSelected = viewModel::onFilterSelected,
             onNoteFilterSelected = viewModel::onNoteFilterSelected,
             onTabSelected = viewModel::onTabSelected,
             onAddClick = {
                 when (uiState.selectedTab) {
                     HomeTab.NOTES -> showAddNoteSheet = true
-                    HomeTab.SOURCES, HomeTab.ASK -> showAddSourceSheet = true
+                    HomeTab.ASK -> showConversationSheet = true
+                    HomeTab.SOURCES -> showAddSourceSheet = true
                     HomeTab.NOTEBOOK -> viewModel.onNotebookAddClick()
                 }
             },
             onBackClick = onNavigateBack,
             onAskSubmit = viewModel::onAskSubmit,
+            onScopeChipClick = { showAnswerScopeSheet = true },
             onSourceEditClick = viewModel::onEditSourceClick,
             onSourceDeleteClick = viewModel::onDeleteSourceClick,
+            onSourceClick = viewModel::onSourceClick,
+            onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
             onSignOut = {
                 container.clearAuthSessionUseCase()
@@ -117,10 +164,26 @@ fun HomeScreen(
                 .padding(top = 12.dp),
         )
 
+        if (uiState.isOpeningSource) {
+            SourceOpeningScreen()
+        }
+
         if (showAddSourceSheet) {
             AddSourceBottomSheet(
                 onDismiss = { showAddSourceSheet = false },
-                onSubmit = viewModel::onAddSourceSubmit,
+                onSubmit = { draft ->
+                    showAddSourceSheet = false
+                    viewModel.onAddSourceSubmit(draft)
+                },
+            )
+        }
+
+        uiState.processingSourceTitle?.let { title ->
+            SourceProcessingBottomSheet(
+                sourceTitle = title,
+                onDismiss = viewModel::onSourceProcessingDismiss,
+                onOpenSource = viewModel::onSourceProcessingOpenSource,
+                onAsk = viewModel::onSourceProcessingAsk,
             )
         }
 
@@ -133,6 +196,22 @@ fun HomeScreen(
             )
         }
 
+        if (showConversationSheet) {
+            ConversationBottomSheet(
+                onDismiss = { showConversationSheet = false },
+            )
+        }
+
+        if (showAnswerScopeSheet) {
+            AnswerScopeBottomSheet(
+                selectedScope = uiState.askScope,
+                sourceCount = uiState.allCount,
+                currentSourceTitle = uiState.askSourceTitle(),
+                onScopeSelected = viewModel::onAskScopeSelected,
+                onDismiss = { showAnswerScopeSheet = false },
+            )
+        }
+
         uiState.editingSource?.let { source ->
             EditSourceBottomSheet(
                 source = source,
@@ -142,9 +221,49 @@ fun HomeScreen(
         }
 
         uiState.deletingSource?.let {
-            DeleteSourceBottomSheet(
+            DeleteConfirmationBottomSheet(
                 onDismiss = viewModel::onDeleteSourceDismiss,
                 onConfirm = viewModel::onDeleteSourceConfirm,
+            )
+        }
+
+        if (uiState.editingNote == null &&
+            uiState.deletingNote == null &&
+            uiState.convertingNote == null
+        ) {
+            uiState.viewingNote?.let { note ->
+                ViewNoteBottomSheet(
+                    note = note,
+                    onDismiss = viewModel::onViewNoteDismiss,
+                    onConvertClick = viewModel::onConvertNoteClick,
+                    onEditClick = viewModel::onEditNoteClick,
+                )
+            }
+        }
+
+        uiState.editingNote?.let { note ->
+            EditNoteBottomSheet(
+                note = note,
+                onDismiss = viewModel::onEditNoteDismiss,
+                onSave = viewModel::onEditNoteSave,
+                onDelete = viewModel::onDeleteNoteClick,
+            )
+        }
+
+        uiState.convertingNote?.let { note ->
+            ConvertNoteBottomSheet(
+                note = note,
+                onDismiss = viewModel::onConvertNoteDismiss,
+                onCreateSource = viewModel::onConvertNoteCreate,
+            )
+        }
+
+        uiState.deletingNote?.let {
+            DeleteConfirmationBottomSheet(
+                titleRes = R.string.note_delete_title,
+                messageRes = R.string.note_delete_message,
+                onDismiss = viewModel::onDeleteNoteDismiss,
+                onConfirm = viewModel::onDeleteNoteConfirm,
             )
         }
 
@@ -173,6 +292,30 @@ fun HomeScreen(
                 onDismiss = viewModel::onNoteOptionsDismiss,
             )
         }
+
+        if (uiState.showNotebookActions) {
+            ItemOptionsBottomSheet(
+                title = stringResource(R.string.notebook_actions_title),
+                actions = listOf(
+                    ItemOptionAction(
+                        label = stringResource(R.string.notebook_actions_copy),
+                        onClick = viewModel::onCopyNotebookClick,
+                    ),
+                    ItemOptionAction(
+                        label = stringResource(R.string.notebook_actions_export),
+                        onClick = viewModel::onExportNotebookClick,
+                    ),
+                ),
+                onDismiss = viewModel::onNotebookActionsDismiss,
+            )
+        }
+
+        if (uiState.showNotebookExport) {
+            ExportNotebookBottomSheet(
+                onDismiss = viewModel::onNotebookExportDismiss,
+                onExport = viewModel::onNotebookExportConfirm,
+            )
+        }
     }
 }
 
@@ -181,15 +324,17 @@ internal fun HomeContent(
     uiState: HomeUiState,
     onRetry: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onSearchClick: () -> Unit,
     onFilterSelected: (SourceFilter) -> Unit,
     onNoteFilterSelected: (NoteFilter) -> Unit,
     onTabSelected: (HomeTab) -> Unit,
     onAddClick: () -> Unit,
     onBackClick: () -> Unit,
     onAskSubmit: () -> Unit,
+    onScopeChipClick: () -> Unit,
     onSourceEditClick: (Source) -> Unit,
     onSourceDeleteClick: (Source) -> Unit,
+    onSourceClick: (Source) -> Unit,
+    onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -212,22 +357,24 @@ internal fun HomeContent(
                     selectedTab = uiState.selectedTab,
                     spaceTitle = uiState.spaceTitle,
                     onBackClick = onBackClick,
-                    onSearchClick = onSearchClick,
                     onAddClick = onAddClick,
                 )
-                AnimatedVisibility(
-                    visible = uiState.isSearchVisible &&
-                        (uiState.selectedTab == HomeTab.SOURCES || uiState.selectedTab == HomeTab.NOTES),
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
+                if (
+                    uiState.selectedTab == HomeTab.SOURCES ||
+                    uiState.selectedTab == HomeTab.NOTES
                 ) {
-                    Column {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HomeSearchField(
-                            query = uiState.searchQuery,
-                            onQueryChange = onSearchQueryChange,
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FolioSearchField(
+                        query = uiState.searchQuery,
+                        onQueryChange = onSearchQueryChange,
+                        placeholder = stringResource(
+                            if (uiState.selectedTab == HomeTab.NOTES) {
+                                R.string.home_search_notes
+                            } else {
+                                R.string.home_search_sources
+                            },
+                        ),
+                    )
                 }
             }
 
@@ -239,6 +386,7 @@ internal fun HomeContent(
                     onFilterSelected = onFilterSelected,
                     onSourceEditClick = onSourceEditClick,
                     onSourceDeleteClick = onSourceDeleteClick,
+                    onSourceClick = onSourceClick,
                     modifier = Modifier
                         .weight(1f)
                         .padding(bottom = HomeBottomNavClearance),
@@ -247,6 +395,7 @@ internal fun HomeContent(
                     uiState = uiState,
                     onRetry = onRetry,
                     onAskSubmit = onAskSubmit,
+                    onScopeChipClick = onScopeChipClick,
                     modifier = Modifier
                         .weight(1f)
                         .padding(bottom = HomeBottomNavClearance),
@@ -256,6 +405,7 @@ internal fun HomeContent(
                     onRetry = onRetry,
                     onAddClick = onAddClick,
                     onFilterSelected = onNoteFilterSelected,
+                    onNoteClick = onNoteClick,
                     onNoteMoreClick = onNoteMoreClick,
                     modifier = Modifier
                         .weight(1f)
@@ -281,6 +431,25 @@ internal fun HomeContent(
     }
 }
 
+@Composable
+private fun SourceOpeningScreen(
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.48f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        BouncingDotsIndicator()
+    }
+}
+
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sources — populated")
 @Composable
 private fun HomeContentPreview() {
@@ -303,15 +472,17 @@ private fun HomeContentPreview() {
             ),
             onRetry = {},
             onSearchQueryChange = {},
-            onSearchClick = {},
             onFilterSelected = {},
             onNoteFilterSelected = {},
             onTabSelected = {},
             onAddClick = {},
             onBackClick = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
             onNoteMoreClick = {},
             onSignOut = {},
         )
@@ -329,15 +500,17 @@ private fun HomeContentEmptyPreview() {
             ),
             onRetry = {},
             onSearchQueryChange = {},
-            onSearchClick = {},
             onFilterSelected = {},
             onNoteFilterSelected = {},
             onTabSelected = {},
             onAddClick = {},
             onBackClick = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
             onNoteMoreClick = {},
             onSignOut = {},
         )
@@ -359,15 +532,17 @@ private fun HomeAskPreview() {
             ),
             onRetry = {},
             onSearchQueryChange = {},
-            onSearchClick = {},
             onFilterSelected = {},
             onNoteFilterSelected = {},
             onTabSelected = {},
             onAddClick = {},
             onBackClick = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
             onNoteMoreClick = {},
             onSignOut = {},
         )
@@ -382,11 +557,58 @@ private fun HomeNotesPreview() {
             uiState = HomeUiState(
                 selectedTab = HomeTab.NOTES,
                 visibleNotes = listOf(
-                    Note("1", "Research Question Draft", "Urban Mobility", "Updated 1d ago", true, "1"),
-                    Note("2", "Literature Review Outline", "Dissertation Research", "Updated 2d ago", true, "1"),
-                    Note("3", "Turing Test — Key Takeaways", "Dissertation Research", "Updated 3d ago", false, "1"),
-                    Note("4", "Policy Implications", "Urban Mobility", "Updated 4d ago", false, "1"),
-                    Note("5", "Teaching Prep — Week 7", "Urban Mobility", "Updated 5d ago", false, "1"),
+                    Note(
+                        id = "1",
+                        title = "Research Question Draft",
+                        content = "How do informal transit networks reshape access in mid-sized cities?",
+                        project = "Urban Mobility",
+                        updatedLabel = "Updated 1d ago",
+                        isPinned = true,
+                        spaceId = "1",
+                        origin = NoteOrigin.USER_CREATED,
+                    ),
+                    Note(
+                        id = "2",
+                        title = "Literature Review Outline",
+                        content = "Map debates on machine intelligence, imitation games, and measurement.",
+                        project = "Dissertation Research",
+                        updatedLabel = "Updated 2d ago",
+                        isPinned = true,
+                        spaceId = "1",
+                        origin = NoteOrigin.USER_CREATED,
+                    ),
+                    Note(
+                        id = "3",
+                        title = "Turing Test — Key Takeaways",
+                        content = "The imitation game reframes intelligence as observable linguistic behavior.",
+                        project = "Dissertation Research",
+                        updatedLabel = "Updated 3d ago",
+                        isPinned = false,
+                        spaceId = "1",
+                        origin = NoteOrigin.SAVED_ANSWER,
+                        citationCount = 4,
+                    ),
+                    Note(
+                        id = "4",
+                        title = "Policy Implications",
+                        content = "Zoning reform alone underestimates last-mile coordination costs.",
+                        project = "Urban Mobility",
+                        updatedLabel = "Updated 4d ago",
+                        isPinned = false,
+                        spaceId = "1",
+                        origin = NoteOrigin.SAVED_ANSWER,
+                        citationCount = 2,
+                    ),
+                    Note(
+                        id = "5",
+                        title = "Teaching Prep — Week 7",
+                        content = "Seminar prompts on archival silence and source criticism.",
+                        project = "Urban Mobility",
+                        updatedLabel = "Updated 5d ago",
+                        isPinned = false,
+                        spaceId = "1",
+                        origin = NoteOrigin.USER_CREATED,
+                    ),
                 ),
                 spaceTitle = "Dissertation Research",
                 notesAllCount = 32,
@@ -395,15 +617,82 @@ private fun HomeNotesPreview() {
             ),
             onRetry = {},
             onSearchQueryChange = {},
-            onSearchClick = {},
             onFilterSelected = {},
             onNoteFilterSelected = {},
             onTabSelected = {},
             onAddClick = {},
             onBackClick = {},
             onAskSubmit = {},
+            onScopeChipClick = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
+            onNoteMoreClick = {},
+            onSignOut = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Notes — empty")
+@Composable
+private fun HomeNotesEmptyPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        HomeContent(
+            uiState = HomeUiState(
+                selectedTab = HomeTab.NOTES,
+                visibleNotes = emptyList(),
+                spaceTitle = "Dissertation Research",
+                notesAllCount = 0,
+                notesPinnedCount = 0,
+                notesUnfiledCount = 0,
+            ),
+            onRetry = {},
+            onSearchQueryChange = {},
+            onFilterSelected = {},
+            onNoteFilterSelected = {},
+            onTabSelected = {},
+            onAddClick = {},
+            onBackClick = {},
+            onAskSubmit = {},
+            onScopeChipClick = {},
+            onSourceEditClick = {},
+            onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
+            onNoteMoreClick = {},
+            onSignOut = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Notes — search empty")
+@Composable
+private fun HomeNotesSearchEmptyPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        HomeContent(
+            uiState = HomeUiState(
+                selectedTab = HomeTab.NOTES,
+                searchQuery = "xyz",
+                visibleNotes = emptyList(),
+                spaceTitle = "Dissertation Research",
+                notesAllCount = 32,
+                notesPinnedCount = 8,
+                notesUnfiledCount = 4,
+            ),
+            onRetry = {},
+            onSearchQueryChange = {},
+            onFilterSelected = {},
+            onNoteFilterSelected = {},
+            onTabSelected = {},
+            onAddClick = {},
+            onBackClick = {},
+            onAskSubmit = {},
+            onScopeChipClick = {},
+            onSourceEditClick = {},
+            onSourceDeleteClick = {},
+            onSourceClick = {},
+            onNoteClick = {},
             onNoteMoreClick = {},
             onSignOut = {},
         )
@@ -418,11 +707,14 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
         HomeUserMessage.SOURCE_UPDATE_FAILED -> R.string.toast_source_update_failed
         HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
         HomeUserMessage.NOTE_CREATED -> R.string.toast_note_created
+        HomeUserMessage.NOTE_UPDATED -> R.string.toast_note_updated
         HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
         HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED -> R.string.home_add_source_not_supported
         HomeUserMessage.ASK_NOT_SUPPORTED -> R.string.home_ask_not_supported
         HomeUserMessage.ADD_NOTE_NOT_SUPPORTED -> R.string.add_note_not_supported
         HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED -> R.string.home_add_notebook_not_supported
+        HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_copy_not_supported
+        HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_export_not_supported
         HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED -> R.string.note_view_not_supported
         HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED -> R.string.note_edit_not_supported
         HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED -> R.string.note_convert_not_supported
@@ -433,6 +725,7 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
         HomeUserMessage.SOURCE_UPDATED,
         HomeUserMessage.SOURCE_DELETED,
         HomeUserMessage.NOTE_CREATED,
+        HomeUserMessage.NOTE_UPDATED,
         HomeUserMessage.NOTE_DELETED,
         -> FolioToastStyle.Success
         HomeUserMessage.ASK_NOT_SUPPORTED,
@@ -441,6 +734,8 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
         HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED,
         HomeUserMessage.ADD_NOTE_NOT_SUPPORTED,
         HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED,
+        HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED,
+        HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED,
         HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
         HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED,
         -> FolioToastStyle.Warning

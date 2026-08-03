@@ -1,5 +1,12 @@
-package com.nus.folio.presentation.home
+package com.nus.folio.presentation.home.pane
 
+import com.nus.folio.presentation.home.HomeBadgeShape
+import com.nus.folio.presentation.home.HomeCardShape
+import com.nus.folio.presentation.home.HomeChipShape
+import com.nus.folio.presentation.home.HomeSourceFilterChipSelected
+import com.nus.folio.presentation.home.HomeSourceFilterChipSelectedBorder
+import com.nus.folio.presentation.home.HomeStatusShape
+import com.nus.folio.presentation.home.HomeUiState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,10 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -45,7 +48,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
+import com.nus.folio.components.FolioEmptyState
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceStatus
@@ -85,6 +88,7 @@ internal fun SourcesPane(
     onFilterSelected: (SourceFilter) -> Unit,
     onSourceEditClick: (Source) -> Unit,
     onSourceDeleteClick: (Source) -> Unit,
+    onSourceClick: (Source) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -122,53 +126,20 @@ internal fun SourcesPane(
                 }
             }
             uiState.visibleSources.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .border(1.dp, HomeCardBorder, CircleShape)
-                                .clip(CircleShape)
-                                .background(HomeCardBackground),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_document),
-                                contentDescription = null,
-                                tint = HomeTextSecondary,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = stringResource(R.string.home_empty_sources),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = HomeTextPrimary,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.home_empty_sources_subtitle),
-                            fontSize = 14.sp,
-                            color = HomeTextSecondary,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = onAddClick,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = HomeHeader,
-                                contentColor = Color.White,
-                            ),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.home_empty_sources_action),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
+                if (uiState.searchQuery.isNotBlank()) {
+                    FolioEmptyState(
+                        iconRes = R.drawable.ic_search,
+                        title = stringResource(R.string.search_empty_title),
+                        message = stringResource(R.string.search_empty_message),
+                    )
+                } else {
+                    FolioEmptyState(
+                        iconRes = R.drawable.ic_document,
+                        title = stringResource(R.string.home_empty_sources),
+                        message = stringResource(R.string.home_empty_sources_subtitle),
+                        actionLabel = stringResource(R.string.home_empty_sources_action),
+                        onActionClick = onAddClick,
+                    )
                 }
             }
             else -> {
@@ -180,6 +151,7 @@ internal fun SourcesPane(
                     items(uiState.visibleSources, key = { it.id }) { source ->
                         SourceCard(
                             source = source,
+                            onClick = { onSourceClick(source) },
                             onEditClick = { onSourceEditClick(source) },
                             onDeleteClick = { onSourceDeleteClick(source) },
                         )
@@ -248,6 +220,7 @@ private fun SourceFilterChip(
 @Composable
 private fun SourceCard(
     source: Source,
+    onClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
@@ -302,6 +275,7 @@ private fun SourceCard(
         }
         SourceCardContent(
             source = source,
+            onClick = onClick,
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .semantics {
@@ -365,11 +339,17 @@ private fun SourceSwipeAction(
 @Composable
 private fun SourceCardContent(
     source: Source,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .background(HomeCardBackground)
             .border(1.dp, HomeCardBorder, HomeCardShape)
             .padding(horizontal = 12.dp, vertical = 14.dp),
@@ -478,6 +458,7 @@ private fun SourcesPanePreview() {
             onFilterSelected = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }
@@ -494,6 +475,7 @@ private fun SourcesPaneEmptyPreview() {
             onFilterSelected = {},
             onSourceEditClick = {},
             onSourceDeleteClick = {},
+            onSourceClick = {},
             modifier = Modifier.background(HomeBackground),
         )
     }
