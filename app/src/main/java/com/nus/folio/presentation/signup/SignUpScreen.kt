@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -36,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -59,10 +61,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
-import com.nus.folio.components.BouncingDotsIndicator
+import com.nus.folio.components.FolioToastHost
+import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.LoginBackground
 import com.nus.folio.ui.theme.LoginBorder
 import com.nus.folio.ui.theme.LoginButtonGlow
@@ -90,6 +95,7 @@ fun SignUpScreen(
     ),
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+    val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.shouldNavigateToHome) {
         if (uiState.shouldNavigateToHome) {
@@ -98,28 +104,47 @@ fun SignUpScreen(
         }
     }
 
+    LaunchedEffect(uiState.toastMessage) {
+        val message = uiState.toastMessage ?: return@LaunchedEffect
+        toastHostState.showToast(message = message, style = FolioToastStyle.Error)
+        viewModel.onToastMessageShown()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         SignUpContent(
             uiState = uiState,
-            onClearError = viewModel::clearError,
+            onClearNameError = viewModel::clearNameError,
+            onClearEmailError = viewModel::clearEmailError,
+            onClearPasswordError = viewModel::clearPasswordError,
+            onClearConfirmPasswordError = viewModel::clearConfirmPasswordError,
             onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
+            onToggleConfirmPasswordVisibility = viewModel::onToggleConfirmPasswordVisibility,
             onSignUpClick = viewModel::onSignUpClick,
             onContinueWithAppleClick = viewModel::onContinueWithAppleClick,
             onSignInClick = onNavigateToLogin,
             modifier = Modifier.fillMaxSize(),
         )
-        if (uiState.isLoading) {
-            SignUpLoadingScreen(modifier = Modifier.fillMaxSize())
-        }
+
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 
 @Composable
 internal fun SignUpContent(
     uiState: SignUpUiState,
-    onClearError: () -> Unit,
+    onClearNameError: () -> Unit,
+    onClearEmailError: () -> Unit,
+    onClearPasswordError: () -> Unit,
+    onClearConfirmPasswordError: () -> Unit,
     onTogglePasswordVisibility: () -> Unit,
-    onSignUpClick: (name: String, email: String, password: String) -> Unit,
+    onToggleConfirmPasswordVisibility: () -> Unit,
+    onSignUpClick: (name: String, email: String, password: String, confirmPassword: String) -> Unit,
     onContinueWithAppleClick: () -> Unit,
     onSignInClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -127,89 +152,111 @@ internal fun SignUpContent(
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     val inputsEnabled = !uiState.authUnavailable && !uiState.isLoading
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(LoginBackground)
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp)
+            .padding(top = 32.dp, bottom = 28.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp)
-                .padding(top = 40.dp, bottom = 88.dp),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            SignUpHeader()
+        SignUpHeader()
 
-            Spacer(modifier = Modifier.height(36.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-            SignUpLabeledField(
-                label = stringResource(R.string.signup_name_label),
-                value = name,
-                onValueChange = {
-                    name = it
-                    onClearError()
-                },
-                placeholder = stringResource(R.string.signup_name_hint),
-                enabled = inputsEnabled,
-                keyboardType = KeyboardType.Text,
-            )
+        SignUpLabeledField(
+            label = stringResource(R.string.signup_name_label),
+            value = name,
+            onValueChange = {
+                name = it
+                onClearNameError()
+            },
+            placeholder = stringResource(R.string.signup_name_hint),
+            enabled = inputsEnabled,
+            keyboardType = KeyboardType.Text,
+            errorMessage = uiState.nameError?.let { signUpErrorMessage(it) },
+        )
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            SignUpLabeledField(
-                label = stringResource(R.string.signup_email_label),
-                value = email,
-                onValueChange = {
-                    email = it
-                    onClearError()
-                },
-                placeholder = stringResource(R.string.signup_email_hint),
-                enabled = inputsEnabled,
-                keyboardType = KeyboardType.Email,
-            )
+        SignUpLabeledField(
+            label = stringResource(R.string.signup_email_label),
+            value = email,
+            onValueChange = {
+                email = it
+                onClearEmailError()
+            },
+            placeholder = stringResource(R.string.signup_email_hint),
+            enabled = inputsEnabled,
+            keyboardType = KeyboardType.Email,
+            errorMessage = uiState.emailError?.let { signUpErrorMessage(it) },
+        )
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            SignUpPasswordField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    onClearError()
-                },
-                passwordVisible = uiState.passwordVisible,
-                onToggleVisibility = onTogglePasswordVisibility,
-                enabled = inputsEnabled,
-            )
+        SignUpPasswordField(
+            label = stringResource(R.string.signup_password_label),
+            value = password,
+            onValueChange = {
+                password = it
+                onClearPasswordError()
+            },
+            placeholder = stringResource(R.string.signup_password_hint),
+            passwordVisible = uiState.passwordVisible,
+            onToggleVisibility = onTogglePasswordVisibility,
+            showPasswordDescription = stringResource(R.string.signup_show_password),
+            hidePasswordDescription = stringResource(R.string.signup_hide_password),
+            enabled = inputsEnabled,
+            errorMessage = uiState.passwordError?.let { signUpErrorMessage(it) },
+        )
 
-            SignUpErrorFeedback(uiState = uiState)
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(28.dp))
+        SignUpPasswordField(
+            label = stringResource(R.string.signup_confirm_password_label),
+            value = confirmPassword,
+            onValueChange = {
+                confirmPassword = it
+                onClearConfirmPasswordError()
+            },
+            placeholder = stringResource(R.string.signup_confirm_password_hint),
+            passwordVisible = uiState.confirmPasswordVisible,
+            onToggleVisibility = onToggleConfirmPasswordVisibility,
+            showPasswordDescription = stringResource(R.string.signup_show_confirm_password),
+            hidePasswordDescription = stringResource(R.string.signup_hide_confirm_password),
+            enabled = inputsEnabled,
+            errorMessage = uiState.confirmPasswordError?.let { signUpErrorMessage(it) },
+        )
 
-            SignUpPrimaryButton(
-                onClick = { onSignUpClick(name, email, password) },
-                enabled = inputsEnabled,
-            )
+        SignUpFormErrorFeedback(uiState = uiState)
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-            SignUpAppleButton(
-                onClick = onContinueWithAppleClick,
-                enabled = inputsEnabled,
-            )
-        }
+        SignUpPrimaryButton(
+            onClick = { onSignUpClick(name, email, password, confirmPassword) },
+            enabled = inputsEnabled,
+            isLoading = uiState.isLoading,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SignUpAppleButton(
+            onClick = onContinueWithAppleClick,
+            enabled = inputsEnabled,
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
 
         SignUpFooter(
             onSignInClick = onSignInClick,
             enabled = inputsEnabled,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp, start = 28.dp, end = 28.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -235,7 +282,7 @@ private fun SignUpHeader() {
         letterSpacing = 1.6.sp,
     )
 
-    Spacer(modifier = Modifier.height(28.dp))
+    Spacer(modifier = Modifier.height(12.dp))
 
     Text(
         text = stringResource(R.string.signup_headline),
@@ -247,7 +294,7 @@ private fun SignUpHeader() {
         lineHeight = 40.sp,
     )
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 
     Text(
         text = stringResource(R.string.signup_description),
@@ -267,7 +314,10 @@ private fun SignUpLabeledField(
     placeholder: String,
     enabled: Boolean,
     keyboardType: KeyboardType,
+    errorMessage: String? = null,
 ) {
+    val isError = errorMessage != null
+
     Text(
         text = label,
         fontSize = 13.sp,
@@ -282,12 +332,22 @@ private fun SignUpLabeledField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         enabled = enabled,
+        isError = isError,
         placeholder = {
             Text(
                 text = placeholder,
                 color = LoginPlaceholder,
                 fontSize = 15.sp,
             )
+        },
+        supportingText = errorMessage?.let { message ->
+            {
+                Text(
+                    text = message,
+                    color = HomeStatusFailedText,
+                    fontSize = 12.sp,
+                )
+            }
         },
         singleLine = true,
         shape = FieldShape,
@@ -298,14 +358,21 @@ private fun SignUpLabeledField(
 
 @Composable
 private fun SignUpPasswordField(
+    label: String,
     value: String,
     onValueChange: (String) -> Unit,
+    placeholder: String,
     passwordVisible: Boolean,
     onToggleVisibility: () -> Unit,
+    showPasswordDescription: String,
+    hidePasswordDescription: String,
     enabled: Boolean,
+    errorMessage: String? = null,
 ) {
+    val isError = errorMessage != null
+
     Text(
-        text = stringResource(R.string.signup_password_label),
+        text = label,
         fontSize = 13.sp,
         color = LoginTextSecondary,
         fontWeight = FontWeight.Medium,
@@ -318,12 +385,22 @@ private fun SignUpPasswordField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         enabled = enabled,
+        isError = isError,
         placeholder = {
             Text(
-                text = stringResource(R.string.signup_password_hint),
+                text = placeholder,
                 color = LoginPlaceholder,
                 fontSize = 15.sp,
             )
+        },
+        supportingText = errorMessage?.let { message ->
+            {
+                Text(
+                    text = message,
+                    color = HomeStatusFailedText,
+                    fontSize = 12.sp,
+                )
+            }
         },
         singleLine = true,
         shape = FieldShape,
@@ -338,9 +415,11 @@ private fun SignUpPasswordField(
                     painter = painterResource(
                         if (passwordVisible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
                     ),
-                    contentDescription = stringResource(
-                        if (passwordVisible) R.string.signup_hide_password else R.string.signup_show_password,
-                    ),
+                    contentDescription = if (passwordVisible) {
+                        hidePasswordDescription
+                    } else {
+                        showPasswordDescription
+                    },
                     tint = Color.Unspecified,
                 )
             }
@@ -355,26 +434,40 @@ private fun signUpTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = LoginBackground,
     unfocusedContainerColor = LoginBackground,
     disabledContainerColor = LoginBackground,
+    errorContainerColor = LoginBackground,
     focusedBorderColor = LoginBorder,
     unfocusedBorderColor = LoginBorder,
     disabledBorderColor = LoginBorder,
+    errorBorderColor = HomeStatusFailedText,
     cursorColor = LoginTextPrimary,
+    errorCursorColor = HomeStatusFailedText,
     focusedTextColor = LoginTextPrimary,
     unfocusedTextColor = LoginTextPrimary,
+    errorSupportingTextColor = HomeStatusFailedText,
 )
 
 @Composable
-private fun SignUpErrorFeedback(uiState: SignUpUiState) {
-    val errorText = when (uiState.error) {
-        SignUpError.NAME_REQUIRED -> stringResource(R.string.signup_error_name_required)
-        SignUpError.EMAIL_REQUIRED -> stringResource(R.string.signup_error_email_required)
-        SignUpError.PASSWORD_REQUIRED -> stringResource(R.string.signup_error_password_required)
-        SignUpError.SIGN_UP_FAILED -> stringResource(R.string.signup_error_sign_up_failed)
-        null -> if (uiState.authUnavailable) {
-            stringResource(R.string.login_error_auth_unavailable)
-        } else {
-            null
-        }
+private fun signUpErrorMessage(error: SignUpError): String = when (error) {
+    SignUpError.NAME_REQUIRED -> stringResource(R.string.signup_error_name_required)
+    SignUpError.EMAIL_REQUIRED -> stringResource(R.string.signup_error_email_required)
+    SignUpError.PASSWORD_REQUIRED -> stringResource(R.string.signup_error_password_required)
+    SignUpError.CONFIRM_PASSWORD_REQUIRED ->
+        stringResource(R.string.signup_error_confirm_password_required)
+    SignUpError.PASSWORDS_DO_NOT_MATCH ->
+        stringResource(R.string.signup_error_passwords_do_not_match)
+    SignUpError.SIGN_UP_FAILED -> stringResource(R.string.signup_error_sign_up_failed)
+    SignUpError.NETWORK_ERROR -> stringResource(R.string.signup_error_network)
+}
+
+@Composable
+private fun SignUpFormErrorFeedback(uiState: SignUpUiState) {
+    val errorText = when {
+        uiState.formError == SignUpError.SIGN_UP_FAILED ->
+            stringResource(R.string.signup_error_sign_up_failed)
+        uiState.formError == SignUpError.NETWORK_ERROR ->
+            stringResource(R.string.signup_error_network)
+        uiState.authUnavailable -> stringResource(R.string.login_error_auth_unavailable)
+        else -> null
     } ?: return
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -392,31 +485,51 @@ private fun SignUpErrorFeedback(uiState: SignUpUiState) {
 private fun SignUpPrimaryButton(
     onClick: () -> Unit,
     enabled: Boolean,
+    isLoading: Boolean,
 ) {
+    val loadingLabel = stringResource(R.string.signup_loading)
+    val isEnabled = enabled && !isLoading
     Button(
         onClick = onClick,
-        enabled = enabled,
+        enabled = isEnabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
+            .alpha(if (isEnabled) 1f else 0.6f)
             .shadow(
                 elevation = 8.dp,
                 shape = ButtonShape,
                 ambientColor = LoginButtonGlow,
                 spotColor = LoginButtonGlow,
             )
-            .border(1.dp, LoginButtonGlow, ButtonShape),
+            .border(1.dp, LoginButtonGlow, ButtonShape)
+            .semantics {
+                if (isLoading) {
+                    contentDescription = loadingLabel
+                    progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                }
+            },
         shape = ButtonShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = LoginPrimary,
             contentColor = Color.White,
+            disabledContainerColor = LoginPrimary,
+            disabledContentColor = Color.White,
         ),
     ) {
-        Text(
-            text = stringResource(R.string.signup_create_account),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = Color.White,
+                strokeWidth = 2.5.dp,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.signup_create_account),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -482,34 +595,19 @@ private fun SignUpFooter(
     )
 }
 
-@Composable
-internal fun SignUpLoadingScreen(
-    modifier: Modifier = Modifier,
-) {
-    val loadingLabel = stringResource(R.string.signup_loading)
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.48f))
-            .semantics {
-                contentDescription = loadingLabel
-                progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        BouncingDotsIndicator()
-    }
-}
-
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
 private fun SignUpContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         SignUpContent(
             uiState = SignUpUiState(),
-            onClearError = {},
+            onClearNameError = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
+            onClearConfirmPasswordError = {},
             onTogglePasswordVisibility = {},
-            onSignUpClick = { _, _, _ -> },
+            onToggleConfirmPasswordVisibility = {},
+            onSignUpClick = { _, _, _, _ -> },
             onContinueWithAppleClick = {},
             onSignInClick = {},
         )
@@ -518,18 +616,85 @@ private fun SignUpContentPreview() {
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sign Up Loading")
 @Composable
-private fun SignUpLoadingScreenPreview() {
+private fun SignUpLoadingPreview() {
     FolioAndroidTheme(dynamicColor = false) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            SignUpContent(
-                uiState = SignUpUiState(isLoading = true),
-                onClearError = {},
-                onTogglePasswordVisibility = {},
-                onSignUpClick = { _, _, _ -> },
-                onContinueWithAppleClick = {},
-                onSignInClick = {},
-            )
-            SignUpLoadingScreen()
-        }
+        SignUpContent(
+            uiState = SignUpUiState(isLoading = true),
+            onClearNameError = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
+            onClearConfirmPasswordError = {},
+            onTogglePasswordVisibility = {},
+            onToggleConfirmPasswordVisibility = {},
+            onSignUpClick = { _, _, _, _ -> },
+            onContinueWithAppleClick = {},
+            onSignInClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sign Up Field Errors")
+@Composable
+private fun SignUpFieldErrorsPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SignUpContent(
+            uiState = SignUpUiState(
+                nameError = SignUpError.NAME_REQUIRED,
+                emailError = SignUpError.EMAIL_REQUIRED,
+                passwordError = SignUpError.PASSWORD_REQUIRED,
+                confirmPasswordError = SignUpError.CONFIRM_PASSWORD_REQUIRED,
+            ),
+            onClearNameError = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
+            onClearConfirmPasswordError = {},
+            onTogglePasswordVisibility = {},
+            onToggleConfirmPasswordVisibility = {},
+            onSignUpClick = { _, _, _, _ -> },
+            onContinueWithAppleClick = {},
+            onSignInClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sign Up Password Mismatch")
+@Composable
+private fun SignUpPasswordMismatchPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SignUpContent(
+            uiState = SignUpUiState(
+                confirmPasswordError = SignUpError.PASSWORDS_DO_NOT_MATCH,
+            ),
+            onClearNameError = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
+            onClearConfirmPasswordError = {},
+            onTogglePasswordVisibility = {},
+            onToggleConfirmPasswordVisibility = {},
+            onSignUpClick = { _, _, _, _ -> },
+            onContinueWithAppleClick = {},
+            onSignInClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Sign Up Form Error")
+@Composable
+private fun SignUpFormErrorPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SignUpContent(
+            uiState = SignUpUiState(
+                formError = SignUpError.SIGN_UP_FAILED,
+            ),
+            onClearNameError = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
+            onClearConfirmPasswordError = {},
+            onTogglePasswordVisibility = {},
+            onToggleConfirmPasswordVisibility = {},
+            onSignUpClick = { _, _, _, _ -> },
+            onContinueWithAppleClick = {},
+            onSignInClick = {},
+        )
     }
 }

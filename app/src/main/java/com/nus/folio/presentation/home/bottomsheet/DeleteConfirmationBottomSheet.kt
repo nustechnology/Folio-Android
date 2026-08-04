@@ -34,6 +34,7 @@ internal fun DeleteConfirmationBottomSheet(
     onConfirm: () -> Unit = {},
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
+    @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
 ) {
     AnimatedModalSheet(
         onDismiss = onDismiss,
@@ -42,6 +43,7 @@ internal fun DeleteConfirmationBottomSheet(
         DeleteConfirmationSheetContent(
             titleRes = titleRes,
             messageRes = messageRes,
+            confirmLabelRes = confirmLabelRes,
             onCancelClick = { requestDismiss() },
             onConfirm = { requestDismiss { onConfirm() } },
         )
@@ -54,6 +56,7 @@ internal fun DeleteConfirmationSheetContent(
     onConfirm: () -> Unit,
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
+    @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -83,6 +86,7 @@ internal fun DeleteConfirmationSheetContent(
             AddSourceDestructiveButton(
                 onClick = onConfirm,
                 modifier = Modifier.weight(1f),
+                labelRes = confirmLabelRes,
             )
         }
     }

@@ -33,13 +33,13 @@ class ClearAuthSessionUseCaseTest {
     private val useCase = ClearAuthSessionUseCase(repository)
 
     @Test
-    fun `invoke clears current session`() = runTest {
+    fun `invoke clears current session via signOut`() = runTest {
         repository.signInResult = Result.success(AuthSession("user@folio.app", "User"))
         repository.signIn("user@folio.app", "secret")
 
         useCase()
 
         assertNull(repository.getCurrentSession())
-        assertEquals(1, repository.clearSessionCallCount)
+        assertEquals(1, repository.signOutCallCount)
     }
 }

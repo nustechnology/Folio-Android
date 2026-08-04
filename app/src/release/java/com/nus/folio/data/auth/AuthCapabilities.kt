@@ -6,6 +6,4 @@ package com.nus.folio.data.auth
  */
 object AuthCapabilities {
     const val isBackendAvailable: Boolean = false
-    const val defaultLoginEmail: String = ""
-    const val defaultLoginPassword: String = ""
 }

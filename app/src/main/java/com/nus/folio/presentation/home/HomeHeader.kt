@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -35,7 +34,6 @@ import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeSearchField
 import com.nus.folio.ui.theme.HomeSearchPlaceholder
-import com.nus.folio.ui.theme.LoginCopper
 
 @Composable
 internal fun HomeHeaderRow(

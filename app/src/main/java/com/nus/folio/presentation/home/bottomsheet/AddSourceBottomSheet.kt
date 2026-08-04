@@ -19,7 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,13 +39,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -83,10 +78,8 @@ import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeChipBorder
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeSheetBackground
-import com.nus.folio.ui.theme.HomeSheetHandle
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeStatusFailedBackground
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeUploadIcon
 import com.nus.folio.ui.theme.LoginCopper

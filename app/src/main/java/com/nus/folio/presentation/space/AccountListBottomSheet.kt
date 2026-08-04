@@ -208,16 +208,10 @@ private fun AccountListSheetContentPreview() {
                 AccountListSheetContent(
                     accounts = listOf(
                         SpaceAccountItem(
-                            id = "1",
-                            displayName = "Alex Nguyen",
-                            email = "alex@folio.app",
+                            id = "jordan@folio.app",
+                            displayName = "Jordan Lee",
+                            email = "jordan@folio.app",
                             isSelected = true,
-                        ),
-                        SpaceAccountItem(
-                            id = SpaceViewModel.PLACEHOLDER_ACCOUNT_ID,
-                            displayName = SpaceViewModel.PLACEHOLDER_ACCOUNT_DISPLAY_NAME,
-                            email = SpaceViewModel.PLACEHOLDER_ACCOUNT_EMAIL,
-                            isPlaceholder = true,
                         ),
                     ),
                     onOpenSettingsClick = {},

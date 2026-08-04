@@ -1,6 +1,5 @@
 package com.nus.folio.presentation.signup
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -29,7 +28,7 @@ class SignUpScreenAccessibilityTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun loadingState_disablesFormControlsAndExposesProgressSemantics() {
+    fun loadingState_showsProgressOnCreateAccountAndDisablesFormControls() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val loadingLabel = context.getString(R.string.signup_loading)
         val createAccountLabel = context.getString(R.string.signup_create_account)
@@ -37,18 +36,19 @@ class SignUpScreenAccessibilityTest {
 
         composeTestRule.setContent {
             FolioAndroidTheme(dynamicColor = false) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    SignUpContent(
-                        uiState = SignUpUiState(isLoading = true),
-                        onClearError = {},
-                        onTogglePasswordVisibility = {},
-                        onSignUpClick = { _, _, _ -> },
-                        onContinueWithAppleClick = {},
-                        onSignInClick = {},
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    SignUpLoadingScreen(modifier = Modifier.fillMaxSize())
-                }
+                SignUpContent(
+                    uiState = SignUpUiState(isLoading = true),
+                    onClearNameError = {},
+                    onClearEmailError = {},
+                    onClearPasswordError = {},
+                    onClearConfirmPasswordError = {},
+                    onTogglePasswordVisibility = {},
+                    onToggleConfirmPasswordVisibility = {},
+                    onSignUpClick = { _, _, _, _ -> },
+                    onContinueWithAppleClick = {},
+                    onSignInClick = {},
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
 
@@ -60,7 +60,7 @@ class SignUpScreenAccessibilityTest {
             .assertExists()
         composeTestRule
             .onNodeWithText(createAccountLabel)
-            .assertIsNotEnabled()
+            .assertDoesNotExist()
         composeTestRule
             .onNodeWithText(appleLabel)
             .assertIsNotEnabled()
@@ -70,7 +70,7 @@ class SignUpScreenAccessibilityTest {
             .let { nodes ->
                 assertTrue(
                     "Expected disabled text fields while loading, found ${nodes.size}",
-                    nodes.size >= 3,
+                    nodes.size >= 4,
                 )
             }
     }

@@ -51,7 +51,6 @@ import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.FolioSheetShape
 import com.nus.folio.ui.theme.HomeCardBackground
-import com.nus.folio.ui.theme.HomeChipBorder
 import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
@@ -63,6 +62,7 @@ private val AddSpaceObjectiveHeight = 160.dp
 internal fun AddSpaceBottomSheet(
     onDismiss: () -> Unit,
     onSubmit: (String, String) -> Unit = { _, _ -> },
+    isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -82,7 +82,10 @@ internal fun AddSpaceBottomSheet(
     ) { requestDismiss ->
         AddSourceDragHandle()
         AddSpaceSheetContent(
-            onCancelClick = { requestDismiss() },
+            isSubmitting = isSubmitting,
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
+            },
             onSubmit = { name, objective ->
                 onSubmit(name, objective)
             },
@@ -94,10 +97,11 @@ internal fun AddSpaceBottomSheet(
 private fun AddSpaceSheetContent(
     onCancelClick: () -> Unit,
     onSubmit: (String, String) -> Unit,
+    isSubmitting: Boolean = false,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var objective by rememberSaveable { mutableStateOf("") }
-    val canSubmit = name.isNotBlank()
+    val canSubmit = name.isNotBlank() && !isSubmitting
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -125,8 +129,6 @@ private fun AddSpaceSheetContent(
             value = objective,
             onValueChange = { objective = it },
         )
-        Spacer(modifier = Modifier.height(20.dp))
-        AddSpacePrivacySection()
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -140,6 +142,7 @@ private fun AddSpaceSheetContent(
                 enabled = canSubmit,
                 onClick = { onSubmit(name.trim(), objective.trim()) },
                 labelRes = R.string.add_space_submit,
+                isLoading = isSubmitting,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -225,41 +228,6 @@ private fun AddSpaceObjectiveField(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AddSpacePrivacySection() {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.add_space_privacy_label),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = LoginCopper,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(HomeUploadZoneShape)
-                .border(1.dp, HomeChipBorder, HomeUploadZoneShape)
-                .background(HomeCardBackground)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.add_space_privacy_title),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = HomeTextPrimary,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.add_space_privacy_subtitle),
-                fontSize = 13.sp,
-                color = HomeTextSecondary,
-                lineHeight = 18.sp,
             )
         }
     }

@@ -2,45 +2,54 @@ package com.nus.folio.di
 
 import android.content.Context
 import com.nus.folio.data.auth.AuthCapabilities
+import com.nus.folio.data.auth.AuthSessionStore
+import com.nus.folio.data.auth.EncryptedAuthSessionStore
 import com.nus.folio.data.datasource.AskDataSource
 import com.nus.folio.data.datasource.AuthDataSource
-import com.nus.folio.data.datasource.GreetingDataSource
 import com.nus.folio.data.datasource.NoteDataSource
 import com.nus.folio.data.datasource.SourceDataSource
 import com.nus.folio.data.datasource.SourceOriginalFileDataSource
 import com.nus.folio.data.datasource.SpaceDataSource
 import com.nus.folio.data.repository.AskRepositoryImpl
 import com.nus.folio.data.repository.AuthRepositoryImpl
-import com.nus.folio.data.repository.GreetingRepositoryImpl
 import com.nus.folio.data.repository.NoteRepositoryImpl
 import com.nus.folio.data.repository.SourceRepositoryImpl
 import com.nus.folio.data.repository.SpaceRepositoryImpl
 import com.nus.folio.domain.repository.AskRepository
 import com.nus.folio.domain.repository.AuthRepository
-import com.nus.folio.domain.repository.GreetingRepository
 import com.nus.folio.domain.repository.NoteRepository
 import com.nus.folio.domain.repository.SourceRepository
 import com.nus.folio.domain.repository.SpaceRepository
 import com.nus.folio.domain.usecase.ClearAuthSessionUseCase
+import com.nus.folio.domain.usecase.CreateSpaceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
-import com.nus.folio.domain.usecase.GetGreetingUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourceOriginalFileUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
+import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
+import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class AppContainer(
     appContext: Context,
+    applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
 
     private val applicationContext = appContext.applicationContext
@@ -48,19 +57,10 @@ class AppContainer(
     /** False in release until AuthDataSource is wired to a real backend. */
     val isAuthAvailable: Boolean = AuthCapabilities.isBackendAvailable
 
-    /** Prefills login fields in debug; empty in release. */
-    val defaultLoginEmail: String = AuthCapabilities.defaultLoginEmail
-    val defaultLoginPassword: String = AuthCapabilities.defaultLoginPassword
+    private val _isSessionRestored = MutableStateFlow(false)
 
-    private val greetingDataSource: GreetingDataSource by lazy { GreetingDataSource() }
-
-    private val greetingRepository: GreetingRepository by lazy {
-        GreetingRepositoryImpl(greetingDataSource)
-    }
-
-    val getGreetingUseCase: GetGreetingUseCase by lazy {
-        GetGreetingUseCase(greetingRepository)
-    }
+    /** Becomes true after the persisted auth session has been restored off the main thread. */
+    val isSessionRestored: StateFlow<Boolean> = _isSessionRestored.asStateFlow()
 
     private val sourceDataSource: SourceDataSource by lazy { SourceDataSource() }
 
@@ -120,7 +120,37 @@ class AppContainer(
         DeleteNoteUseCase(noteRepository)
     }
 
-    private val spaceDataSource: SpaceDataSource by lazy { SpaceDataSource() }
+    private val authDataSource: AuthDataSource by lazy { AuthDataSource() }
+
+    private val authSessionStore: AuthSessionStore by lazy {
+        EncryptedAuthSessionStore(applicationContext)
+    }
+
+    private val authRepositoryImpl: AuthRepositoryImpl by lazy {
+        AuthRepositoryImpl(authDataSource, authSessionStore)
+    }
+
+    private val authRepository: AuthRepository
+        get() = authRepositoryImpl
+
+    init {
+        applicationScope.launch {
+            try {
+                authRepositoryImpl.restoreSession()
+            } finally {
+                _isSessionRestored.value = true
+            }
+        }
+    }
+
+    private val spaceDataSource: SpaceDataSource by lazy {
+        SpaceDataSource(
+            accessTokenProvider = { authRepository.getCurrentSession()?.accessToken },
+            refreshAccessToken = {
+                authRepository.refreshSession().getOrNull()?.accessToken
+            },
+        )
+    }
 
     private val spaceRepository: SpaceRepository by lazy {
         SpaceRepositoryImpl(spaceDataSource)
@@ -130,10 +160,8 @@ class AppContainer(
         GetSpacesUseCase(spaceRepository)
     }
 
-    private val authDataSource: AuthDataSource by lazy { AuthDataSource() }
-
-    private val authRepository: AuthRepository by lazy {
-        AuthRepositoryImpl(authDataSource)
+    val createSpaceUseCase: CreateSpaceUseCase by lazy {
+        CreateSpaceUseCase(spaceRepository)
     }
 
     val signUpUseCase: SignUpUseCase by lazy {
@@ -148,12 +176,20 @@ class AppContainer(
         SignInWithAppleUseCase(authRepository)
     }
 
+    val refreshAuthSessionUseCase: RefreshAuthSessionUseCase by lazy {
+        RefreshAuthSessionUseCase(authRepository)
+    }
+
     val requestPasswordResetUseCase: RequestPasswordResetUseCase by lazy {
         RequestPasswordResetUseCase(authRepository)
     }
 
     val getCurrentSessionUseCase: GetCurrentSessionUseCase by lazy {
         GetCurrentSessionUseCase(authRepository)
+    }
+
+    val syncCurrentUserUseCase: SyncCurrentUserUseCase by lazy {
+        SyncCurrentUserUseCase(authRepository)
     }
 
     val clearAuthSessionUseCase: ClearAuthSessionUseCase by lazy {

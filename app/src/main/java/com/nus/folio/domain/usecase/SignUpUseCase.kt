@@ -10,5 +10,6 @@ class SignUpUseCase(
         name: String,
         email: String,
         password: String,
-    ): Result<AuthSession> = repository.signUp(name, email, password)
+        confirmPassword: String,
+    ): Result<AuthSession> = repository.signUp(name, email, password, confirmPassword)
 }

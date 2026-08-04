@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -29,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,7 +74,8 @@ import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.HomeTypeBadgeBackground
 import com.nus.folio.ui.theme.LoginCopper
-
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 @Composable
 fun SpaceScreen(
     onSpaceSelected: (Space) -> Unit,
@@ -81,7 +84,10 @@ fun SpaceScreen(
     viewModel: SpaceViewModel = viewModel(
         factory = SpaceViewModel.Factory(
             getSpacesUseCase = LocalAppContainer.current.getSpacesUseCase,
+            createSpaceUseCase = LocalAppContainer.current.createSpaceUseCase,
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
+            syncCurrentUserUseCase = LocalAppContainer.current.syncCurrentUserUseCase,
+            refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
         ),
     ),
 ) {
@@ -99,14 +105,27 @@ fun SpaceScreen(
         viewModel.onUserMessageShown()
     }
 
+    LaunchedEffect(uiState.actionError) {
+        val message = uiState.actionError ?: return@LaunchedEffect
+        toastHostState.showToast(
+            FolioToastVisuals(
+                message = message,
+                style = FolioToastStyle.Error,
+            ),
+        )
+        viewModel.onActionErrorShown()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         SpaceContent(
             uiState = uiState,
             avatarInitial = avatarInitial,
-            onRetry = viewModel::loadSpaces,
+            onRetry = viewModel::onRetry,
             onSearchQueryChange = viewModel::onSearchQueryChange,
+            onFilterSortClick = viewModel::onFilterSortClick,
             onAvatarClick = viewModel::onAccountClick,
             onAddClick = viewModel::onAddClick,
+            onLoadMore = viewModel::onLoadMore,
             onSpaceClick = onSpaceSelected,
             onSpaceMoreClick = viewModel::onSpaceOptionsClick,
             modifier = Modifier.fillMaxSize(),
@@ -130,6 +149,7 @@ fun SpaceScreen(
 
         if (uiState.showAddSheet) {
             AddSpaceBottomSheet(
+                isSubmitting = uiState.isCreatingSpace,
                 onDismiss = viewModel::onAddSheetDismiss,
                 onSubmit = { name, objective ->
                     viewModel.onAddSpaceSubmit(name, objective)
@@ -171,6 +191,14 @@ fun SpaceScreen(
                 onAccountSelected = viewModel::onAccountSelected,
             )
         }
+
+        if (uiState.showSortSheet) {
+            SortSpacesBottomSheet(
+                selectedSort = uiState.selectedSort,
+                onSortSelected = viewModel::onSortSelected,
+                onDismiss = viewModel::onSortSheetDismiss,
+            )
+        }
     }
 }
 
@@ -180,12 +208,28 @@ internal fun SpaceContent(
     avatarInitial: String,
     onRetry: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onFilterSortClick: () -> Unit = {},
     onAvatarClick: () -> Unit,
     onAddClick: () -> Unit,
+    onLoadMore: () -> Unit = {},
     onSpaceClick: (Space) -> Unit,
     onSpaceMoreClick: (Space) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            totalItems > 0 && lastVisible >= totalItems - LOAD_MORE_THRESHOLD
+        }
+            .distinctUntilChanged()
+            .filter { nearEnd -> nearEnd }
+            .collect { onLoadMore() }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -204,11 +248,19 @@ internal fun SpaceContent(
                 onAvatarClick = onAvatarClick,
             )
             Spacer(modifier = Modifier.height(16.dp))
-            FolioSearchField(
-                query = uiState.searchQuery,
-                onQueryChange = onSearchQueryChange,
-                placeholder = stringResource(R.string.space_search_hint),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FolioSearchField(
+                    query = uiState.searchQuery,
+                    onQueryChange = onSearchQueryChange,
+                    placeholder = stringResource(R.string.space_search_hint),
+                    modifier = Modifier.weight(1f),
+                )
+                SpaceFilterSortButton(onClick = onFilterSortClick)
+            }
         }
 
         when {
@@ -254,6 +306,7 @@ internal fun SpaceContent(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = 16.dp,
@@ -270,12 +323,33 @@ internal fun SpaceContent(
                             onMoreClick = { onSpaceMoreClick(space) },
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    if (uiState.isLoadingMore) {
+                        item(key = "spaces_loading_more") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = HomeHeader,
+                                    strokeWidth = 3.dp,
+                                )
+                            }
+                        }
+                    } else {
+                        item(key = "spaces_list_spacer") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+private const val LOAD_MORE_THRESHOLD = 3
 
 @Composable
 private fun SpaceHeaderRow(
@@ -327,6 +401,32 @@ private fun SpaceHeaderRow(
                 color = Color.White,
             )
         }
+    }
+}
+
+@Composable
+private fun SpaceFilterSortButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(SpaceCardShape)
+            .background(HomeSearchField)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_filter_sort),
+            contentDescription = stringResource(R.string.space_filter_sort),
+            tint = HomeSearchPlaceholder,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -507,19 +607,12 @@ private fun SpaceUserMessage.toSpaceToastVisuals(context: android.content.Contex
     val messageRes = when (this) {
         SpaceUserMessage.SPACE_CREATED -> R.string.toast_space_created
         SpaceUserMessage.SPACE_UPDATED -> R.string.toast_space_updated
-        SpaceUserMessage.SPACE_DELETED -> R.string.toast_space_deleted
-        SpaceUserMessage.ADD_SPACE_NOT_SUPPORTED -> R.string.space_add_not_supported
-        SpaceUserMessage.RENAME_SPACE_NOT_SUPPORTED -> R.string.space_rename_not_supported
         SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED -> R.string.space_delete_not_supported
     }
     val style = when (this) {
         SpaceUserMessage.SPACE_CREATED,
         SpaceUserMessage.SPACE_UPDATED,
-        SpaceUserMessage.SPACE_DELETED,
         -> FolioToastStyle.Success
-        SpaceUserMessage.ADD_SPACE_NOT_SUPPORTED,
-        SpaceUserMessage.RENAME_SPACE_NOT_SUPPORTED,
-        -> FolioToastStyle.Warning
         SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED,
         -> FolioToastStyle.Error
     }

@@ -1,5 +1,6 @@
 package com.nus.folio.presentation.signup
 
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
@@ -11,6 +12,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.io.IOException
 
 class SignUpViewModelTest {
 
@@ -26,12 +28,24 @@ class SignUpViewModelTest {
     )
 
     @Test
-    fun `onSignUpClick with blank name sets NAME_REQUIRED`() {
+    fun `onSignUpClick with blank fields sets all field errors`() {
         val viewModel = createViewModel()
 
-        viewModel.onSignUpClick(name = " ", email = "a@folio.app", password = "secret")
+        viewModel.onSignUpClick(
+            name = " ",
+            email = "",
+            password = " ",
+            confirmPassword = "",
+        )
 
-        assertEquals(SignUpError.NAME_REQUIRED, viewModel.uiState.value.error)
+        assertEquals(SignUpError.NAME_REQUIRED, viewModel.uiState.value.nameError)
+        assertEquals(SignUpError.EMAIL_REQUIRED, viewModel.uiState.value.emailError)
+        assertEquals(SignUpError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
+        assertEquals(
+            SignUpError.CONFIRM_PASSWORD_REQUIRED,
+            viewModel.uiState.value.confirmPasswordError,
+        )
+        assertNull(viewModel.uiState.value.formError)
         assertEquals(0, repository.signUpCallCount)
     }
 
@@ -39,9 +53,17 @@ class SignUpViewModelTest {
     fun `onSignUpClick with blank email sets EMAIL_REQUIRED`() {
         val viewModel = createViewModel()
 
-        viewModel.onSignUpClick(name = "Alex", email = "", password = "secret")
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "",
+            password = "secret",
+            confirmPassword = "secret",
+        )
 
-        assertEquals(SignUpError.EMAIL_REQUIRED, viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.nameError)
+        assertEquals(SignUpError.EMAIL_REQUIRED, viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
+        assertNull(viewModel.uiState.value.confirmPasswordError)
         assertEquals(0, repository.signUpCallCount)
     }
 
@@ -49,9 +71,50 @@ class SignUpViewModelTest {
     fun `onSignUpClick with blank password sets PASSWORD_REQUIRED`() {
         val viewModel = createViewModel()
 
-        viewModel.onSignUpClick(name = "Alex", email = "a@folio.app", password = " ")
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "a@folio.app",
+            password = " ",
+            confirmPassword = "secret",
+        )
 
-        assertEquals(SignUpError.PASSWORD_REQUIRED, viewModel.uiState.value.error)
+        assertEquals(SignUpError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
+        assertEquals(0, repository.signUpCallCount)
+    }
+
+    @Test
+    fun `onSignUpClick with blank confirm password sets CONFIRM_PASSWORD_REQUIRED`() {
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "a@folio.app",
+            password = "secret",
+            confirmPassword = " ",
+        )
+
+        assertEquals(
+            SignUpError.CONFIRM_PASSWORD_REQUIRED,
+            viewModel.uiState.value.confirmPasswordError,
+        )
+        assertEquals(0, repository.signUpCallCount)
+    }
+
+    @Test
+    fun `onSignUpClick with mismatched passwords sets PASSWORDS_DO_NOT_MATCH`() {
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "a@folio.app",
+            password = "secret",
+            confirmPassword = "other",
+        )
+
+        assertEquals(
+            SignUpError.PASSWORDS_DO_NOT_MATCH,
+            viewModel.uiState.value.confirmPasswordError,
+        )
         assertEquals(0, repository.signUpCallCount)
     }
 
@@ -60,23 +123,106 @@ class SignUpViewModelTest {
         repository.signUpResult = Result.success(AuthSession("a@folio.app"))
         val viewModel = createViewModel()
 
-        viewModel.onSignUpClick("Alex", "a@folio.app", "secret")
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
 
-        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.shouldNavigateToHome)
-        assertNull(viewModel.uiState.value.error)
-        assertEquals("Alex", repository.lastSignUpName)
+        assertNull(viewModel.uiState.value.formError)
+        assertEquals("Jordan Lee", repository.lastSignUpName)
+        assertEquals("secret", repository.lastSignUpConfirmPassword)
     }
 
     @Test
-    fun `onSignUpClick failure sets SIGN_UP_FAILED`() {
-        repository.signUpResult = Result.failure(IllegalStateException("exists"))
+    fun `onSignUpClick failure with api message sets toastMessage`() {
+        repository.signUpResult = Result.failure(AuthApiException("Email already registered"))
         val viewModel = createViewModel()
 
-        viewModel.onSignUpClick("Alex", "a@folio.app", "secret")
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
 
-        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.error)
+        assertEquals("Email already registered", viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.formError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignUpClick failure without message sets SIGN_UP_FAILED`() {
+        repository.signUpResult = Result.failure(AuthApiException(""))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+        assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignUpClick missing field IOException maps to SIGN_UP_FAILED`() {
+        repository.signUpResult =
+            Result.failure(IOException("Sign-up failed: missing access token"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+    }
+
+    @Test
+    fun `onSignUpClick non-server IOException message maps to SIGN_UP_FAILED`() {
+        repository.signUpResult = Result.failure(IOException("Broken pipe"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+    }
+
+    @Test
+    fun `onSignUpClick illegal argument does not toast raw developer message`() {
+        repository.signUpResult =
+            Result.failure(IllegalArgumentException("Passwords do not match"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+    }
+
+    @Test
+    fun `onSignUpClick unknown host maps to NETWORK_ERROR`() {
+        repository.signUpResult =
+            Result.failure(java.net.UnknownHostException("shale-crowd-satin.ngrok-free.dev"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.NETWORK_ERROR, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+    }
+
+    @Test
+    fun `onSignUpClick socket timeout maps to NETWORK_ERROR`() {
+        repository.signUpResult = Result.failure(java.net.SocketTimeoutException("timeout"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.NETWORK_ERROR, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
+    }
+
+    @Test
+    fun `onSignUpClick socket exception maps to NETWORK_ERROR`() {
+        repository.signUpResult = Result.failure(java.net.SocketException("Connection reset"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.NETWORK_ERROR, viewModel.uiState.value.formError)
+        assertNull(viewModel.uiState.value.toastMessage)
     }
 
     @Test
@@ -90,13 +236,25 @@ class SignUpViewModelTest {
     }
 
     @Test
-    fun `onContinueWithAppleClick failure sets SIGN_UP_FAILED`() {
-        repository.signInWithAppleResult = Result.failure(IllegalStateException("apple error"))
+    fun `onContinueWithAppleClick failure with message sets toastMessage`() {
+        repository.signInWithAppleResult = Result.failure(AuthApiException("apple error"))
         val viewModel = createViewModel()
 
         viewModel.onContinueWithAppleClick()
 
-        assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.error)
+        assertEquals("apple error", viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.formError)
+    }
+
+    @Test
+    fun `onToastMessageShown clears toastMessage`() {
+        repository.signUpResult = Result.failure(AuthApiException("Email already registered"))
+        val viewModel = createViewModel()
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        viewModel.onToastMessageShown()
+
+        assertNull(viewModel.uiState.value.toastMessage)
     }
 
     @Test
@@ -109,13 +267,22 @@ class SignUpViewModelTest {
     }
 
     @Test
-    fun `clearError clears error`() {
+    fun `onToggleConfirmPasswordVisibility toggles flag`() {
         val viewModel = createViewModel()
-        viewModel.onSignUpClick("", "a@folio.app", "secret")
 
-        viewModel.clearError()
+        viewModel.onToggleConfirmPasswordVisibility()
 
-        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.confirmPasswordVisible)
+    }
+
+    @Test
+    fun `clearNameError clears name field error`() {
+        val viewModel = createViewModel()
+        viewModel.onSignUpClick("", "a@folio.app", "secret", "secret")
+
+        viewModel.clearNameError()
+
+        assertNull(viewModel.uiState.value.nameError)
     }
 
     @Test
@@ -123,17 +290,18 @@ class SignUpViewModelTest {
         val viewModel = createViewModel(isAuthAvailable = false)
 
         assertTrue(viewModel.uiState.value.authUnavailable)
-        assertNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.formError)
     }
 
     @Test
-    fun `onNavigationHandled clears navigation flag`() {
+    fun `onNavigationHandled clears navigation flag and loading`() {
         repository.signUpResult = Result.success(AuthSession("a@folio.app"))
         val viewModel = createViewModel()
-        viewModel.onSignUpClick("Alex", "a@folio.app", "secret")
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
 
         viewModel.onNavigationHandled()
 
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 }

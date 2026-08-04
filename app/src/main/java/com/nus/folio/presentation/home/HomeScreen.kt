@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +65,7 @@ import com.nus.folio.presentation.home.pane.SourcesPane
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -94,11 +95,13 @@ fun HomeScreen(
 ) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddSourceSheet by remember { mutableStateOf(false) }
     var showAddNoteSheet by remember { mutableStateOf(false) }
     var showConversationSheet by remember { mutableStateOf(false) }
     var showAnswerScopeSheet by remember { mutableStateOf(false) }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
     val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.userMessage) {
@@ -149,10 +152,7 @@ fun HomeScreen(
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
-            onSignOut = {
-                container.clearAuthSessionUseCase()
-                onSignOut()
-            },
+            onSignOut = { showSignOutConfirm = true },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -264,6 +264,21 @@ fun HomeScreen(
                 messageRes = R.string.note_delete_message,
                 onDismiss = viewModel::onDeleteNoteDismiss,
                 onConfirm = viewModel::onDeleteNoteConfirm,
+            )
+        }
+
+        if (showSignOutConfirm) {
+            DeleteConfirmationBottomSheet(
+                titleRes = R.string.account_sign_out_title,
+                messageRes = R.string.account_sign_out_message,
+                confirmLabelRes = R.string.account_sign_out,
+                onDismiss = { showSignOutConfirm = false },
+                onConfirm = {
+                    scope.launch {
+                        container.clearAuthSessionUseCase()
+                        onSignOut()
+                    }
+                },
             )
         }
 
@@ -465,10 +480,6 @@ private fun HomeContentPreview() {
                 ),
                 spaceTitle = "Dissertation Research",
                 allCount = 128,
-                papersCount = 80,
-                booksCount = 24,
-                webCount = 18,
-                textCount = 6,
             ),
             onRetry = {},
             onSearchQueryChange = {},
@@ -701,39 +712,29 @@ private fun HomeNotesSearchEmptyPreview() {
 
 private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context): FolioToastVisuals {
     val messageRes = when (this) {
-        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created
         HomeUserMessage.SOURCE_UPDATED -> R.string.toast_source_updated
         HomeUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
         HomeUserMessage.SOURCE_UPDATE_FAILED -> R.string.toast_source_update_failed
         HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
-        HomeUserMessage.NOTE_CREATED -> R.string.toast_note_created
         HomeUserMessage.NOTE_UPDATED -> R.string.toast_note_updated
         HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
-        HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED -> R.string.home_add_source_not_supported
         HomeUserMessage.ASK_NOT_SUPPORTED -> R.string.home_ask_not_supported
         HomeUserMessage.ADD_NOTE_NOT_SUPPORTED -> R.string.add_note_not_supported
-        HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED -> R.string.home_add_notebook_not_supported
         HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_copy_not_supported
         HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_export_not_supported
-        HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED -> R.string.note_view_not_supported
         HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED -> R.string.note_edit_not_supported
         HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED -> R.string.note_convert_not_supported
         HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED -> R.string.note_delete_not_supported
     }
     val style = when (this) {
-        HomeUserMessage.SOURCE_CREATED,
         HomeUserMessage.SOURCE_UPDATED,
         HomeUserMessage.SOURCE_DELETED,
-        HomeUserMessage.NOTE_CREATED,
         HomeUserMessage.NOTE_UPDATED,
         HomeUserMessage.NOTE_DELETED,
         -> FolioToastStyle.Success
         HomeUserMessage.ASK_NOT_SUPPORTED,
-        HomeUserMessage.VIEW_NOTE_NOT_SUPPORTED,
         -> FolioToastStyle.Info
-        HomeUserMessage.ADD_SOURCE_NOT_SUPPORTED,
         HomeUserMessage.ADD_NOTE_NOT_SUPPORTED,
-        HomeUserMessage.ADD_NOTEBOOK_NOT_SUPPORTED,
         HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED,
         HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED,
         HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
