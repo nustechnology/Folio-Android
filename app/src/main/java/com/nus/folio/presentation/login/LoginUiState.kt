@@ -5,6 +5,7 @@ data class LoginUiState(
     val isLoading: Boolean = false,
     val authUnavailable: Boolean = false,
     val error: LoginError? = null,
+    val toastMessage: String? = null,
     val shouldNavigateToHome: Boolean = false,
 )
 

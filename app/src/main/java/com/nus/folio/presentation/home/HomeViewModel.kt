@@ -81,10 +81,6 @@ class HomeViewModel(
                             sourcesError = null,
                             allSources = library.sources,
                             allCount = library.allCount,
-                            papersCount = library.papersCount,
-                            booksCount = library.booksCount,
-                            webCount = library.webCount,
-                            textCount = library.textCount,
                         )
                     },
                     onFailure = { throwable ->
@@ -334,10 +330,6 @@ class HomeViewModel(
                         val next = state.copy(
                             allSources = updatedSources,
                             allCount = updatedSources.size,
-                            papersCount = updatedSources.count { it.type == SourceType.PDF },
-                            booksCount = updatedSources.count { it.type == SourceType.BOOK },
-                            webCount = updatedSources.count { it.type == SourceType.WEB },
-                            textCount = updatedSources.count { it.type == SourceType.TEXT },
                             deletingSource = null,
                             userMessage = HomeUserMessage.SOURCE_DELETED,
                         )

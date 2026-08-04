@@ -56,8 +56,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
-import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.components.BouncingDotsIndicator
+import com.nus.folio.components.FolioToastHost
+import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.rememberFolioToastHostState
+import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.LoginBackground
@@ -77,7 +80,7 @@ private val ButtonShape = RoundedCornerShape(12.dp)
 fun LoginScreen(
     onNavigateToSpaces: () -> Unit,
     onNavigateToSignUp: () -> Unit,
-    onNavigateToResetPassword: (email: String) -> Unit,
+    onNavigateToResetPassword: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(
@@ -87,6 +90,7 @@ fun LoginScreen(
     ),
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+    val toastHostState = rememberFolioToastHostState()
 
     LaunchedEffect(uiState.shouldNavigateToHome) {
         if (uiState.shouldNavigateToHome) {
@@ -95,11 +99,15 @@ fun LoginScreen(
         }
     }
 
+    LaunchedEffect(uiState.toastMessage) {
+        val message = uiState.toastMessage ?: return@LaunchedEffect
+        toastHostState.showToast(message = message, style = FolioToastStyle.Error)
+        viewModel.onToastMessageShown()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LoginContent(
             uiState = uiState,
-            initialEmail = LocalAppContainer.current.defaultLoginEmail,
-            initialPassword = LocalAppContainer.current.defaultLoginPassword,
             onClearFeedback = viewModel::clearFeedback,
             onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
             onSignInClick = viewModel::onSignInClick,
@@ -110,6 +118,13 @@ fun LoginScreen(
         if (uiState.isLoading) {
             LoginLoadingScreen(modifier = Modifier.fillMaxSize())
         }
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 
@@ -119,14 +134,12 @@ private fun LoginContent(
     onClearFeedback: () -> Unit,
     onTogglePasswordVisibility: () -> Unit,
     onSignInClick: (email: String, password: String) -> Unit,
-    onForgotPasswordClick: (email: String) -> Unit,
+    onForgotPasswordClick: () -> Unit,
     onSignUpClick: () -> Unit,
     modifier: Modifier = Modifier,
-    initialEmail: String = "",
-    initialPassword: String = "",
 ) {
-    var email by rememberSaveable { mutableStateOf(initialEmail) }
-    var password by remember { mutableStateOf(initialPassword) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     val inputsEnabled = !uiState.authUnavailable
 
     Box(
@@ -173,7 +186,7 @@ private fun LoginContent(
             Spacer(modifier = Modifier.height(12.dp))
 
             LoginForgotPassword(
-                onClick = { onForgotPasswordClick(email) },
+                onClick = onForgotPasswordClick,
                 enabled = inputsEnabled,
             )
 

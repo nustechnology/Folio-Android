@@ -1,10 +1,12 @@
 package com.nus.folio.presentation.navigation
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -22,6 +24,7 @@ import com.nus.folio.presentation.resetpassword.ResetPasswordScreen
 import com.nus.folio.presentation.signup.SignUpScreen
 import com.nus.folio.presentation.sourcedetail.SourceDetailScreen
 import com.nus.folio.presentation.space.SpaceScreen
+import kotlinx.coroutines.launch
 
 object FolioDestination {
     const val LOGIN = "login"
@@ -34,8 +37,7 @@ object FolioDestination {
     const val HOME_TAB_RESULT = "home_tab_result"
     const val HOME_ASK_SOURCE_RESULT = "home_ask_source_result"
 
-    fun resetPassword(email: String = ""): String =
-        "$RESET_PASSWORD?email=${Uri.encode(email)}"
+    fun resetPassword(): String = RESET_PASSWORD
 
     fun home(spaceId: String, spaceTitle: String = ""): String =
         "$HOME/${Uri.encode(spaceId)}?title=${Uri.encode(spaceTitle)}"
@@ -50,12 +52,23 @@ private fun NavHostController.popBackStackOrIgnore(): Boolean =
 
 @Composable
 fun FolioNavHost(modifier: Modifier = Modifier) {
-    val navController = rememberNavController()
+    val container = LocalAppContainer.current
+    val isSessionRestored by container.isSessionRestored.collectAsStateWithLifecycle()
+    if (!isSessionRestored) {
+        Box(modifier = modifier.fillMaxSize())
+        return
+    }
 
-    // Always LOGIN until auth session persistence is implemented.
+    val navController = rememberNavController()
+    val startDestination = if (container.getCurrentSessionUseCase() != null) {
+        FolioDestination.SPACES
+    } else {
+        FolioDestination.LOGIN
+    }
+
     NavHost(
         navController = navController,
-        startDestination = FolioDestination.LOGIN,
+        startDestination = startDestination,
         modifier = modifier.fillMaxSize(),
     ) {
         composable(FolioDestination.LOGIN) {
@@ -68,8 +81,8 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onNavigateToSignUp = {
                     navController.navigate(FolioDestination.SIGN_UP)
                 },
-                onNavigateToResetPassword = { email ->
-                    navController.navigate(FolioDestination.resetPassword(email))
+                onNavigateToResetPassword = {
+                    navController.navigate(FolioDestination.resetPassword())
                 },
             )
         }
@@ -89,17 +102,8 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 },
             )
         }
-        composable(
-            route = "${FolioDestination.RESET_PASSWORD}?email={email}",
-            arguments = listOf(
-                navArgument("email") {
-                    type = NavType.StringType
-                    defaultValue = ""
-                },
-            ),
-        ) { entry ->
+        composable(FolioDestination.RESET_PASSWORD) {
             ResetPasswordScreen(
-                initialEmail = entry.arguments?.getString("email").orEmpty(),
                 onNavigateBack = { navController.popBackStackOrIgnore() },
             )
         }
@@ -117,6 +121,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         }
         composable(FolioDestination.ACCOUNT) {
             val container = LocalAppContainer.current
+            val scope = rememberCoroutineScope()
             AccountSettingsScreen(
                 onBackClick = {
                     // Prefer Spaces as the post-auth root; never pop it away on a double tap.
@@ -125,9 +130,11 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                     }
                 },
                 onSignOut = {
-                    container.clearAuthSessionUseCase()
-                    navController.navigate(FolioDestination.LOGIN) {
-                        popUpTo(FolioDestination.SPACES) { inclusive = true }
+                    scope.launch {
+                        container.clearAuthSessionUseCase()
+                        navController.navigate(FolioDestination.LOGIN) {
+                            popUpTo(FolioDestination.SPACES) { inclusive = true }
+                        }
                     }
                 },
             )

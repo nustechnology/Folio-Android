@@ -58,15 +58,40 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `onSignInClick failure sets SIGN_IN_FAILED`() {
-        repository.signInResult = Result.failure(IllegalStateException("bad creds"))
+    fun `onSignInClick failure with api message sets toastMessage`() {
+        repository.signInResult = Result.failure(IllegalStateException("Invalid credentials"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignInClick("user@folio.app", "secret")
+
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals("Invalid credentials", viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignInClick failure without message sets SIGN_IN_FAILED`() {
+        repository.signInResult = Result.failure(IllegalStateException())
         val viewModel = createViewModel()
 
         viewModel.onSignInClick("user@folio.app", "secret")
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.toastMessage)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onToastMessageShown clears toastMessage`() {
+        repository.signInResult = Result.failure(IllegalStateException("Invalid credentials"))
+        val viewModel = createViewModel()
+        viewModel.onSignInClick("user@folio.app", "secret")
+
+        viewModel.onToastMessageShown()
+
+        assertNull(viewModel.uiState.value.toastMessage)
     }
 
     @Test

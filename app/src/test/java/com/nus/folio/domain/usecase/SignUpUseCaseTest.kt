@@ -16,13 +16,14 @@ class SignUpUseCaseTest {
     fun `invoke forwards fields and returns session`() = runTest {
         repository.signUpResult = Result.success(AuthSession("new@folio.app"))
 
-        val result = useCase("Alex Morgan", "new@folio.app", "secret")
+        val result = useCase("Jordan Lee", "new@folio.app", "secret", "secret")
 
         assertTrue(result.isSuccess)
         assertEquals("new@folio.app", result.getOrNull()?.email)
-        assertEquals("Alex Morgan", repository.lastSignUpName)
+        assertEquals("Jordan Lee", repository.lastSignUpName)
         assertEquals("new@folio.app", repository.lastSignUpEmail)
         assertEquals("secret", repository.lastSignUpPassword)
+        assertEquals("secret", repository.lastSignUpConfirmPassword)
         assertEquals(1, repository.signUpCallCount)
     }
 
@@ -30,7 +31,7 @@ class SignUpUseCaseTest {
     fun `invoke returns failure when repository fails`() = runTest {
         repository.signUpResult = Result.failure(IllegalStateException("exists"))
 
-        val result = useCase("Alex", "new@folio.app", "secret")
+        val result = useCase("Jordan Lee", "new@folio.app", "secret", "secret")
 
         assertTrue(result.isFailure)
         assertEquals("exists", result.exceptionOrNull()?.message)

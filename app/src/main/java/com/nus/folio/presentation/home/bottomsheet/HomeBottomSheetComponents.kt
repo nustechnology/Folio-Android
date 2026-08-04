@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -120,10 +121,11 @@ internal fun AddSourceSubmitButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     labelRes: Int = R.string.add_source_submit,
+    isLoading: Boolean = false,
 ) {
     Button(
         onClick = onClick,
-        enabled = enabled,
+        enabled = enabled && !isLoading,
         modifier = modifier.height(52.dp),
         shape = HomeBottomSheetButtonShape,
         colors = ButtonDefaults.buttonColors(
@@ -133,11 +135,19 @@ internal fun AddSourceSubmitButton(
             disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
     ) {
-        Text(
-            text = stringResource(labelRes),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = Color.White,
+                strokeWidth = 2.5.dp,
+            )
+        } else {
+            Text(
+                text = stringResource(labelRes),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 

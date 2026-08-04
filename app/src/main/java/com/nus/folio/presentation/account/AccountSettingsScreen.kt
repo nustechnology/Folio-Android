@@ -25,11 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -48,6 +49,7 @@ import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.initialsFromDisplayName
 import com.nus.folio.presentation.home.HomeBackButton
+import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
 import com.nus.folio.ui.theme.AccountAvatar
 import com.nus.folio.ui.theme.AccountCardBackground
 import com.nus.folio.ui.theme.AccountCardBorder
@@ -57,7 +59,6 @@ import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
-import com.nus.folio.ui.theme.HomeSearchPlaceholder
 
 private val MenuItemShape = RoundedCornerShape(14.dp)
 
@@ -69,12 +70,14 @@ fun AccountSettingsScreen(
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.Factory(
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
+            syncCurrentUserUseCase = LocalAppContainer.current.syncCurrentUserUseCase,
         ),
     ),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
+    var showSignOutConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.userMessage) {
         val message = uiState.userMessage ?: return@LaunchedEffect
@@ -85,7 +88,7 @@ fun AccountSettingsScreen(
     Box(modifier = modifier.fillMaxSize()) {
         AccountSettingsContent(
             uiState = uiState,
-            onSignOutClick = onSignOut,
+            onSignOutClick = { showSignOutConfirm = true },
             onBackClick = onBackClick,
             onProfileSettingsClick = viewModel::onProfileSettingsClick,
             onSecurityClick = viewModel::onSecurityClick,
@@ -100,6 +103,16 @@ fun AccountSettingsScreen(
                 .statusBarsPadding()
                 .padding(top = 12.dp),
         )
+
+        if (showSignOutConfirm) {
+            DeleteConfirmationBottomSheet(
+                titleRes = R.string.account_sign_out_title,
+                messageRes = R.string.account_sign_out_message,
+                confirmLabelRes = R.string.account_sign_out,
+                onDismiss = { showSignOutConfirm = false },
+                onConfirm = onSignOut,
+            )
+        }
     }
 }
 
@@ -303,8 +316,8 @@ private fun AccountSettingsContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         AccountSettingsContent(
             uiState = AccountUiState(
-                displayName = "Alex Nguyen",
-                email = "alex@folio.app",
+                displayName = "Jordan Lee",
+                email = "jordan@folio.app",
             ),
             onSignOutClick = {},
             onBackClick = {},

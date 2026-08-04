@@ -31,6 +31,10 @@ class LoginViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
+    fun onToastMessageShown() {
+        _uiState.update { it.copy(toastMessage = null) }
+    }
+
     fun onNavigationHandled() {
         _uiState.update { it.copy(shouldNavigateToHome = false, isLoading = false) }
     }
@@ -59,7 +63,12 @@ class LoginViewModel(
         launchExclusive {
             val loadingStartedAt = System.currentTimeMillis()
             _uiState.update {
-                it.copy(isLoading = true, error = null, shouldNavigateToHome = false)
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    toastMessage = null,
+                    shouldNavigateToHome = false,
+                )
             }
 
             val result = signInUseCase(email, password)
@@ -72,11 +81,28 @@ class LoginViewModel(
                     ensureActive()
                     _uiState.update { it.copy(shouldNavigateToHome = true) }
                 }
-                .onFailure {
-                    _uiState.update {
-                        it.copy(isLoading = false, error = LoginError.SIGN_IN_FAILED)
-                    }
+                .onFailure { error ->
+                    applyFailure(error)
                 }
+        }
+    }
+
+    private fun applyFailure(error: Throwable) {
+        val apiMessage = error.message?.takeIf { it.isNotBlank() }
+        _uiState.update {
+            if (apiMessage != null) {
+                it.copy(
+                    isLoading = false,
+                    error = null,
+                    toastMessage = apiMessage,
+                )
+            } else {
+                it.copy(
+                    isLoading = false,
+                    error = LoginError.SIGN_IN_FAILED,
+                    toastMessage = null,
+                )
+            }
         }
     }
 

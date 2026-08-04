@@ -2,20 +2,32 @@ package com.nus.folio.presentation.account
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class AccountViewModel(
-    getCurrentSessionUseCase: GetCurrentSessionUseCase,
+    private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
+    private val syncCurrentUserUseCase: SyncCurrentUserUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
     val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
 
     init {
+        applySession()
+        viewModelScope.launch {
+            syncCurrentUserUseCase()
+            applySession()
+        }
+    }
+
+    private fun applySession() {
         val session = getCurrentSessionUseCase()
         _uiState.update {
             it.copy(
@@ -47,11 +59,15 @@ class AccountViewModel(
 
     class Factory(
         private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
+        private val syncCurrentUserUseCase: SyncCurrentUserUseCase,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-                return AccountViewModel(getCurrentSessionUseCase) as T
+                return AccountViewModel(
+                    getCurrentSessionUseCase = getCurrentSessionUseCase,
+                    syncCurrentUserUseCase = syncCurrentUserUseCase,
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

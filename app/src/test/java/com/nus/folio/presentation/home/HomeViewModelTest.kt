@@ -61,7 +61,6 @@ class HomeViewModelTest {
         assertNull(viewModel.uiState.value.notesError)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
         assertEquals(5, viewModel.uiState.value.allCount)
-        assertEquals(0, viewModel.uiState.value.textCount)
         assertEquals(1, sourceRepository.getSourcesCallCount)
         assertEquals("1", sourceRepository.lastSpaceId)
         assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)

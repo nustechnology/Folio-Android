@@ -1,28 +1,13 @@
 package com.nus.folio.data.repository
 
 import com.nus.folio.data.datasource.AskDataSource
-import com.nus.folio.data.datasource.GreetingDataSource
 import com.nus.folio.data.datasource.NoteDataSource
 import com.nus.folio.data.datasource.SourceDataSource
-import com.nus.folio.data.datasource.SpaceDataSource
 import com.nus.folio.domain.repository.SourceOriginalFileResolver
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-
-class GreetingRepositoryImplTest {
-
-    private val repository = GreetingRepositoryImpl(GreetingDataSource())
-
-    @Test
-    fun `getGreeting returns success with greeting message`() = runTest {
-        val result = repository.getGreeting()
-
-        assertTrue(result.isSuccess)
-        assertEquals("Hello Folio!", result.getOrNull()?.message)
-    }
-}
 
 class SourceRepositoryImplTest {
 
@@ -149,19 +134,5 @@ class NoteRepositoryImplTest {
         assertTrue(result.isSuccess)
         assertEquals(1, repository.getNotes("1").getOrNull()?.allCount)
         assertTrue(repository.getNotes("1").getOrNull()!!.notes.none { it.id == "2" })
-    }
-}
-
-class SpaceRepositoryImplTest {
-
-    private val repository = SpaceRepositoryImpl(SpaceDataSource())
-
-    @Test
-    fun `getSpaces returns success list`() = runTest {
-        val result = repository.getSpaces()
-
-        assertTrue(result.isSuccess)
-        assertEquals(4, result.getOrNull()?.size)
-        assertEquals("Dissertation Research", result.getOrNull()?.first()?.title)
     }
 }

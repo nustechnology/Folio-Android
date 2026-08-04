@@ -1,7 +1,7 @@
 package com.nus.folio.domain.model
 
 /**
- * Avatar initials from first and last name (e.g. "Alex Nguyen" → "AN").
+ * Avatar initials from first and last name (e.g. "Jordan Lee" → "JL").
  * Falls back to the first letter of [emailFallback] when [displayName] is blank.
  */
 fun initialsFromDisplayName(displayName: String, emailFallback: String = ""): String {
@@ -15,6 +15,3 @@ fun initialsFromDisplayName(displayName: String, emailFallback: String = ""): St
         else -> emailFallback.firstOrNull()?.uppercaseChar()?.toString().orEmpty()
     }
 }
-
-val AuthSession.avatarInitials: String
-    get() = initialsFromDisplayName(displayName, email)

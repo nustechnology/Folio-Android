@@ -113,7 +113,7 @@ fun HomeScreen(
 ### Navigation
 
 - Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `RESET_PASSWORD`, `SPACES`, `ACCOUNT`, `HOME`
-- Start destination: `LOGIN` (until auth session persistence is implemented)
+- Start destination: waits for async session restore, then `SPACES` if signed in else `LOGIN`
 - Post-auth flow: Login / Sign Up → `SPACES` → `HOME/{spaceId}?title={title}`
 - `FolioDestination.home(spaceId, spaceTitle)` builds the Home route; `resetPassword(email)` builds Reset Password with optional email arg
 - `AccountSettingsScreen` is a top-level route (`ACCOUNT`), opened from Spaces; sign-out navigates back to `LOGIN`

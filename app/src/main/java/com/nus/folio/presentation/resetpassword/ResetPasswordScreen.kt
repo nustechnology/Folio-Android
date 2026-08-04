@@ -2,8 +2,6 @@ package com.nus.folio.presentation.resetpassword
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -29,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +63,6 @@ private val InfoCardShape = RoundedCornerShape(12.dp)
 @Composable
 fun ResetPasswordScreen(
     onNavigateBack: () -> Unit,
-    initialEmail: String = "",
     modifier: Modifier = Modifier,
     viewModel: ResetPasswordViewModel = viewModel(
         factory = ResetPasswordViewModel.Factory(
@@ -80,7 +74,6 @@ fun ResetPasswordScreen(
 
     ResetPasswordContent(
         uiState = uiState,
-        initialEmail = initialEmail,
         onClearFeedback = viewModel::clearFeedback,
         onSendRecoveryLinkClick = viewModel::onSendRecoveryLinkClick,
         onBackClick = onNavigateBack,
@@ -91,13 +84,12 @@ fun ResetPasswordScreen(
 @Composable
 private fun ResetPasswordContent(
     uiState: ResetPasswordUiState,
-    initialEmail: String,
     onClearFeedback: () -> Unit,
     onSendRecoveryLinkClick: (email: String) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var email by rememberSaveable { mutableStateOf(initialEmail) }
+    var email by rememberSaveable { mutableStateOf("") }
 
     Box(
         modifier = modifier
@@ -111,34 +103,11 @@ private fun ResetPasswordContent(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 28.dp)
-                .padding(top = 8.dp, bottom = 100.dp),
+                .padding(top = 32.dp, bottom = 100.dp),
         ) {
-            ResetPasswordTopBar(onBackClick = onBackClick)
+            ResetPasswordHeader()
 
             Spacer(modifier = Modifier.height(28.dp))
-
-            Text(
-                text = stringResource(R.string.reset_password_headline),
-                fontFamily = CormorantGaramond,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = LoginTextPrimary,
-                letterSpacing = (-0.4).sp,
-                lineHeight = 40.sp,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = stringResource(R.string.reset_password_description),
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Normal,
-                fontSize = 15.sp,
-                color = LoginTextSecondary,
-                lineHeight = 22.sp,
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
 
             Text(
                 text = stringResource(R.string.reset_password_email_label),
@@ -209,18 +178,47 @@ private fun ResetPasswordContent(
 }
 
 @Composable
-private fun ResetPasswordTopBar(onBackClick: () -> Unit) {
-    Icon(
-        painter = painterResource(R.drawable.ic_back),
-        contentDescription = stringResource(R.string.reset_password_back),
-        modifier = Modifier
-            .size(24.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onBackClick,
-            ),
-        tint = LoginTextPrimary,
+private fun ResetPasswordHeader() {
+    Text(
+        text = stringResource(R.string.app_name),
+        fontFamily = CormorantGaramond,
+        fontSize = 40.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = LoginTextPrimary,
+        letterSpacing = (-0.5).sp,
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    Text(
+        text = stringResource(R.string.reset_password_tagline),
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = LoginCopper,
+        letterSpacing = 1.6.sp,
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Text(
+        text = stringResource(R.string.reset_password_headline),
+        fontFamily = CormorantGaramond,
+        fontSize = 34.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = LoginTextPrimary,
+        letterSpacing = (-0.4).sp,
+        lineHeight = 40.sp,
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    Text(
+        text = stringResource(R.string.reset_password_description),
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 15.sp,
+        color = LoginTextSecondary,
+        lineHeight = 22.sp,
     )
 }
 
@@ -344,7 +342,6 @@ private fun ResetPasswordContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         ResetPasswordContent(
             uiState = ResetPasswordUiState(),
-            initialEmail = "researcher@folio.app",
             onClearFeedback = {},
             onSendRecoveryLinkClick = {},
             onBackClick = {},
@@ -358,7 +355,6 @@ private fun ResetPasswordContentLoadingPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         ResetPasswordContent(
             uiState = ResetPasswordUiState(isLoading = true),
-            initialEmail = "researcher@folio.app",
             onClearFeedback = {},
             onSendRecoveryLinkClick = {},
             onBackClick = {},
