@@ -2,6 +2,7 @@ package com.nus.folio.data.repository
 
 import com.nus.folio.data.auth.AuthSessionStore
 import com.nus.folio.data.datasource.AuthDataSource
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.repository.AuthRepository
 import kotlinx.coroutines.sync.Mutex
@@ -88,6 +89,13 @@ class AuthRepositoryImpl(
             enrichWithCurrentUser(merged)
         }.also { result ->
             result.onSuccess { setSession(it) }
+            result.onFailure { error ->
+                // Server rejected refresh (expired/invalid refresh token). Drop the dead
+                // session so the UI can return to login instead of retrying forever.
+                if (error is AuthApiException) {
+                    setSession(null)
+                }
+            }
         }
     }
 

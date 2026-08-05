@@ -63,6 +63,7 @@ import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.LoginBackground
 import com.nus.folio.ui.theme.LoginBorder
 import com.nus.folio.ui.theme.LoginButtonGlow
@@ -99,9 +100,13 @@ fun LoginScreen(
         }
     }
 
-    LaunchedEffect(uiState.toastMessage) {
-        val message = uiState.toastMessage ?: return@LaunchedEffect
-        toastHostState.showToast(message = message, style = FolioToastStyle.Error)
+    val invalidCredentialsToast = stringResource(R.string.login_error_invalid_credentials)
+    LaunchedEffect(uiState.toastError, uiState.toastMessage) {
+        val message = when (uiState.toastError) {
+            LoginError.INVALID_CREDENTIALS -> invalidCredentialsToast
+            else -> uiState.toastMessage
+        } ?: return@LaunchedEffect
+        toastHostState.showToast(title = message, style = FolioToastStyle.Error)
         viewModel.onToastMessageShown()
     }
 
@@ -168,6 +173,11 @@ private fun LoginContent(
                     onClearFeedback()
                 },
                 enabled = inputsEnabled,
+                errorMessage = when (uiState.error) {
+                    LoginError.EMAIL_REQUIRED, LoginError.EMAIL_INVALID ->
+                        loginErrorMessage(uiState.error)
+                    else -> null
+                },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -253,13 +263,26 @@ private fun LoginSignUpPrompt(
 }
 
 @Composable
+private fun loginErrorMessage(error: LoginError): String = when (error) {
+    LoginError.EMAIL_REQUIRED -> stringResource(R.string.login_error_email_required)
+    LoginError.EMAIL_INVALID -> stringResource(R.string.login_error_email_invalid)
+    LoginError.PASSWORD_REQUIRED -> stringResource(R.string.login_error_password_required)
+    LoginError.INVALID_CREDENTIALS -> stringResource(R.string.login_error_invalid_credentials)
+    LoginError.SIGN_IN_FAILED -> stringResource(R.string.login_error_sign_in_failed)
+    LoginError.AUTH_UNAVAILABLE -> stringResource(R.string.login_error_auth_unavailable)
+}
+
+@Composable
 private fun LoginFeedback(uiState: LoginUiState) {
     val errorText = when (uiState.error) {
-        LoginError.EMAIL_REQUIRED -> stringResource(R.string.login_error_email_required)
         LoginError.PASSWORD_REQUIRED -> stringResource(R.string.login_error_password_required)
         LoginError.SIGN_IN_FAILED -> stringResource(R.string.login_error_sign_in_failed)
         LoginError.AUTH_UNAVAILABLE -> stringResource(R.string.login_error_auth_unavailable)
-        null -> if (uiState.authUnavailable) {
+        LoginError.EMAIL_REQUIRED,
+        LoginError.EMAIL_INVALID,
+        LoginError.INVALID_CREDENTIALS,
+        null,
+        -> if (uiState.authUnavailable) {
             stringResource(R.string.login_error_auth_unavailable)
         } else {
             null
@@ -344,18 +367,30 @@ private fun LoginEmailField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean,
+    errorMessage: String? = null,
 ) {
+    val isError = errorMessage != null
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         enabled = enabled,
+        isError = isError,
         placeholder = {
             Text(
                 text = stringResource(R.string.login_email_hint),
                 color = LoginPlaceholder,
                 fontSize = 15.sp,
             )
+        },
+        supportingText = errorMessage?.let { message ->
+            {
+                Text(
+                    text = message,
+                    color = HomeStatusFailedText,
+                    fontSize = 12.sp,
+                )
+            }
         },
         singleLine = true,
         shape = FieldShape,
@@ -413,11 +448,17 @@ private fun LoginPasswordField(
 private fun loginTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = LoginBackground,
     unfocusedContainerColor = LoginBackground,
+    disabledContainerColor = LoginBackground,
+    errorContainerColor = LoginBackground,
     focusedBorderColor = LoginBorder,
     unfocusedBorderColor = LoginBorder,
+    disabledBorderColor = LoginBorder,
+    errorBorderColor = HomeStatusFailedText,
     cursorColor = LoginTextPrimary,
+    errorCursorColor = HomeStatusFailedText,
     focusedTextColor = LoginTextPrimary,
     unfocusedTextColor = LoginTextPrimary,
+    errorSupportingTextColor = HomeStatusFailedText,
 )
 
 @Composable

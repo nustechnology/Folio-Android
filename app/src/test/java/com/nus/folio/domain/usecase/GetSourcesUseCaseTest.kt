@@ -24,6 +24,22 @@ class GetSourcesUseCaseTest {
     }
 
     @Test
+    fun `invoke forwards sourceType search and sort`() = runTest {
+        val result = useCase(
+            spaceId = "1",
+            sourceType = "File",
+            search = "Turing",
+            sort = com.nus.folio.domain.model.SourceSort.ALPHABETICAL_AZ,
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("File", repository.lastSourceType)
+        assertEquals("Turing", repository.lastSearch)
+        assertEquals(com.nus.folio.domain.model.SourceSort.ALPHABETICAL_AZ, repository.lastSort)
+        assertEquals(1, result.getOrNull()?.sources?.size)
+    }
+
+    @Test
     fun `invoke returns failure when repository fails`() = runTest {
         repository.getSourcesResult = Result.failure(IllegalStateException("offline"))
 

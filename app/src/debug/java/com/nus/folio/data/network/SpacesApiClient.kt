@@ -7,12 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.IOException
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -33,6 +28,18 @@ interface SpacesApi {
         researchObjective: String,
     ): Space
 
+    suspend fun updateSpace(
+        accessToken: String,
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Space
+
+    suspend fun deleteSpace(
+        accessToken: String,
+        spaceId: String,
+    )
+
     companion object {
         const val DEFAULT_SORT = "recently-updated"
     }
@@ -42,7 +49,7 @@ interface SpacesApi {
  * Thin HTTP client for Folio spaces endpoints (debug builds against the ngrok/dev backend).
  */
 class SpacesApiClient(
-    private val baseUrl: String = AuthApiClient.DEFAULT_BASE_URL,
+    private val baseUrl: String = FolioApiPaths.BASE_URL,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
 ) : SpacesApi {
 
@@ -66,28 +73,18 @@ class SpacesApiClient(
                 append(URLEncoder.encode(trimmedSearch, Charsets.UTF_8.name()))
             }
         }
-        val connection = (URL("$baseUrl/api/v1/spaces?$query").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doInput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("ngrok-skip-browser-warning", "true")
-            setRequestProperty("Authorization", "Bearer $accessToken")
-        }
-
-        try {
-            val code = connection.responseCode
-            val responseBody = readBody(
-                if (code in 200..299) connection.inputStream else connection.errorStream,
-            )
-            if (code !in 200..299) {
-                throw httpException(responseBody, code, "Get spaces")
-            }
-            parseSpacesPage(responseBody, page = page.coerceAtLeast(1), limit = limit.coerceAtLeast(1))
-        } finally {
-            connection.disconnect()
-        }
+        FolioHttp.get(
+            url = FolioApiPaths.spaces(baseUrl, query),
+            accessToken = accessToken,
+            failureLabel = "Get spaces",
+            parse = { response ->
+                parseSpacesPage(
+                    responseBody = response.body,
+                    page = page.coerceAtLeast(1),
+                    limit = limit.coerceAtLeast(1),
+                )
+            },
+        )
     }
 
     override suspend fun createSpace(
@@ -98,44 +95,52 @@ class SpacesApiClient(
         val body = JSONObject()
             .put("name", name)
             .put("researchObjective", researchObjective)
-        val connection = (URL("$baseUrl/api/v1/spaces").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doInput = true
-            doOutput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("ngrok-skip-browser-warning", "true")
-            setRequestProperty("Authorization", "Bearer $accessToken")
-        }
-
-        try {
-            connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray(Charsets.UTF_8))
-            }
-
-            val code = connection.responseCode
-            val responseBody = readBody(
-                if (code in 200..299) connection.inputStream else connection.errorStream,
-            )
-            if (code !in 200..299) {
-                throw httpException(responseBody, code, "Create space")
-            }
-            parseCreatedSpace(responseBody)
-        } finally {
-            connection.disconnect()
-        }
+        FolioHttp.postJson(
+            url = FolioApiPaths.spaces(baseUrl),
+            jsonBody = body.toString(),
+            accessToken = accessToken,
+            failureLabel = "Create space",
+            parse = { response -> parseSpacePayload(response.body, failureLabel = "Create space") },
+        )
     }
 
-    private fun parseCreatedSpace(responseBody: String): Space {
+    override suspend fun updateSpace(
+        accessToken: String,
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Space = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("name", name)
+            .put("researchObjective", researchObjective)
+        FolioHttp.patchJson(
+            url = FolioApiPaths.space(spaceId, baseUrl),
+            jsonBody = body.toString(),
+            accessToken = accessToken,
+            failureLabel = "Update space",
+            parse = { response -> parseSpacePayload(response.body, failureLabel = "Update space") },
+        )
+    }
+
+    override suspend fun deleteSpace(
+        accessToken: String,
+        spaceId: String,
+    ): Unit = withContext(Dispatchers.IO) {
+        FolioHttp.delete(
+            url = FolioApiPaths.space(spaceId, baseUrl),
+            accessToken = accessToken,
+            failureLabel = "Delete space",
+        )
+    }
+
+    private fun parseSpacePayload(responseBody: String, failureLabel: String): Space {
         if (responseBody.isBlank()) {
-            throw IOException("Create space failed: empty response")
+            throw IOException("$failureLabel failed: empty response")
         }
         val root = JSONObject(responseBody)
         val spaceJson = root.optJSONObject("data")?.optJSONObject("space")
             ?: root.optJSONObject("space")
-            ?: throw IOException("Create space failed: missing space payload")
+            ?: throw IOException("$failureLabel failed: missing space payload")
         return parseSpace(spaceJson)
     }
 
@@ -214,51 +219,7 @@ class SpacesApiClient(
         )
     }
 
-    private fun httpException(
-        responseBody: String,
-        code: Int,
-        failureLabel: String,
-    ): IOException {
-        val message = parseErrorMessage(responseBody, code, failureLabel)
-        return if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-            UnauthorizedException(message)
-        } else {
-            IOException(message)
-        }
-    }
-
-    private fun parseErrorMessage(
-        responseBody: String,
-        code: Int,
-        failureLabel: String,
-    ): String {
-        val fallback = "$failureLabel failed (HTTP $code)"
-        if (responseBody.isBlank()) return fallback
-        return runCatching {
-            val json = JSONObject(responseBody)
-            listOf("message", "detail", "error")
-                .map { key ->
-                    when (val value = json.opt(key)) {
-                        is String -> value
-                        is JSONArray -> (0 until value.length())
-                            .mapNotNull { index -> value.optString(index).takeIf { it.isNotBlank() } }
-                            .joinToString("; ")
-                        else -> ""
-                    }
-                }
-                .firstOrNull { it.isNotBlank() }
-                ?: fallback
-        }.getOrDefault(fallback)
-    }
-
-    private fun readBody(stream: InputStream?): String {
-        if (stream == null) return ""
-        return BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-    }
-
     companion object {
-        private const val TIMEOUT_MS = 15_000
-
         internal fun formatUpdatedLabel(isoInstant: String, nowMillis: Long): String {
             val millis = parseIsoToMillis(isoInstant) ?: return "Updated recently"
             val delta = (nowMillis - millis).coerceAtLeast(0L)

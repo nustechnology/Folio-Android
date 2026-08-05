@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -55,11 +57,14 @@ import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
 
+private val EditSpaceObjectiveHeight = 160.dp
+
 @Composable
-internal fun RenameSpaceBottomSheet(
+internal fun EditSpaceBottomSheet(
     space: Space,
     onDismiss: () -> Unit,
-    onSave: (name: String) -> Unit = {},
+    onSave: (name: String, researchObjective: String) -> Unit = { _, _ -> },
+    isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -74,28 +79,39 @@ internal fun RenameSpaceBottomSheet(
     }
 
     AnimatedModalSheet(
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!isSubmitting) onDismiss()
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
         AddSourceDragHandle()
-        RenameSpaceSheetContent(
+        EditSpaceSheetContent(
             space = space,
-            onCancelClick = { requestDismiss() },
-            onSave = { name ->
-                requestDismiss { onSave(name) }
+            isSubmitting = isSubmitting,
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
+            },
+            onSave = { name, objective ->
+                onSave(name, objective)
             },
         )
     }
 }
 
 @Composable
-private fun RenameSpaceSheetContent(
+private fun EditSpaceSheetContent(
     space: Space,
     onCancelClick: () -> Unit,
-    onSave: (name: String) -> Unit,
+    onSave: (name: String, researchObjective: String) -> Unit,
+    isSubmitting: Boolean = false,
 ) {
     var name by rememberSaveable(space.id) { mutableStateOf(space.title) }
-    val canSave = name.isNotBlank() && name.trim() != space.title
+    var objective by rememberSaveable(space.id) { mutableStateOf(space.description) }
+    val trimmedName = name.trim()
+    val trimmedObjective = objective.trim()
+    val canSave = trimmedName.isNotEmpty() &&
+        !isSubmitting &&
+        (trimmedName != space.title || trimmedObjective != space.description)
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -107,6 +123,41 @@ private fun RenameSpaceSheetContent(
             color = HomeTextPrimary,
         )
         Spacer(modifier = Modifier.height(24.dp))
+        EditSpaceNameField(
+            value = name,
+            onValueChange = { name = it },
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        EditSpaceObjectiveField(
+            value = objective,
+            onValueChange = { objective = it },
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            AddSourceCancelButton(
+                onClick = onCancelClick,
+                modifier = Modifier.weight(1f),
+            )
+            AddSourceSubmitButton(
+                enabled = canSave,
+                onClick = { onSave(trimmedName, trimmedObjective) },
+                labelRes = R.string.edit_source_save,
+                isLoading = isSubmitting,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditSpaceNameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.add_space_name_hint),
             fontSize = 13.sp,
@@ -122,7 +173,7 @@ private fun RenameSpaceSheetContent(
                 .background(HomeCardBackground)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            if (name.isEmpty()) {
+            if (value.isEmpty()) {
                 Text(
                     text = stringResource(R.string.add_space_name_placeholder),
                     color = HomeTextSecondary,
@@ -130,28 +181,56 @@ private fun RenameSpaceSheetContent(
                 )
             }
             BasicTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = value,
+                onValueChange = onValueChange,
                 singleLine = true,
                 textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
                 cursorBrush = SolidColor(HomeTextPrimary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    }
+}
+
+@Composable
+private fun EditSpaceObjectiveField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.add_space_objective_hint),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = LoginCopper,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(EditSpaceObjectiveHeight)
+                .clip(HomeUploadZoneShape)
+                .border(1.dp, HomeSheetInputBorder, HomeUploadZoneShape)
+                .background(HomeCardBackground)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            AddSourceCancelButton(
-                onClick = onCancelClick,
-                modifier = Modifier.weight(1f),
-            )
-            AddSourceSubmitButton(
-                enabled = canSave,
-                onClick = { onSave(name.trim()) },
-                labelRes = R.string.edit_source_save,
-                modifier = Modifier.weight(1f),
+            if (value.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.add_space_objective_placeholder),
+                    color = HomeTextSecondary,
+                    fontSize = 15.sp,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = false,
+                textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
+                cursorBrush = SolidColor(HomeTextPrimary),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState),
             )
         }
     }
@@ -168,7 +247,7 @@ private fun Context.findActivityOrNull(): Activity? {
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
 @Composable
-private fun RenameSpaceSheetContentPreview() {
+private fun EditSpaceSheetContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -180,7 +259,7 @@ private fun RenameSpaceSheetContentPreview() {
                     .padding(bottom = 20.dp),
             ) {
                 AddSourceDragHandle()
-                RenameSpaceSheetContent(
+                EditSpaceSheetContent(
                     space = Space(
                         id = "1",
                         title = "Dissertation Research",
@@ -190,7 +269,7 @@ private fun RenameSpaceSheetContentPreview() {
                         updatedLabel = "Updated 2d ago",
                     ),
                     onCancelClick = {},
-                    onSave = {},
+                    onSave = { _, _ -> },
                 )
             }
         }

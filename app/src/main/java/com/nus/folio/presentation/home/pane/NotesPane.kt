@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -36,6 +35,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -43,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.FolioEmptyState
+import com.nus.folio.components.FolioSkeletonBar
+import com.nus.folio.components.FolioSkeletonColumn
+import com.nus.folio.components.FolioSkeletonList
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
@@ -68,22 +73,26 @@ internal fun NotesPane(
     onNoteMoreClick: (Note) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showFilters = !uiState.isLoading &&
+        uiState.notesError == null &&
+        (uiState.allNotes.isNotEmpty() || uiState.selectedNoteFilter != NoteFilter.ALL)
+
     Column(modifier = modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.height(16.dp))
-        NotesFilterChips(
-            uiState = uiState,
-            onFilterSelected = onFilterSelected,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        if (showFilters) {
+            NotesFilterChips(
+                uiState = uiState,
+                onFilterSelected = onFilterSelected,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         val contentModifier = Modifier
             .weight(1f)
             .fillMaxWidth()
 
         when {
             uiState.isLoading -> {
-                Box(modifier = contentModifier, contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = HomeHeader)
-                }
+                NotesSkeletonList(modifier = contentModifier)
             }
             uiState.notesError != null -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -139,6 +148,57 @@ internal fun NotesPane(
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotesSkeletonList(modifier: Modifier = Modifier) {
+    val loadingDescription = stringResource(R.string.home_notes_loading)
+    FolioSkeletonList(
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = loadingDescription
+        },
+    ) {
+        NoteCardSkeleton(
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+    }
+}
+
+@Composable
+private fun NoteCardSkeleton(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(HomeCardShape)
+            .background(HomeCardBackground)
+            .border(1.dp, HomeCardBorder, HomeCardShape)
+            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        FolioSkeletonBar(
+            modifier = Modifier.size(40.dp),
+            shape = HomeBadgeShape,
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            FolioSkeletonColumn(
+                lineCount = 3,
+                lineHeight = 12.dp,
+                spacing = 8.dp,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FolioSkeletonBar(
+                    modifier = Modifier.size(width = 72.dp, height = 20.dp),
+                    shape = HomeBadgeShape,
+                )
+                FolioSkeletonBar(
+                    modifier = Modifier.size(width = 56.dp, height = 20.dp),
+                    shape = HomeBadgeShape,
+                )
             }
         }
     }
@@ -395,6 +455,22 @@ private fun NotesPaneEmptyPreview() {
                 notesPinnedCount = 0,
                 notesUnfiledCount = 0,
             ),
+            onRetry = {},
+            onAddClick = {},
+            onFilterSelected = {},
+            onNoteClick = {},
+            onNoteMoreClick = {},
+            modifier = Modifier.background(HomeBackground),
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 700, name = "Notes — loading")
+@Composable
+private fun NotesPaneLoadingPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        NotesPane(
+            uiState = HomeUiState(isLoading = true),
             onRetry = {},
             onAddClick = {},
             onFilterSelected = {},

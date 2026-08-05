@@ -1,12 +1,10 @@
 package com.nus.folio.presentation.home.bottomsheet
 
-import android.util.Patterns
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,9 +17,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -62,6 +67,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -72,21 +78,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.domain.util.AddSourceInputRules
+import com.nus.folio.presentation.home.HomeSheetInputBorder
+import com.nus.folio.presentation.home.HomeSheetShape
+import com.nus.folio.presentation.home.HomeSheetTabShape
+import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeChipBorder
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeSheetBackground
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeUploadIcon
 import com.nus.folio.ui.theme.LoginCopper
-import com.nus.folio.presentation.home.HomeSheetInputBorder
-import com.nus.folio.presentation.home.HomeSheetShape
-import com.nus.folio.presentation.home.HomeSheetTabShape
-import com.nus.folio.presentation.home.HomeUploadZoneShape
+import java.text.NumberFormat
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -95,22 +104,37 @@ private val AddSourceContentHeight = 160.dp
 private val AddSourceTabEnterMillis = 280
 private val AddSourceTabExitMillis = 200
 
+/** MIME types for the file picker — aligned with [com.nus.folio.data.util.SourceMimeTypes]. */
+private val AddSourceFileMimeTypes = arrayOf(
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/epub+zip",
+    "text/markdown",
+    "text/x-markdown",
+    "text/plain",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/csv",
+    "text/comma-separated-values",
+)
+
 private val AddSourceTabOrder = listOf(
-    AddSourceTab.PDF,
+    AddSourceTab.FILE,
     AddSourceTab.WEB,
     AddSourceTab.TEXT,
 )
 
 enum class AddSourceTab {
-    PDF,
+    FILE,
     WEB,
     TEXT,
 }
 
 sealed interface AddSourceDraft {
-    data class Pdf(
+    data class File(
         val displayName: String,
         val uri: Uri?,
+        val author: String = "",
     ) : AddSourceDraft
 
     data class Web(
@@ -130,37 +154,50 @@ sealed interface AddSourceDraft {
 internal fun AddSourceBottomSheet(
     onDismiss: () -> Unit,
     onSubmit: (AddSourceDraft) -> Unit = {},
+    isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selectedPdfUriString by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedPdfName by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedPdfUri = selectedPdfUriString?.let(Uri::parse)
+    var selectedFileUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedFile by remember { mutableStateOf<SelectedSourceFile?>(null) }
+    var isResolvingFile by remember { mutableStateOf(false) }
 
-    val pdfPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val uriString = uri.toString()
-        selectedPdfUriString = uriString
-        selectedPdfName = uri.lastPathSegment
+    fun applySelectedUri(uri: Uri) {
+        selectedFileUriString = uri.toString()
         scope.launch {
-            val resolvedName = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    )
-                }
-                uri.displayName(context) ?: uri.lastPathSegment
-            }
-            if (selectedPdfUriString == uriString) {
-                selectedPdfName = resolvedName
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
             }
         }
     }
 
-    // Let Compose own IME insets — avoid window resize + padding stacking.
+    LaunchedEffect(selectedFileUriString) {
+        val uriString = selectedFileUriString
+        if (uriString == null) {
+            selectedFile = null
+            isResolvingFile = false
+            return@LaunchedEffect
+        }
+        isResolvingFile = true
+        val resolved = withContext(Dispatchers.IO) {
+            resolveSelectedSourceFile(context, Uri.parse(uriString))
+        }
+        if (selectedFileUriString == uriString) {
+            selectedFile = resolved
+            isResolvingFile = false
+        }
+    }
+
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        applySelectedUri(uri)
+    }
+
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
             ?: return@DisposableEffect onDispose {}
@@ -172,22 +209,26 @@ internal fun AddSourceBottomSheet(
     }
 
     AnimatedModalSheet(
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!isSubmitting) onDismiss()
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
         AddSourceDragHandle()
         AddSourceSheetContent(
-            selectedPdfUri = selectedPdfUri,
-            selectedPdfName = selectedPdfName,
-            onCancelClick = { requestDismiss() },
-            onUploadPdfClick = {
-                pdfPicker.launch(arrayOf("application/pdf"))
+            selectedFile = selectedFile,
+            isResolvingFile = isResolvingFile,
+            isSubmitting = isSubmitting,
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
             },
-            onSubmit = { draft ->
-                requestDismiss {
-                    onSubmit(draft)
-                }
+            onUploadFileClick = {
+                if (!isSubmitting) filePicker.launch(AddSourceFileMimeTypes)
             },
+            onFileDropped = { uri ->
+                if (!isSubmitting) applySelectedUri(uri)
+            },
+            onSubmit = onSubmit,
         )
     }
 }
@@ -203,13 +244,15 @@ private fun Context.findActivityOrNull(): Activity? {
 
 @Composable
 internal fun AddSourceSheetContent(
-    onUploadPdfClick: () -> Unit,
+    onUploadFileClick: () -> Unit,
     onSubmit: (AddSourceDraft) -> Unit,
     onCancelClick: () -> Unit = {},
+    onFileDropped: (Uri) -> Unit = {},
     modifier: Modifier = Modifier,
-    initialTab: AddSourceTab = AddSourceTab.PDF,
-    selectedPdfUri: Uri? = null,
-    selectedPdfName: String? = null,
+    initialTab: AddSourceTab = AddSourceTab.FILE,
+    selectedFile: SelectedSourceFile? = null,
+    isResolvingFile: Boolean = false,
+    isSubmitting: Boolean = false,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(initialTab) }
     var webUrl by rememberSaveable { mutableStateOf("") }
@@ -219,15 +262,27 @@ internal fun AddSourceSheetContent(
     var textAuthor by rememberSaveable { mutableStateOf("") }
     var textContent by rememberSaveable { mutableStateOf("") }
     var webUrlTouched by rememberSaveable { mutableStateOf(false) }
+    var textContentTouched by rememberSaveable { mutableStateOf(false) }
 
-    val webUrlValid = isValidHttpUrl(webUrl)
-    val showWebError = selectedTab == AddSourceTab.WEB && webUrlTouched && webUrl.isNotBlank() && !webUrlValid
+    val webUrlValid = AddSourceInputRules.isValidHttpUrl(webUrl)
+    val showWebError = selectedTab == AddSourceTab.WEB && webUrlTouched && !webUrlValid
+    val contentError = when {
+        !textContentTouched -> null
+        textContent.length > AddSourceInputRules.MAX_CONTENT_LENGTH ->
+            AddSourceInputRules.ContentValidationError.TOO_LONG
+        textContent.length < AddSourceInputRules.MIN_CONTENT_LENGTH ->
+            AddSourceInputRules.ContentValidationError.TOO_SHORT
+        else -> null
+    }
+    val showContentError = contentError != null
+    val fileValid = selectedFile != null && selectedFile.validationError == null
+    val contentValid = AddSourceInputRules.isContentValid(textContent)
 
     val canSubmit = when (selectedTab) {
-        AddSourceTab.PDF -> selectedPdfUri != null
+        AddSourceTab.FILE -> fileValid && !isResolvingFile
         AddSourceTab.WEB -> webUrlValid
-        AddSourceTab.TEXT -> textTitle.isNotBlank() && textContent.isNotBlank()
-    }
+        AddSourceTab.TEXT -> contentValid
+    } && !isSubmitting
 
     Column(modifier = modifier) {
         Spacer(modifier = Modifier.height(8.dp))
@@ -251,9 +306,9 @@ internal fun AddSourceSheetContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AddSourceTabChip(
-                label = stringResource(R.string.add_source_tab_pdf),
-                selected = selectedTab == AddSourceTab.PDF,
-                onClick = { selectedTab = AddSourceTab.PDF },
+                label = stringResource(R.string.add_source_tab_file),
+                selected = selectedTab == AddSourceTab.FILE,
+                onClick = { selectedTab = AddSourceTab.FILE },
                 modifier = Modifier.weight(1f),
             )
             AddSourceTabChip(
@@ -314,17 +369,33 @@ internal fun AddSourceSheetContent(
             modifier = Modifier.fillMaxWidth(),
         ) { tab ->
             when (tab) {
-                AddSourceTab.PDF -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(AddSourceContentHeight),
-                    ) {
-                        PdfUploadZone(
-                            selectedFileName = selectedPdfName,
-                            onClick = onUploadPdfClick,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                AddSourceTab.FILE -> {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(AddSourceContentHeight),
+                        ) {
+                            FileUploadZone(
+                                selectedFile = selectedFile,
+                                onClick = onUploadFileClick,
+                                onFileDropped = onFileDropped,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        selectedFile?.validationError?.let { error ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = when (error) {
+                                    AddSourceInputRules.FileValidationError.UNSUPPORTED_FORMAT ->
+                                        stringResource(R.string.add_source_file_unsupported_format)
+                                    AddSourceInputRules.FileValidationError.SIZE_EXCEEDED ->
+                                        stringResource(R.string.add_source_file_size_exceeded)
+                                },
+                                fontSize = 12.sp,
+                                color = HomeStatusFailedText,
+                            )
+                        }
                     }
                 }
                 AddSourceTab.WEB -> {
@@ -337,8 +408,8 @@ internal fun AddSourceSheetContent(
                             webUrl = it
                             webUrlTouched = true
                         },
-                        onTitleChange = { webTitle = it },
-                        onAuthorChange = { webAuthor = it },
+                        onTitleChange = { webTitle = AddSourceInputRules.limitTitle(it) },
+                        onAuthorChange = { webAuthor = AddSourceInputRules.limitAuthor(it) },
                     )
                 }
                 AddSourceTab.TEXT -> {
@@ -346,9 +417,14 @@ internal fun AddSourceSheetContent(
                         title = textTitle,
                         author = textAuthor,
                         content = textContent,
-                        onTitleChange = { textTitle = it },
-                        onAuthorChange = { textAuthor = it },
-                        onContentChange = { textContent = it },
+                        showContentError = showContentError,
+                        contentError = contentError,
+                        onTitleChange = { textTitle = AddSourceInputRules.limitTitle(it) },
+                        onAuthorChange = { textAuthor = AddSourceInputRules.limitAuthor(it) },
+                        onContentChange = {
+                            textContent = it
+                            textContentTouched = true
+                        },
                     )
                 }
             }
@@ -364,11 +440,13 @@ internal fun AddSourceSheetContent(
             )
             AddSourceSubmitButton(
                 enabled = canSubmit,
+                isLoading = isSubmitting,
                 onClick = {
                     val draft = when (selectedTab) {
-                        AddSourceTab.PDF -> AddSourceDraft.Pdf(
-                            displayName = selectedPdfName.orEmpty(),
-                            uri = selectedPdfUri,
+                        AddSourceTab.FILE -> AddSourceDraft.File(
+                            displayName = selectedFile?.displayName.orEmpty(),
+                            uri = selectedFile?.uri,
+                            author = selectedFile?.author.orEmpty(),
                         )
                         AddSourceTab.WEB -> AddSourceDraft.Web(
                             url = webUrl.trim(),
@@ -378,7 +456,7 @@ internal fun AddSourceSheetContent(
                         AddSourceTab.TEXT -> AddSourceDraft.Text(
                             title = textTitle.trim(),
                             author = textAuthor.trim(),
-                            content = textContent.trim(),
+                            content = textContent,
                         )
                     }
                     onSubmit(draft)
@@ -434,16 +512,48 @@ private fun AddSourceTabChip(
 }
 
 @Composable
-private fun PdfUploadZone(
-    selectedFileName: String?,
+@OptIn(ExperimentalFoundationApi::class)
+private fun FileUploadZone(
+    selectedFile: SelectedSourceFile?,
     onClick: () -> Unit,
+    onFileDropped: (Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val dropTarget = remember(onFileDropped, context) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                val androidEvent = event.toAndroidDragEvent()
+                val clipData = androidEvent.clipData ?: return false
+                // Cross-app drops need a temporary grant; persistable URI permission
+                // cannot acquire this access.
+                context.findActivityOrNull()?.requestDragAndDropPermissions(androidEvent)
+                for (index in 0 until clipData.itemCount) {
+                    val uri = clipData.getItemAt(index).uri
+                    if (uri != null) {
+                        onFileDropped(uri)
+                        return true
+                    }
+                }
+                return false
+            }
+        }
+    }
     val dashWidth = 1.5.dp
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(HomeUploadZoneShape)
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { event ->
+                    event.mimeTypes().any { mime ->
+                        mime.startsWith("application/") ||
+                            mime.startsWith("text/") ||
+                            mime == "*/*"
+                    }
+                },
+                target = dropTarget,
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -474,9 +584,9 @@ private fun PdfUploadZone(
             modifier = Modifier.size(28.dp),
         )
         Spacer(modifier = Modifier.height(16.dp))
-        if (selectedFileName != null) {
+        if (selectedFile != null) {
             Text(
-                text = stringResource(R.string.add_source_pdf_selected, selectedFileName),
+                text = stringResource(R.string.add_source_file_selected, selectedFile.displayName),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = HomeTextPrimary,
@@ -484,9 +594,32 @@ private fun PdfUploadZone(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            val detailLine = buildFileMetaLine(selectedFile)
+            if (detailLine.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = detailLine,
+                    fontSize = 13.sp,
+                    color = HomeTextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            selectedFile.author?.takeIf { it.isNotBlank() }?.let { author ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.add_source_file_meta_author, author),
+                    fontSize = 13.sp,
+                    color = HomeTextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = stringResource(R.string.add_source_change_pdf),
+                text = stringResource(R.string.add_source_change_file),
                 fontSize = 13.sp,
                 color = HomeTextSecondary,
                 textAlign = TextAlign.Center,
@@ -501,6 +634,13 @@ private fun PdfUploadZone(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
+                text = stringResource(R.string.add_source_upload_types),
+                fontSize = 13.sp,
+                color = HomeTextSecondary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
                 text = stringResource(R.string.add_source_upload_limit),
                 fontSize = 13.sp,
                 color = HomeTextSecondary,
@@ -508,6 +648,24 @@ private fun PdfUploadZone(
             )
         }
     }
+}
+
+@Composable
+private fun buildFileMetaLine(selectedFile: SelectedSourceFile): String {
+    val parts = mutableListOf<String>()
+    selectedFile.sizeBytes?.let { parts += formatFileSize(it) }
+    selectedFile.pageCount?.let { pages ->
+        parts += pluralStringResource(R.plurals.add_source_file_meta_pages, pages, pages)
+    }
+    selectedFile.characterCount?.let { chars ->
+        val formatted = NumberFormat.getIntegerInstance(Locale.getDefault()).format(chars)
+        parts += pluralStringResource(
+            R.plurals.add_source_file_meta_characters,
+            chars,
+            formatted,
+        )
+    }
+    return parts.joinToString(" · ")
 }
 
 @Composable
@@ -560,10 +718,13 @@ private fun AddSourceTextFields(
     title: String,
     author: String,
     content: String,
+    showContentError: Boolean,
+    contentError: AddSourceInputRules.ContentValidationError?,
     onTitleChange: (String) -> Unit,
     onAuthorChange: (String) -> Unit,
     onContentChange: (String) -> Unit,
 ) {
+    val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -580,17 +741,51 @@ private fun AddSourceTextFields(
             onValueChange = onAuthorChange,
             placeholder = stringResource(R.string.add_source_text_author_placeholder),
         )
-        AddSourceLabeledField(
-            label = stringResource(R.string.add_source_text_content_label),
-            value = content,
-            onValueChange = onContentChange,
-            placeholder = stringResource(R.string.add_source_text_content_placeholder),
-            singleLine = false,
-            fieldModifier = Modifier
-                .fillMaxWidth()
-                .height(AddSourceContentHeight),
-            showResizeHint = true,
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            AddSourceLabeledField(
+                label = stringResource(R.string.add_source_text_content_label),
+                value = content,
+                onValueChange = onContentChange,
+                placeholder = stringResource(R.string.add_source_text_content_placeholder),
+                singleLine = false,
+                fieldModifier = Modifier
+                    .fillMaxWidth()
+                    .height(AddSourceContentHeight),
+                showResizeHint = true,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.add_source_text_content_counter,
+                    numberFormat.format(content.length),
+                    numberFormat.format(AddSourceInputRules.MAX_CONTENT_LENGTH),
+                ),
+                fontSize = 12.sp,
+                color = if (content.length > AddSourceInputRules.MAX_CONTENT_LENGTH) {
+                    HomeStatusFailedText
+                } else {
+                    HomeTextSecondary
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.End,
+            )
+            if (showContentError && contentError != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = when (contentError) {
+                        AddSourceInputRules.ContentValidationError.TOO_SHORT ->
+                            stringResource(R.string.add_source_text_content_too_short)
+                        AddSourceInputRules.ContentValidationError.TOO_LONG ->
+                            stringResource(
+                                R.string.add_source_text_content_too_long,
+                                numberFormat.format(AddSourceInputRules.MAX_CONTENT_LENGTH),
+                            )
+                    },
+                    fontSize = 12.sp,
+                    color = HomeStatusFailedText,
+                )
+            }
+        }
     }
 }
 
@@ -709,29 +904,10 @@ private fun AddSourceResizeHint(modifier: Modifier = Modifier) {
     }
 }
 
-private fun isValidHttpUrl(input: String): Boolean {
-    val trimmed = input.trim()
-    if (trimmed.isEmpty()) return false
-    val uri = Uri.parse(trimmed)
-    val scheme = uri.scheme?.lowercase()
-    return (scheme == "http" || scheme == "https") &&
-        !uri.host.isNullOrBlank() &&
-        Patterns.WEB_URL.matcher(trimmed).matches()
-}
-
-private fun Uri.displayName(context: android.content.Context): String? {
-    val resolver = context.contentResolver
-    return resolver.query(this, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        ?.use { cursor ->
-            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-        }
-}
-
-@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — PDF")
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — File")
 @Composable
-private fun AddSourceSheetContentPdfPreview() {
-    AddSourceSheetContentPreviewScaffold(initialTab = AddSourceTab.PDF)
+private fun AddSourceSheetContentFilePreview() {
+    AddSourceSheetContentPreviewScaffold(initialTab = AddSourceTab.FILE)
 }
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Add source — Web")
@@ -759,7 +935,7 @@ private fun AddSourceSheetContentPreviewScaffold(initialTab: AddSourceTab) {
                     .padding(bottom = 20.dp),
             ) {
                 AddSourceSheetContent(
-                    onUploadPdfClick = {},
+                    onUploadFileClick = {},
                     onSubmit = {},
                     initialTab = initialTab,
                 )

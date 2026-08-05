@@ -3,7 +3,13 @@ package com.nus.folio.presentation.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.usecase.SignInUseCase
+import com.nus.folio.domain.util.AuthInputRules
+import java.io.InterruptedIOException
+import java.net.SocketException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,7 +38,7 @@ class LoginViewModel(
     }
 
     fun onToastMessageShown() {
-        _uiState.update { it.copy(toastMessage = null) }
+        _uiState.update { it.copy(toastMessage = null, toastError = null) }
     }
 
     fun onNavigationHandled() {
@@ -50,10 +56,31 @@ class LoginViewModel(
         }
         when {
             email.isBlank() -> {
-                _uiState.update { it.copy(error = LoginError.EMAIL_REQUIRED) }
+                _uiState.update {
+                    it.copy(
+                        error = LoginError.EMAIL_REQUIRED,
+                        toastError = null,
+                        toastMessage = null,
+                    )
+                }
+            }
+            !AuthInputRules.isValidEmail(email) -> {
+                _uiState.update {
+                    it.copy(
+                        error = LoginError.EMAIL_INVALID,
+                        toastError = null,
+                        toastMessage = null,
+                    )
+                }
             }
             password.isBlank() -> {
-                _uiState.update { it.copy(error = LoginError.PASSWORD_REQUIRED) }
+                _uiState.update {
+                    it.copy(
+                        error = LoginError.PASSWORD_REQUIRED,
+                        toastError = null,
+                        toastMessage = null,
+                    )
+                }
             }
             else -> performSignIn(email, password)
         }
@@ -66,6 +93,7 @@ class LoginViewModel(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    toastError = null,
                     toastMessage = null,
                     shouldNavigateToHome = false,
                 )
@@ -88,20 +116,48 @@ class LoginViewModel(
     }
 
     private fun applyFailure(error: Throwable) {
-        val apiMessage = error.message?.takeIf { it.isNotBlank() }
-        _uiState.update {
-            if (apiMessage != null) {
-                it.copy(
-                    isLoading = false,
-                    error = null,
-                    toastMessage = apiMessage,
-                )
-            } else {
-                it.copy(
-                    isLoading = false,
-                    error = LoginError.SIGN_IN_FAILED,
-                    toastMessage = null,
-                )
+        when {
+            error.isTransportFailure() -> {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = LoginError.SIGN_IN_FAILED,
+                        toastError = null,
+                        toastMessage = null,
+                    )
+                }
+            }
+            error is AuthApiException && error.isCredentialRejection() -> {
+                // AC3 Case 5: unregistered email or wrong password → fixed toast.
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = null,
+                        toastError = LoginError.INVALID_CREDENTIALS,
+                        toastMessage = null,
+                    )
+                }
+            }
+            error is AuthApiException -> {
+                // Rate limits, server errors, and other non-credential API failures.
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = LoginError.SIGN_IN_FAILED,
+                        toastError = null,
+                        toastMessage = null,
+                    )
+                }
+            }
+            else -> {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = null,
+                        toastError = LoginError.INVALID_CREDENTIALS,
+                        toastMessage = null,
+                    )
+                }
             }
         }
     }
@@ -127,3 +183,14 @@ class LoginViewModel(
         const val SIGN_IN_LOADING_DELAY_MS = 2_000L
     }
 }
+
+private fun AuthApiException.isCredentialRejection(): Boolean =
+    statusCode == HTTP_UNAUTHORIZED
+
+private const val HTTP_UNAUTHORIZED = 401
+
+private fun Throwable.isTransportFailure(): Boolean =
+    this is UnknownHostException ||
+        this is SocketException ||
+        this is InterruptedIOException ||
+        this is SSLException

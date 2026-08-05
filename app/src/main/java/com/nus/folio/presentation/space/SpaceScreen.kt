@@ -23,9 +23,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,9 +55,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.Space
+import com.nus.folio.domain.model.SpaceSort
 import com.nus.folio.domain.model.initialsFromDisplayName
 import com.nus.folio.components.FolioEmptyState
 import com.nus.folio.components.FolioSearchField
+import com.nus.folio.components.FolioSkeletonBar
+import com.nus.folio.components.FolioSkeletonColumn
+import com.nus.folio.components.FolioSkeletonList
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
@@ -61,6 +69,8 @@ import com.nus.folio.components.ItemOptionAction
 import com.nus.folio.components.ItemOptionStyle
 import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.components.rememberFolioToastHostState
+import com.nus.folio.presentation.home.HomeFilterActiveDot
+import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
@@ -80,11 +90,14 @@ import kotlinx.coroutines.flow.filter
 fun SpaceScreen(
     onSpaceSelected: (Space) -> Unit,
     onNavigateToAccount: () -> Unit,
+    onRequiresReauth: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SpaceViewModel = viewModel(
         factory = SpaceViewModel.Factory(
             getSpacesUseCase = LocalAppContainer.current.getSpacesUseCase,
             createSpaceUseCase = LocalAppContainer.current.createSpaceUseCase,
+            updateSpaceUseCase = LocalAppContainer.current.updateSpaceUseCase,
+            deleteSpaceUseCase = LocalAppContainer.current.deleteSpaceUseCase,
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
             syncCurrentUserUseCase = LocalAppContainer.current.syncCurrentUserUseCase,
             refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
@@ -99,6 +112,10 @@ fun SpaceScreen(
         initialsFromDisplayName(it.displayName, it.email)
     }.orEmpty()
 
+    LaunchedEffect(uiState.requiresReauth) {
+        if (uiState.requiresReauth) onRequiresReauth()
+    }
+
     LaunchedEffect(uiState.userMessage) {
         val message = uiState.userMessage ?: return@LaunchedEffect
         toastHostState.showToast(message.toSpaceToastVisuals(context))
@@ -109,7 +126,7 @@ fun SpaceScreen(
         val message = uiState.actionError ?: return@LaunchedEffect
         toastHostState.showToast(
             FolioToastVisuals(
-                message = message,
+                title = message,
                 style = FolioToastStyle.Error,
             ),
         )
@@ -121,6 +138,7 @@ fun SpaceScreen(
             uiState = uiState,
             avatarInitial = avatarInitial,
             onRetry = viewModel::onRetry,
+            onRefresh = viewModel::onRefresh,
             onSearchQueryChange = viewModel::onSearchQueryChange,
             onFilterSortClick = viewModel::onFilterSortClick,
             onAvatarClick = viewModel::onAccountClick,
@@ -176,10 +194,23 @@ fun SpaceScreen(
         }
 
         uiState.renamingSpace?.let { space ->
-            RenameSpaceBottomSheet(
+            EditSpaceBottomSheet(
                 space = space,
                 onDismiss = viewModel::onRenameSpaceDismiss,
                 onSave = viewModel::onRenameSpaceSave,
+                isSubmitting = uiState.isUpdatingSpace,
+            )
+        }
+
+        uiState.deletingSpace?.let {
+            DeleteConfirmationBottomSheet(
+                onDismiss = viewModel::onDeleteSpaceDismiss,
+                onConfirm = viewModel::onDeleteSpaceConfirm,
+                titleRes = R.string.space_delete_title,
+                messageRes = R.string.space_delete_message,
+                confirmLabelRes = R.string.space_delete_confirm,
+                isSubmitting = uiState.isDeletingSpace,
+                closeOnConfirm = false,
             )
         }
 
@@ -202,11 +233,13 @@ fun SpaceScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SpaceContent(
     uiState: SpaceUiState,
     avatarInitial: String,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onFilterSortClick: () -> Unit = {},
     onAvatarClick: () -> Unit,
@@ -217,6 +250,7 @@ internal fun SpaceContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val pullRefreshState = rememberPullToRefreshState()
 
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -259,97 +293,178 @@ internal fun SpaceContent(
                     placeholder = stringResource(R.string.space_search_hint),
                     modifier = Modifier.weight(1f),
                 )
-                SpaceFilterSortButton(onClick = onFilterSortClick)
+                SpaceFilterSortButton(
+                    onClick = onFilterSortClick,
+                    showActiveIndicator = uiState.selectedSort != SpaceSort.DEFAULT,
+                )
             }
         }
 
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = HomeHeader)
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullRefreshState,
+                    isRefreshing = uiState.isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = HomeCardBackground,
+                    color = HomeHeader,
+                )
+            },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            when {
+                uiState.isLoading -> {
+                    SpacesSkeletonList()
                 }
-            }
-            uiState.error != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = uiState.error,
-                            color = HomeStatusFailedText,
-                            fontSize = 14.sp,
+                uiState.error != null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = uiState.error,
+                                color = HomeStatusFailedText,
+                                fontSize = 14.sp,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.space_retry),
+                                modifier = Modifier.clickable(onClick = onRetry),
+                                color = HomeHeader,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+                uiState.visibleSpaces.isEmpty() -> {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_search,
+                            title = stringResource(R.string.search_empty_title),
+                            message = stringResource(R.string.search_empty_message),
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.space_retry),
-                            modifier = Modifier.clickable(onClick = onRetry),
-                            color = HomeHeader,
-                            fontWeight = FontWeight.SemiBold,
+                    } else {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_space,
+                            title = stringResource(R.string.space_empty_no_spaces),
+                            message = stringResource(R.string.space_empty_no_spaces_subtitle),
+                            actionLabel = stringResource(R.string.space_empty_no_spaces_action),
+                            onActionClick = onAddClick,
                         )
                     }
                 }
-            }
-            uiState.visibleSpaces.isEmpty() -> {
-                if (uiState.searchQuery.isNotBlank()) {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_search,
-                        title = stringResource(R.string.search_empty_title),
-                        message = stringResource(R.string.search_empty_message),
-                    )
-                } else {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_space,
-                        title = stringResource(R.string.space_empty_no_spaces),
-                        message = stringResource(R.string.space_empty_no_spaces_subtitle),
-                        actionLabel = stringResource(R.string.space_empty_no_spaces_action),
-                        onActionClick = onAddClick,
-                    )
-                }
-            }
-            else -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = 88.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(uiState.visibleSpaces, key = { it.id }) { space ->
-                        SpaceCard(
-                            space = space,
-                            onClick = { onSpaceClick(space) },
-                            onMoreClick = { onSpaceMoreClick(space) },
-                        )
-                    }
-                    if (uiState.isLoadingMore) {
-                        item(key = "spaces_loading_more") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(28.dp),
-                                    color = HomeHeader,
-                                    strokeWidth = 3.dp,
-                                )
+                else -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 16.dp,
+                            bottom = 88.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(uiState.visibleSpaces, key = { it.id }) { space ->
+                            SpaceCard(
+                                space = space,
+                                onClick = { onSpaceClick(space) },
+                                onMoreClick = { onSpaceMoreClick(space) },
+                            )
+                        }
+                        if (uiState.isLoadingMore) {
+                            item(key = "spaces_loading_more") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = HomeHeader,
+                                        strokeWidth = 3.dp,
+                                    )
+                                }
+                            }
+                        } else {
+                            item(key = "spaces_list_spacer") {
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
-                    } else {
-                        item(key = "spaces_list_spacer") {
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
                     }
                 }
-            }
+        }
         }
     }
 }
 
 private const val LOAD_MORE_THRESHOLD = 3
+
+@Composable
+private fun SpacesSkeletonList() {
+    FolioSkeletonList(
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 16.dp,
+            bottom = 88.dp,
+        ),
+    ) {
+        SpaceCardSkeleton()
+    }
+}
+
+@Composable
+private fun SpaceCardSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(SpaceCardShape)
+            .background(HomeCardBackground)
+            .border(1.dp, HomeCardBorder, SpaceCardShape)
+            .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            FolioSkeletonBar(
+                modifier = Modifier.size(40.dp),
+                shape = SpaceIconShape,
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            FolioSkeletonColumn(
+                lineCount = 2,
+                lineHeight = 12.dp,
+                spacing = 8.dp,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        FolioSkeletonColumn(
+            lineCount = 2,
+            lineHeight = 10.dp,
+            spacing = 6.dp,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(HomeCardBorder),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        FolioSkeletonBar(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(12.dp),
+        )
+    }
+}
 
 @Composable
 private fun SpaceHeaderRow(
@@ -407,6 +522,7 @@ private fun SpaceHeaderRow(
 @Composable
 private fun SpaceFilterSortButton(
     onClick: () -> Unit,
+    showActiveIndicator: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -427,6 +543,16 @@ private fun SpaceFilterSortButton(
             tint = HomeSearchPlaceholder,
             modifier = Modifier.size(20.dp),
         )
+        if (showActiveIndicator) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 10.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(HomeFilterActiveDot),
+            )
+        }
     }
 }
 
@@ -531,17 +657,19 @@ private fun SpaceCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        if (space.description.isNotBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-            text = space.description,
-            modifier = Modifier.fillMaxWidth(),
-            fontSize = 12.sp,
-            color = HomeTextSecondary,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 16.sp,
-        )
+            Text(
+                text = space.description,
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 12.sp,
+                color = HomeTextSecondary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 16.sp,
+            )
+        }
         Spacer(modifier = Modifier.height(10.dp))
         Box(
             modifier = Modifier
@@ -603,21 +731,42 @@ private fun SpaceContentEmptyPreview() {
     }
 }
 
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Spaces — loading")
+@Composable
+private fun SpaceContentLoadingPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SpaceContent(
+            uiState = SpaceUiState(isLoading = true),
+            avatarInitial = "AN",
+            onRetry = {},
+            onSearchQueryChange = {},
+            onAvatarClick = {},
+            onAddClick = {},
+            onSpaceClick = {},
+            onSpaceMoreClick = {},
+        )
+    }
+}
+
 private fun SpaceUserMessage.toSpaceToastVisuals(context: android.content.Context): FolioToastVisuals {
     val messageRes = when (this) {
         SpaceUserMessage.SPACE_CREATED -> R.string.toast_space_created
         SpaceUserMessage.SPACE_UPDATED -> R.string.toast_space_updated
-        SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED -> R.string.space_delete_not_supported
+        SpaceUserMessage.SPACE_DELETED -> R.string.toast_space_deleted
+    }
+    val descriptionRes = when (this) {
+        SpaceUserMessage.SPACE_CREATED -> R.string.toast_space_created_description
+        else -> null
     }
     val style = when (this) {
         SpaceUserMessage.SPACE_CREATED,
         SpaceUserMessage.SPACE_UPDATED,
+        SpaceUserMessage.SPACE_DELETED,
         -> FolioToastStyle.Success
-        SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED,
-        -> FolioToastStyle.Error
     }
     return FolioToastVisuals(
-        message = context.getString(messageRes),
+        title = context.getString(messageRes),
+        description = descriptionRes?.let(context::getString),
         style = style,
     )
 }

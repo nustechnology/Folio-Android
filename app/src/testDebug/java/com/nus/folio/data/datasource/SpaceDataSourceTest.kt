@@ -21,6 +21,10 @@ class SpaceDataSourceTest {
         var lastLimit: Int? = null
         var lastCreateName: String? = null
         var lastCreateObjective: String? = null
+        var lastUpdateSpaceId: String? = null
+        var lastUpdateName: String? = null
+        var lastUpdateObjective: String? = null
+        var lastDeleteSpaceId: String? = null
         var listCallCount = 0
         var failUnauthorizedOnce = false
         var spaces: List<Space> = listOf(
@@ -74,6 +78,34 @@ class SpaceDataSourceTest {
                 noteCount = 0,
                 updatedLabel = "Updated just now",
             )
+        }
+
+        override suspend fun updateSpace(
+            accessToken: String,
+            spaceId: String,
+            name: String,
+            researchObjective: String,
+        ): Space {
+            lastAccessToken = accessToken
+            lastUpdateSpaceId = spaceId
+            lastUpdateName = name
+            lastUpdateObjective = researchObjective
+            return Space(
+                id = spaceId,
+                title = name,
+                description = researchObjective,
+                sourceCount = 2,
+                noteCount = 0,
+                updatedLabel = "Updated just now",
+            )
+        }
+
+        override suspend fun deleteSpace(
+            accessToken: String,
+            spaceId: String,
+        ) {
+            lastAccessToken = accessToken
+            lastDeleteSpaceId = spaceId
         }
     }
 
@@ -139,12 +171,67 @@ class SpaceDataSourceTest {
         assertEquals("access-token", api.lastAccessToken)
     }
 
+    @Test
+    fun `updateSpace patches name and objective`() = runTest {
+        val api = FakeSpacesApi()
+        val dataSource = SpaceDataSource(
+            spacesApi = api,
+            accessTokenProvider = { "access-token" },
+        )
+
+        val space = dataSource.updateSpace(
+            spaceId = "  cae32514-0007-4f9f-86ed-ba022e7a336f  ",
+            name = "  Renamed space  ",
+            researchObjective = "  Updated objective  ",
+        )
+
+        assertEquals("cae32514-0007-4f9f-86ed-ba022e7a336f", space.id)
+        assertEquals("cae32514-0007-4f9f-86ed-ba022e7a336f", api.lastUpdateSpaceId)
+        assertEquals("Renamed space", api.lastUpdateName)
+        assertEquals("Updated objective", api.lastUpdateObjective)
+        assertEquals("access-token", api.lastAccessToken)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `createSpace throws when name is blank`() = runTest {
         SpaceDataSource(
             spacesApi = FakeSpacesApi(),
             accessTokenProvider = { "access-token" },
         ).createSpace(name = " ", researchObjective = "Objective")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `updateSpace throws when name is blank`() = runTest {
+        SpaceDataSource(
+            spacesApi = FakeSpacesApi(),
+            accessTokenProvider = { "access-token" },
+        ).updateSpace(
+            spaceId = "cae32514-0007-4f9f-86ed-ba022e7a336f",
+            name = " ",
+            researchObjective = "Objective",
+        )
+    }
+
+    @Test
+    fun `deleteSpace calls api with token and space id`() = runTest {
+        val api = FakeSpacesApi()
+        val dataSource = SpaceDataSource(
+            spacesApi = api,
+            accessTokenProvider = { "access-token" },
+        )
+
+        dataSource.deleteSpace(spaceId = "  cae32514-0007-4f9f-86ed-ba022e7a336f  ")
+
+        assertEquals("cae32514-0007-4f9f-86ed-ba022e7a336f", api.lastDeleteSpaceId)
+        assertEquals("access-token", api.lastAccessToken)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `deleteSpace throws when space id is blank`() = runTest {
+        SpaceDataSource(
+            spacesApi = FakeSpacesApi(),
+            accessTokenProvider = { "access-token" },
+        ).deleteSpace(spaceId = " ")
     }
 
     @Test

@@ -35,17 +35,37 @@ internal fun DeleteConfirmationBottomSheet(
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
     @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
+    isSubmitting: Boolean = false,
+    /**
+     * When true (default), confirm animates the sheet closed then invokes [onConfirm]
+     * (Home source/note delete). When false, [onConfirm] runs immediately and the
+     * parent closes the sheet by clearing state (Space delete with loading).
+     */
+    closeOnConfirm: Boolean = true,
 ) {
     AnimatedModalSheet(
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!isSubmitting) onDismiss()
+        },
+        dismissOnScrimClick = !isSubmitting,
     ) { requestDismiss ->
         AddSourceDragHandle()
         DeleteConfirmationSheetContent(
             titleRes = titleRes,
             messageRes = messageRes,
             confirmLabelRes = confirmLabelRes,
-            onCancelClick = { requestDismiss() },
-            onConfirm = { requestDismiss { onConfirm() } },
+            isSubmitting = isSubmitting,
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
+            },
+            onConfirm = {
+                if (isSubmitting) return@DeleteConfirmationSheetContent
+                if (closeOnConfirm) {
+                    requestDismiss { onConfirm() }
+                } else {
+                    onConfirm()
+                }
+            },
         )
     }
 }
@@ -57,6 +77,7 @@ internal fun DeleteConfirmationSheetContent(
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
     @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
+    isSubmitting: Boolean = false,
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -87,6 +108,7 @@ internal fun DeleteConfirmationSheetContent(
                 onClick = onConfirm,
                 modifier = Modifier.weight(1f),
                 labelRes = confirmLabelRes,
+                isLoading = isSubmitting,
             )
         }
     }

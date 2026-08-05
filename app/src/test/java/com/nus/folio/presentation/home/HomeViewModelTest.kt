@@ -1,20 +1,39 @@
 package com.nus.folio.presentation.home
 
+import com.nus.folio.domain.model.AuthApiException
+import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceProcessingEvent
+import com.nus.folio.domain.model.SourceProcessingState
+import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.repository.SourceFileBytes
+import com.nus.folio.domain.repository.SourceFileBytesReader
+import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
+import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
+import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
+import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
 import com.nus.folio.testing.FakeAskRepository
+import com.nus.folio.testing.FakeAuthRepository
 import com.nus.folio.testing.FakeNoteRepository
 import com.nus.folio.testing.FakeSourceRepository
 import com.nus.folio.testing.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,6 +41,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
 
     @get:Rule
@@ -30,23 +50,42 @@ class HomeViewModelTest {
     private val sourceRepository = FakeSourceRepository()
     private val askRepository = FakeAskRepository()
     private val noteRepository = FakeNoteRepository()
+    private val authRepository = FakeAuthRepository()
+    private val sourceFileBytesReader = SourceFileBytesReader { uriString ->
+        SourceFileBytes(
+            fileName = uriString.substringAfterLast('/').ifBlank { "paper.pdf" },
+            mimeType = "application/pdf",
+            bytes = byteArrayOf(1, 2, 3),
+        )
+    }
 
     private fun createViewModel(
         spaceId: String = "1",
         spaceTitle: String = "Dissertation Research",
         openSourceDelayMs: Long = 0L,
+        searchDebounceMs: Long = 0L,
     ): HomeViewModel =
         HomeViewModel(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
             getSourcesUseCase = GetSourcesUseCase(sourceRepository),
+            createSourceUseCase = CreateSourceUseCase(sourceRepository),
+            observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(sourceRepository),
             updateSourceUseCase = UpdateSourceUseCase(sourceRepository),
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
+            getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskTopicsUseCase = GetAskTopicsUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
             updateNoteUseCase = UpdateNoteUseCase(noteRepository),
             deleteNoteUseCase = DeleteNoteUseCase(noteRepository),
+            sourceFileBytesReader = sourceFileBytesReader,
+            refreshAuthSessionUseCase = RefreshAuthSessionUseCase(authRepository),
+            getCurrentSessionUseCase = GetCurrentSessionUseCase(authRepository),
+            retrySourceUseCase = RetrySourceUseCase(sourceRepository),
             openSourceDelayMs = openSourceDelayMs,
+            searchDebounceMs = searchDebounceMs,
+            createMinDelayMs = 0L,
+            loadMinDelayMs = 0L,
         )
 
     @Test
@@ -100,14 +139,52 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onFilterSelected PDF shows only pdf`() {
+    fun `onFilterSelected FILE shows only file`() {
         val viewModel = createViewModel()
 
-        viewModel.onFilterSelected(SourceFilter.PDF)
+        viewModel.onFilterSelected(SourceFilter.FILE)
 
-        assertEquals(SourceFilter.PDF, viewModel.uiState.value.selectedFilter)
+        assertEquals(SourceFilter.FILE, viewModel.uiState.value.selectedFilter)
+        assertEquals("File", sourceRepository.lastSourceType)
         assertEquals(4, viewModel.uiState.value.visibleSources.size)
-        assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.PDF })
+        assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.FILE })
+    }
+
+    @Test
+    fun `onFilterSortClick shows sort sheet`() {
+        val viewModel = createViewModel()
+
+        viewModel.onFilterSortClick()
+
+        assertTrue(viewModel.uiState.value.showSortSheet)
+
+        viewModel.onSortSheetDismiss()
+
+        assertFalse(viewModel.uiState.value.showSortSheet)
+    }
+
+    @Test
+    fun `onSortSelected reloads sources with selected sort`() {
+        val viewModel = createViewModel()
+        assertEquals(SourceSort.RECENTLY_ADDED, sourceRepository.lastSort)
+
+        viewModel.onSortSelected(SourceSort.ALPHABETICAL_ZA)
+
+        assertFalse(viewModel.uiState.value.showSortSheet)
+        assertEquals(SourceSort.ALPHABETICAL_ZA, viewModel.uiState.value.selectedSort)
+        assertEquals(SourceSort.ALPHABETICAL_ZA, sourceRepository.lastSort)
+    }
+
+    @Test
+    fun `onSortSelected same sort only dismisses sheet`() {
+        val viewModel = createViewModel()
+        val callsBefore = sourceRepository.getSourcesCallCount
+        viewModel.onFilterSortClick()
+
+        viewModel.onSortSelected(SourceSort.RECENTLY_ADDED)
+
+        assertFalse(viewModel.uiState.value.showSortSheet)
+        assertEquals(callsBefore, sourceRepository.getSourcesCallCount)
     }
 
     @Test
@@ -116,6 +193,7 @@ class HomeViewModelTest {
 
         viewModel.onFilterSelected(SourceFilter.WEB)
 
+        assertEquals("Web", sourceRepository.lastSourceType)
         assertEquals(1, viewModel.uiState.value.visibleSources.size)
         assertEquals(SourceType.WEB, viewModel.uiState.value.visibleSources.first().type)
     }
@@ -126,8 +204,32 @@ class HomeViewModelTest {
 
         viewModel.onFilterSelected(SourceFilter.TEXT)
 
+        assertEquals("Manual", sourceRepository.lastSourceType)
         assertEquals(1, viewModel.uiState.value.visibleSources.size)
         assertEquals(SourceType.TEXT, viewModel.uiState.value.visibleSources.first().type)
+    }
+
+    @Test
+    fun `newer filter result is not overwritten by slower older filter`() = runTest {
+        val firstFilterStarted = CompletableDeferred<Unit>()
+        val releaseFirstFilter = CompletableDeferred<Unit>()
+        sourceRepository.getSourcesGate = { sourceType, _ ->
+            if (sourceType == "File") {
+                firstFilterStarted.complete(Unit)
+                releaseFirstFilter.await()
+            }
+        }
+        val viewModel = createViewModel()
+
+        viewModel.onFilterSelected(SourceFilter.FILE)
+        firstFilterStarted.await()
+        viewModel.onFilterSelected(SourceFilter.WEB)
+        releaseFirstFilter.complete(Unit)
+
+        assertEquals(SourceFilter.WEB, viewModel.uiState.value.selectedFilter)
+        assertEquals("Web", sourceRepository.lastSourceType)
+        assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.WEB })
+        assertEquals(1, viewModel.uiState.value.visibleSources.size)
     }
 
     @Test
@@ -147,6 +249,7 @@ class HomeViewModelTest {
 
         viewModel.onSearchQueryChange("Turing")
 
+        assertEquals("Turing", sourceRepository.lastSearch)
         assertEquals(1, viewModel.uiState.value.visibleSources.size)
         assertTrue(viewModel.uiState.value.visibleSources.first().title.contains("Turing"))
     }
@@ -231,18 +334,192 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onRefreshSources reloads sources without full-screen loading`() {
+        val viewModel = createViewModel()
+        assertFalse(viewModel.uiState.value.isLoading)
+        val loadsBefore = sourceRepository.getSourcesCallCount
+
+        viewModel.onRefreshSources()
+
+        assertEquals(loadsBefore + 1, sourceRepository.getSourcesCallCount)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertFalse(viewModel.uiState.value.isRefreshingSources)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
+    }
+
+    @Test
+    fun `onRetry refreshes session then reloads home`() {
+        sourceRepository.getSourcesResult = Result.failure(IllegalStateException("unauthorized"))
+        val viewModel = createViewModel()
+        assertEquals("unauthorized", viewModel.uiState.value.sourcesError)
+
+        sourceRepository.getSourcesResult = null
+        authRepository.refreshSessionResult = Result.success(
+            AuthSession(
+                email = "jordan@folio.app",
+                accessToken = "access-refreshed",
+                refreshToken = "refresh-refreshed",
+            ),
+        )
+
+        viewModel.onRetry()
+
+        assertEquals(1, authRepository.refreshSessionCallCount)
+        assertNull(viewModel.uiState.value.sourcesError)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
+        assertFalse(viewModel.uiState.value.requiresReauth)
+    }
+
+    @Test
+    fun `onRetry requires reauth when refresh clears session`() {
+        sourceRepository.getSourcesResult = Result.failure(IllegalStateException("unauthorized"))
+        val viewModel = createViewModel()
+
+        authRepository.refreshSessionResult = Result.failure(
+            AuthApiException("Refresh token expired"),
+        )
+
+        viewModel.onRetry()
+
+        assertEquals(1, authRepository.refreshSessionCallCount)
+        assertTrue(viewModel.uiState.value.requiresReauth)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `onAddSourceSubmit applies manual defaults for blank title and author`() {
+        authRepository.seedSession(
+            AuthSession(email = "ada@folio.app", displayName = "Ada Lovelace"),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Text(
+                title = "",
+                author = "",
+                content = "Enough content for the minimum length.",
+            ),
+        )
+
+        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Manual
+        assertTrue(request.title.startsWith("Untitled Source - "))
+        assertEquals("Ada Lovelace", request.author)
+        assertEquals(
+            request.title,
+            viewModel.uiState.value.processingSourceTitle,
+        )
+    }
+
+    @Test
+    fun `onAddSourceSubmit applies web author default from domain`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Web(
+                url = "https://www.example.org/article",
+                title = "",
+                author = "",
+            ),
+        )
+
+        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Web
+        assertEquals("https://www.example.org/article", request.sourceUrl)
+        assertEquals("", request.title)
+        assertEquals("example.org", request.author)
+    }
+
+    @Test
     fun `onAddSourceSubmit shows processing sheet with source title`() {
         val viewModel = createViewModel()
 
         viewModel.onAddSourceSubmit(
-            AddSourceDraft.Pdf(
+            AddSourceDraft.Text(
+                title = "Memo",
+                author = "Author",
+                content = "Body content",
+            ),
+        )
+
+        assertEquals("Memo", viewModel.uiState.value.processingSourceTitle)
+        assertEquals(SourceProcessingState.ADDED, viewModel.uiState.value.processingState)
+        assertEquals(0, viewModel.uiState.value.processingProgress)
+        assertEquals(HomeUserMessage.SOURCE_CREATED, viewModel.uiState.value.userMessage)
+        assertFalse(viewModel.uiState.value.showAddSourceSheet)
+        assertFalse(viewModel.uiState.value.isCreatingSource)
+        assertEquals(1, sourceRepository.createSourceCallCount)
+        assertEquals(1, sourceRepository.observeSourceProcessingCallCount)
+        assertEquals(6, viewModel.uiState.value.allCount)
+    }
+
+    @Test
+    fun `onAddSourceClick opens add source sheet`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceClick()
+
+        assertTrue(viewModel.uiState.value.showAddSourceSheet)
+    }
+
+    @Test
+    fun `processing events update progress for created source`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Text(
+                title = "Memo",
+                author = "Author",
+                content = "Body content",
+            ),
+        )
+        val sourceId = viewModel.uiState.value.processingSourceId!!
+
+        sourceRepository.emitProcessingEvent(
+            SourceProcessingEvent(sourceId, SourceProcessingState.EXTRACTING_TEXT, 25),
+        )
+        sourceRepository.emitProcessingEvent(
+            SourceProcessingEvent("other-id", SourceProcessingState.READY, 100),
+        )
+        sourceRepository.emitProcessingEvent(
+            SourceProcessingEvent(sourceId, SourceProcessingState.READY, 100),
+        )
+
+        assertEquals(100, viewModel.uiState.value.processingProgress)
+        assertEquals(SourceProcessingState.READY, viewModel.uiState.value.processingState)
+        assertEquals(sourceId, viewModel.uiState.value.processingSourceId)
+    }
+
+    @Test
+    fun `onAddSourceSubmit shows failure when create fails`() {
+        sourceRepository.createSourceResult = Result.failure(IllegalStateException("offline"))
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Web(
+                url = "https://example.com",
+                title = "Article",
+                author = "",
+            ),
+        )
+
+        assertNull(viewModel.uiState.value.processingSourceTitle)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onAddSourceSubmit fails when file uri is missing`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.File(
                 displayName = "paper.pdf",
                 uri = null,
             ),
         )
 
-        assertEquals("paper.pdf", viewModel.uiState.value.processingSourceTitle)
+        assertNull(viewModel.uiState.value.processingSourceTitle)
         assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.FILE_REQUIRED, viewModel.uiState.value.actionError)
+        assertEquals(0, sourceRepository.createSourceCallCount)
     }
 
     @Test
@@ -259,7 +536,26 @@ class HomeViewModelTest {
         viewModel.onSourceProcessingAsk()
 
         assertNull(viewModel.uiState.value.processingSourceTitle)
+        assertNull(viewModel.uiState.value.processingSourceId)
         assertEquals(HomeTab.ASK, viewModel.uiState.value.selectedTab)
+    }
+
+    @Test
+    fun `onSourceProcessingOpenSource sets openSourceDetailId`() {
+        val viewModel = createViewModel()
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Text(
+                title = "Memo",
+                author = "Author",
+                content = "Body",
+            ),
+        )
+        val sourceId = viewModel.uiState.value.processingSourceId
+
+        viewModel.onSourceProcessingOpenSource()
+
+        assertNull(viewModel.uiState.value.processingSourceTitle)
+        assertEquals(sourceId, viewModel.uiState.value.openSourceDetailId)
     }
 
     @Test
@@ -270,6 +566,51 @@ class HomeViewModelTest {
         viewModel.onEditSourceClick(source)
 
         assertEquals(source, viewModel.uiState.value.editingSource)
+    }
+
+    @Test
+    fun `onSourceOptionsClick shows options sheet for source`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+
+        viewModel.onSourceOptionsClick(source)
+
+        assertEquals(source, viewModel.uiState.value.optionsSource)
+    }
+
+    @Test
+    fun `onSourceOptionsDismiss clears options source`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+        viewModel.onSourceOptionsClick(source)
+
+        viewModel.onSourceOptionsDismiss()
+
+        assertNull(viewModel.uiState.value.optionsSource)
+    }
+
+    @Test
+    fun `onEditSourceClick from options clears options sheet`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+        viewModel.onSourceOptionsClick(source)
+
+        viewModel.onEditSourceClick(source)
+
+        assertNull(viewModel.uiState.value.optionsSource)
+        assertEquals(source, viewModel.uiState.value.editingSource)
+    }
+
+    @Test
+    fun `onDeleteSourceClick from options clears options sheet`() {
+        val viewModel = createViewModel()
+        val source = viewModel.uiState.value.visibleSources.first()
+        viewModel.onSourceOptionsClick(source)
+
+        viewModel.onDeleteSourceClick(source)
+
+        assertNull(viewModel.uiState.value.optionsSource)
+        assertEquals(source, viewModel.uiState.value.deletingSource)
     }
 
     @Test
@@ -297,6 +638,45 @@ class HomeViewModelTest {
         assertEquals("Updated title", updated.title)
         assertEquals("Updated author", updated.author)
         assertEquals(1, sourceRepository.updateSourceCallCount)
+        assertNull(sourceRepository.lastUpdatedContent)
+    }
+
+    @Test
+    fun `onEditSourceClick for text loads plain content`() = runTest {
+        val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
+        val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
+
+        viewModel.onEditSourceClick(source)
+        advanceUntilIdle()
+
+        assertEquals(source, viewModel.uiState.value.editingSource)
+        assertEquals(
+            "Sample manual source content for editing.",
+            viewModel.uiState.value.editingSourceContent,
+        )
+        assertEquals(1, sourceRepository.getSourceDetailCallCount)
+    }
+
+    @Test
+    fun `onEditSourceSave for text includes content`() = runTest {
+        val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
+        val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
+        viewModel.onEditSourceClick(source)
+        advanceUntilIdle()
+
+        viewModel.onEditSourceSave(
+            title = "Updated notes",
+            author = "Researcher",
+            content = "Updated manual source content for the archive.",
+        )
+
+        assertNull(viewModel.uiState.value.editingSource)
+        assertEquals(HomeUserMessage.SOURCE_UPDATED, viewModel.uiState.value.userMessage)
+        assertEquals(1, sourceRepository.updateSourceCallCount)
+        assertEquals(
+            "Updated manual source content for the archive.",
+            sourceRepository.lastUpdatedContent,
+        )
     }
 
     @Test
@@ -324,7 +704,8 @@ class HomeViewModelTest {
 
         viewModel.onEditSourceSave(title = "Updated title", author = "Updated author")
 
-        assertEquals(HomeUserMessage.SOURCE_UPDATE_FAILED, viewModel.uiState.value.userMessage)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
         val unchanged = viewModel.uiState.value.visibleSources.first { it.id == source.id }
         assertEquals(source.title, unchanged.title)
         assertEquals(source.author, unchanged.author)
@@ -402,7 +783,8 @@ class HomeViewModelTest {
 
         viewModel.onDeleteSourceConfirm()
 
-        assertEquals(HomeUserMessage.SOURCE_DELETE_FAILED, viewModel.uiState.value.userMessage)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
         assertTrue(viewModel.uiState.value.allSources.any { it.id == source.id })
         assertEquals(previousAllCount, viewModel.uiState.value.allCount)
     }
@@ -681,5 +1063,28 @@ class HomeViewModelTest {
         viewModel.onUserMessageShown()
 
         assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onSourceProcessingRetry resets progress and observes again`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAddSourceSubmit(
+            AddSourceDraft.Text(
+                title = "Memo",
+                author = "Author",
+                content = "Body content",
+            ),
+        )
+        val sourceId = viewModel.uiState.value.processingSourceId!!
+        sourceRepository.emitProcessingEvent(
+            SourceProcessingEvent(sourceId, SourceProcessingState.FAILED, 100),
+        )
+
+        viewModel.onSourceProcessingRetry()
+
+        assertEquals(1, sourceRepository.retrySourceCallCount)
+        assertEquals(sourceId, sourceRepository.lastRetriedSourceId)
+        assertEquals(0, viewModel.uiState.value.processingProgress)
+        assertEquals(SourceProcessingState.ADDED, viewModel.uiState.value.processingState)
     }
 }

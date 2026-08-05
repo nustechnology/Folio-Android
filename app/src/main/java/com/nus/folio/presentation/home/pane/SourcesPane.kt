@@ -7,12 +7,11 @@ import com.nus.folio.presentation.home.HomeSourceFilterChipSelected
 import com.nus.folio.presentation.home.HomeSourceFilterChipSelectedBorder
 import com.nus.folio.presentation.home.HomeStatusShape
 import com.nus.folio.presentation.home.HomeUiState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import com.nus.folio.presentation.home.sourceFilterBadgeColors
+import com.nus.folio.presentation.home.sourceTypeBadgeColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,42 +19,39 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.FolioEmptyState
+import com.nus.folio.components.FolioSkeletonBar
+import com.nus.folio.components.FolioSkeletonList
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceStatus
@@ -74,92 +70,195 @@ import com.nus.folio.ui.theme.HomeStatusReadyBackground
 import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeTypeBadgeBackground
-import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
-private val SourceSwipeActionWidth = 64.dp
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SourcesPane(
     uiState: HomeUiState,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit = {},
     onAddClick: () -> Unit,
     onFilterSelected: (SourceFilter) -> Unit,
-    onSourceEditClick: (Source) -> Unit,
-    onSourceDeleteClick: (Source) -> Unit,
+    onSourceMoreClick: (Source) -> Unit,
     onSourceClick: (Source) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pullRefreshState = rememberPullToRefreshState()
+    val showFilters = !uiState.isLoading &&
+        uiState.sourcesError == null &&
+        (uiState.allSources.isNotEmpty() || uiState.selectedFilter != SourceFilter.ALL)
+
     Column(modifier = modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.height(16.dp))
-        HomeFilterChips(
-            uiState = uiState,
-            onFilterSelected = onFilterSelected,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        if (showFilters) {
+            HomeFilterChips(
+                uiState = uiState,
+                onFilterSelected = onFilterSelected,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = HomeHeader)
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshingSources,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullRefreshState,
+                    isRefreshing = uiState.isRefreshingSources,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = HomeCardBackground,
+                    color = HomeHeader,
+                )
+            },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            when {
+                uiState.isLoading -> {
+                    SourcesSkeletonList()
                 }
-            }
-            uiState.sourcesError != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = uiState.sourcesError.ifBlank {
-                                stringResource(R.string.home_error_generic)
-                            },
-                            color = HomeStatusFailedText,
-                            fontSize = 14.sp,
+                uiState.sourcesError != null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = uiState.sourcesError.ifBlank {
+                                    stringResource(R.string.home_error_generic)
+                                },
+                                color = HomeStatusFailedText,
+                                fontSize = 14.sp,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.home_retry),
+                                modifier = Modifier.clickable(onClick = onRetry),
+                                color = HomeHeader,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+                uiState.visibleSources.isEmpty() -> {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_search,
+                            title = stringResource(R.string.search_empty_title),
+                            message = stringResource(R.string.search_empty_message),
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.home_retry),
-                            modifier = Modifier.clickable(onClick = onRetry),
-                            color = HomeHeader,
-                            fontWeight = FontWeight.SemiBold,
+                    } else {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_document,
+                            title = stringResource(R.string.home_empty_sources),
+                            message = stringResource(R.string.home_empty_sources_subtitle),
+                            actionLabel = stringResource(R.string.home_empty_sources_action),
+                            onActionClick = onAddClick,
                         )
                     }
                 }
-            }
-            uiState.visibleSources.isEmpty() -> {
-                if (uiState.searchQuery.isNotBlank()) {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_search,
-                        title = stringResource(R.string.search_empty_title),
-                        message = stringResource(R.string.search_empty_message),
-                    )
-                } else {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_document,
-                        title = stringResource(R.string.home_empty_sources),
-                        message = stringResource(R.string.home_empty_sources_subtitle),
-                        actionLabel = stringResource(R.string.home_empty_sources_action),
-                        onActionClick = onAddClick,
-                    )
-                }
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(uiState.visibleSources, key = { it.id }) { source ->
-                        SourceCard(
-                            source = source,
-                            onClick = { onSourceClick(source) },
-                            onEditClick = { onSourceEditClick(source) },
-                            onDeleteClick = { onSourceDeleteClick(source) },
-                        )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(uiState.visibleSources, key = { it.id }) { source ->
+                            SourceCard(
+                                source = source,
+                                onClick = { onSourceClick(source) },
+                                onMoreClick = { onSourceMoreClick(source) },
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
                     }
-                    item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SourcesSkeletonList() {
+    FolioSkeletonList {
+        SourceCardSkeleton()
+    }
+}
+
+@Composable
+private fun SourceCardSkeleton() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(HomeCardShape)
+            .background(HomeCardBackground)
+            .border(1.dp, HomeCardBorder, HomeCardShape)
+            .padding(start = 12.dp, end = 4.dp, top = 14.dp, bottom = 14.dp)
+            .clearAndSetSemantics { },
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box {
+            Text(
+                text = "PDF",
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Transparent,
+            )
+            FolioSkeletonBar(
+                modifier = Modifier.matchParentSize(),
+                shape = HomeBadgeShape,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Reserve the same title metrics as SourceCard (min/maxLines = 2).
+                Text(
+                    text = " ",
+                    fontFamily = CormorantGaramond,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Transparent,
+                    maxLines = 2,
+                    lineHeight = 22.sp,
+                )
+                FolioSkeletonBar(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .height(12.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Meta",
+                    fontSize = 12.sp,
+                    color = Color.Transparent,
+                    maxLines = 1,
+                )
+                FolioSkeletonBar(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(0.55f)
+                        .height(10.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Box {
+            Text(
+                text = stringResource(R.string.home_status_ready),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Transparent,
+            )
+            FolioSkeletonBar(
+                modifier = Modifier.matchParentSize(),
+                shape = HomeStatusShape,
+            )
+        }
+        Spacer(modifier = Modifier.size(32.dp))
     }
 }
 
@@ -170,7 +269,7 @@ private fun HomeFilterChips(
 ) {
     val filters = listOf(
         SourceFilter.ALL to stringResource(R.string.home_filter_all_label),
-        SourceFilter.PDF to stringResource(R.string.home_type_pdf),
+        SourceFilter.FILE to stringResource(R.string.home_type_file),
         SourceFilter.WEB to stringResource(R.string.home_type_web),
         SourceFilter.TEXT to stringResource(R.string.home_type_text),
     )
@@ -185,6 +284,7 @@ private fun HomeFilterChips(
             SourceFilterChip(
                 label = label,
                 selected = uiState.selectedFilter == filter,
+                filter = filter,
                 onClick = { onFilterSelected(filter) },
             )
         }
@@ -195,10 +295,24 @@ private fun HomeFilterChips(
 private fun SourceFilterChip(
     label: String,
     selected: Boolean,
+    filter: SourceFilter,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) HomeSourceFilterChipSelected else HomeCardBackground
-    val border = if (selected) HomeSourceFilterChipSelectedBorder else HomeCardBorder
+    val typeColors = sourceFilterBadgeColors(filter)
+    val background = when {
+        selected && typeColors != null -> typeColors.background
+        selected -> HomeSourceFilterChipSelected
+        else -> HomeCardBackground
+    }
+    val border = when {
+        selected && typeColors != null -> typeColors.content.copy(alpha = 0.35f)
+        selected -> HomeSourceFilterChipSelectedBorder
+        else -> HomeCardBorder
+    }
+    val contentColor = when {
+        selected && typeColors != null -> typeColors.content
+        else -> HomeTextPrimary
+    }
     Text(
         text = label,
         modifier = Modifier
@@ -213,7 +327,7 @@ private fun SourceFilterChip(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         fontSize = 13.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        color = HomeTextPrimary,
+        color = contentColor,
     )
 }
 
@@ -221,130 +335,12 @@ private fun SourceFilterChip(
 private fun SourceCard(
     source: Source,
     onClick: () -> Unit,
-    onEditClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val revealWidthPx = with(density) { (SourceSwipeActionWidth * 2).toPx() }
-    val offsetX = remember { Animatable(0f) }
-    val editActionLabel = stringResource(R.string.source_swipe_edit)
-    val deleteActionLabel = stringResource(R.string.source_swipe_delete)
-
-    fun settle(targetOpen: Boolean) {
-        scope.launch {
-            offsetX.animateTo(
-                targetValue = if (targetOpen) -revealWidthPx else 0f,
-                animationSpec = tween(durationMillis = 220),
-            )
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(HomeCardShape),
-    ) {
-        Row(
-            modifier = Modifier
-                .matchParentSize()
-                .align(Alignment.CenterEnd)
-                .clearAndSetSemantics { },
-            horizontalArrangement = Arrangement.End,
-        ) {
-            SourceSwipeAction(
-                iconRes = R.drawable.ic_edit,
-                contentDescription = null,
-                background = HomeHeader,
-                contentColor = Color.White,
-                onClick = {
-                    settle(targetOpen = false)
-                    onEditClick()
-                },
-            )
-            SourceSwipeAction(
-                iconRes = R.drawable.ic_delete,
-                contentDescription = null,
-                background = HomeStatusFailedBackground,
-                contentColor = HomeStatusFailedText,
-                onClick = {
-                    settle(targetOpen = false)
-                    onDeleteClick()
-                },
-            )
-        }
-        SourceCardContent(
-            source = source,
-            onClick = onClick,
-            modifier = Modifier
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .semantics {
-                    customActions = listOf(
-                        CustomAccessibilityAction(editActionLabel) {
-                            onEditClick()
-                            true
-                        },
-                        CustomAccessibilityAction(deleteActionLabel) {
-                            onDeleteClick()
-                            true
-                        },
-                    )
-                }
-                .pointerInput(revealWidthPx) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            val shouldOpen = offsetX.value <= -revealWidthPx / 2f
-                            settle(targetOpen = shouldOpen)
-                        },
-                        onDragCancel = {
-                            settle(targetOpen = offsetX.value <= -revealWidthPx / 2f)
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            scope.launch {
-                                val next = (offsetX.value + dragAmount).coerceIn(-revealWidthPx, 0f)
-                                offsetX.snapTo(next)
-                            }
-                        },
-                    )
-                },
-        )
-    }
-}
-
-@Composable
-private fun SourceSwipeAction(
-    iconRes: Int,
-    contentDescription: String?,
-    background: Color,
-    contentColor: Color,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .width(SourceSwipeActionWidth)
-            .fillMaxHeight()
-            .background(background)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = contentDescription,
-            tint = contentColor,
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
-
-@Composable
-private fun SourceCardContent(
-    source: Source,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    onMoreClick: () -> Unit,
 ) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
+            .clip(HomeCardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -352,18 +348,19 @@ private fun SourceCardContent(
             )
             .background(HomeCardBackground)
             .border(1.dp, HomeCardBorder, HomeCardShape)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = 12.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.Top,
     ) {
+        val badgeColors = sourceTypeBadgeColors(source.type)
         Text(
-            text = sourceTypeLabel(source.type),
+            text = sourceBadgeLabel(source),
             modifier = Modifier
                 .clip(HomeBadgeShape)
-                .background(HomeTypeBadgeBackground)
+                .background(badgeColors.background)
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = HomeTextSecondary,
+            color = badgeColors.content,
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -392,12 +389,36 @@ private fun SourceCardContent(
         }
         Spacer(modifier = Modifier.width(8.dp))
         StatusPill(status = source.status)
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_more_vertical),
+                contentDescription = stringResource(R.string.home_sources_more),
+                tint = HomeTextPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
 @Composable
+private fun sourceBadgeLabel(source: Source): String {
+    when (source.type) {
+        SourceType.TEXT -> return sourceTypeLabel(SourceType.TEXT)
+        SourceType.WEB -> return sourceTypeLabel(SourceType.WEB)
+        SourceType.FILE, SourceType.BOOK -> Unit
+    }
+    val extension = source.fileExtension.trim()
+        .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    if (extension != null) return extension.uppercase()
+    return sourceTypeLabel(source.type)
+}
+
+@Composable
 private fun sourceTypeLabel(type: SourceType): String = when (type) {
-    SourceType.PDF -> stringResource(R.string.home_type_pdf)
+    SourceType.FILE -> stringResource(R.string.home_type_file)
     SourceType.BOOK -> stringResource(R.string.home_type_book)
     SourceType.WEB -> stringResource(R.string.home_type_web)
     SourceType.TEXT -> stringResource(R.string.home_type_text)
@@ -441,19 +462,18 @@ private fun SourcesPanePreview() {
         SourcesPane(
             uiState = HomeUiState(
                 visibleSources = listOf(
-                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1"),
-                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1"),
-                    Source("5", "Attention Is All You Need", SourceType.PDF, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("1", "Alan Turing: Computing Machinery", SourceType.FILE, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
+                    Source("2", "The Origins of Totalitarianism", SourceType.FILE, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
+                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1", "epub"),
+                    Source("4", "The Age of Surveillance Capitalism", SourceType.FILE, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1", "pdf"),
+                    Source("5", "Attention Is All You Need", SourceType.FILE, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
                 ),
                 allCount = 128,
             ),
             onRetry = {},
             onAddClick = {},
             onFilterSelected = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             modifier = Modifier.background(HomeBackground),
         )
@@ -469,8 +489,23 @@ private fun SourcesPaneEmptyPreview() {
             onRetry = {},
             onAddClick = {},
             onFilterSelected = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
+            onSourceClick = {},
+            modifier = Modifier.background(HomeBackground),
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 700, name = "Sources — loading")
+@Composable
+private fun SourcesPaneLoadingPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SourcesPane(
+            uiState = HomeUiState(isLoading = true),
+            onRetry = {},
+            onAddClick = {},
+            onFilterSelected = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             modifier = Modifier.background(HomeBackground),
         )

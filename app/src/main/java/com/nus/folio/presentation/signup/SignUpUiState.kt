@@ -10,6 +10,9 @@ data class SignUpUiState(
     val passwordError: SignUpError? = null,
     val confirmPasswordError: SignUpError? = null,
     val formError: SignUpError? = null,
+    /** Fixed client toast (e.g. email already exists); mapped to strings in the screen. */
+    val toastError: SignUpError? = null,
+    /** Dynamic toast text (e.g. Apple / other API messages). */
     val toastMessage: String? = null,
     val shouldNavigateToHome: Boolean = false,
 )
@@ -17,7 +20,10 @@ data class SignUpUiState(
 enum class SignUpError {
     NAME_REQUIRED,
     EMAIL_REQUIRED,
+    EMAIL_INVALID,
+    EMAIL_ALREADY_EXISTS,
     PASSWORD_REQUIRED,
+    PASSWORD_TOO_SHORT,
     CONFIRM_PASSWORD_REQUIRED,
     PASSWORDS_DO_NOT_MATCH,
     SIGN_UP_FAILED,

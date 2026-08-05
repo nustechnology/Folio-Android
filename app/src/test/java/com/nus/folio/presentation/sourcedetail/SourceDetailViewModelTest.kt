@@ -2,12 +2,14 @@ package com.nus.folio.presentation.sourcedetail
 
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
-import com.nus.folio.domain.usecase.GetSourceOriginalFileUseCase
-import com.nus.folio.domain.model.SourceFileLocation
+import com.nus.folio.domain.usecase.GetSourcePreviewUrlUseCase
+import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
+import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.testing.FakeSourceRepository
 import com.nus.folio.testing.MainDispatcherRule
 import org.junit.Assert.assertEquals
@@ -27,12 +29,16 @@ class SourceDetailViewModelTest {
     private fun createViewModel(
         spaceId: String = "1",
         sourceId: String = "1",
+        contentRevealDelayMs: Long = 0L,
     ): SourceDetailViewModel =
         SourceDetailViewModel(
             spaceId = spaceId,
             sourceId = sourceId,
             getSourceDetailUseCase = GetSourceDetailUseCase(repository),
-            getSourceOriginalFileUseCase = GetSourceOriginalFileUseCase(repository),
+            getSourcePreviewUrlUseCase = GetSourcePreviewUrlUseCase(repository),
+            retrySourceUseCase = RetrySourceUseCase(repository),
+            observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(repository),
+            contentRevealDelayMs = contentRevealDelayMs,
         )
 
     @Test
@@ -40,8 +46,29 @@ class SourceDetailViewModelTest {
         val viewModel = createViewModel()
 
         assertFalse(viewModel.uiState.value.isLoading)
+        assertFalse(viewModel.uiState.value.isContentLoading)
         assertNull(viewModel.uiState.value.error)
         assertEquals("Alan Turing: Computing Machinery", viewModel.uiState.value.detail?.title)
+    }
+
+    @Test
+    fun `init loads preview url when available`() {
+        val viewModel = createViewModel()
+
+        assertEquals(1, repository.getSourcePreviewUrlCallCount)
+        assertEquals(
+            "https://example.org/preview/1.pdf",
+            viewModel.uiState.value.previewUrl,
+        )
+    }
+
+    @Test
+    fun `init hides preview when preview url unavailable`() {
+        repository.getSourcePreviewUrlResult = Result.success(null)
+
+        val viewModel = createViewModel()
+
+        assertNull(viewModel.uiState.value.previewUrl)
     }
 
     @Test
@@ -52,6 +79,7 @@ class SourceDetailViewModelTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("offline", viewModel.uiState.value.error)
+        assertEquals(0, repository.getSourcePreviewUrlCallCount)
     }
 
     @Test
@@ -62,7 +90,7 @@ class SourceDetailViewModelTest {
                 title = "Research metrics dashboard",
                 author = "Research team",
                 addedLabel = "Added 1d ago",
-                type = SourceType.PDF,
+                type = SourceType.FILE,
                 status = SourceStatus.READY,
                 spaceId = "1",
                 fileExtension = "xlsx",
@@ -97,12 +125,53 @@ class SourceDetailViewModelTest {
     }
 
     @Test
-    fun `onOpenOriginalClick requests original file location`() {
+    fun `onOpenOriginalClick opens preview url`() {
         val viewModel = createViewModel()
 
         viewModel.onOpenOriginalClick()
 
-        assertEquals(1, repository.getOriginalFileCallCount)
-        assertTrue(viewModel.uiState.value.openOriginalRequest is SourceFileLocation.Local)
+        val request = viewModel.uiState.value.openOriginalRequest
+        assertTrue(request is SourceFileLocation.Remote)
+        assertEquals(
+            "https://example.org/preview/1.pdf",
+            (request as SourceFileLocation.Remote).url,
+        )
+    }
+
+    @Test
+    fun `onOpenOriginalClick does nothing without preview url`() {
+        repository.getSourcePreviewUrlResult = Result.success(null)
+        val viewModel = createViewModel()
+
+        viewModel.onOpenOriginalClick()
+
+        assertNull(viewModel.uiState.value.openOriginalRequest)
+    }
+
+    @Test
+    fun `onRetryProcessing marks source processing`() {
+        repository.getSourceDetailResult = Result.success(
+            SourceDetail(
+                id = "4",
+                title = "Failed source",
+                author = "Author",
+                addedLabel = "Added 1d ago",
+                type = SourceType.FILE,
+                status = SourceStatus.FAILED,
+                spaceId = "1",
+                fileExtension = "pdf",
+                contentFormat = SourceContentFormat.DOCUMENT,
+                originalFileName = "failed.pdf",
+            ),
+        )
+        val viewModel = createViewModel(sourceId = "4")
+
+        viewModel.onRetryProcessing()
+
+        assertEquals(1, repository.retrySourceCallCount)
+        assertEquals("4", repository.lastRetriedSourceId)
+        assertEquals(SourceStatus.PROCESSING, viewModel.uiState.value.detail?.status)
+        assertFalse(viewModel.uiState.value.isRetrying)
+        assertNull(viewModel.uiState.value.previewUrl)
     }
 }

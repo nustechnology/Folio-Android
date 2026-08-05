@@ -117,6 +117,11 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onNavigateToAccount = {
                     navController.navigate(FolioDestination.ACCOUNT)
                 },
+                onRequiresReauth = {
+                    navController.navigate(FolioDestination.LOGIN) {
+                        popUpTo(FolioDestination.SPACES) { inclusive = true }
+                    }
+                },
             )
         }
         composable(FolioDestination.ACCOUNT) {

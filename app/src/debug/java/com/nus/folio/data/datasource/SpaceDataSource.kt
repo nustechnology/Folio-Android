@@ -51,6 +51,35 @@ class SpaceDataSource(
         }
     }
 
+    suspend fun updateSpace(
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Space {
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        require(name.isNotBlank()) { "Name is required" }
+        val trimmedName = name.trim()
+        val trimmedObjective = researchObjective.trim()
+        return withAuthRetry { accessToken ->
+            spacesApi.updateSpace(
+                accessToken = accessToken,
+                spaceId = spaceId.trim(),
+                name = trimmedName,
+                researchObjective = trimmedObjective,
+            )
+        }
+    }
+
+    suspend fun deleteSpace(spaceId: String) {
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        withAuthRetry { accessToken ->
+            spacesApi.deleteSpace(
+                accessToken = accessToken,
+                spaceId = spaceId.trim(),
+            )
+        }
+    }
+
     private suspend fun <T> withAuthRetry(block: suspend (accessToken: String) -> T): T {
         val accessToken = requireAccessToken()
         return try {

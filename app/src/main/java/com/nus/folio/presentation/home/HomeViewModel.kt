@@ -4,39 +4,69 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.AskTopic
+import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceProcessingState
+import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.toApiSourceType
+import com.nus.folio.domain.repository.SourceFileBytesReader
+import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
+import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
+import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
+import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
+import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class HomeViewModel(
     private val spaceId: String,
     spaceTitle: String,
     private val getSourcesUseCase: GetSourcesUseCase,
+    private val createSourceUseCase: CreateSourceUseCase,
+    private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
     private val updateSourceUseCase: UpdateSourceUseCase,
     private val deleteSourceUseCase: DeleteSourceUseCase,
+    private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val getAskTopicsUseCase: GetAskTopicsUseCase,
     private val getNotesUseCase: GetNotesUseCase,
     private val updateNoteUseCase: UpdateNoteUseCase,
     private val deleteNoteUseCase: DeleteNoteUseCase,
+    private val sourceFileBytesReader: SourceFileBytesReader,
+    private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
+    private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
+    private val retrySourceUseCase: RetrySourceUseCase,
     private val openSourceDelayMs: Long = OPEN_SOURCE_DELAY_MS,
+    private val searchDebounceMs: Long = SEARCH_DEBOUNCE_MS,
+    private val createMinDelayMs: Long = CREATE_MIN_DELAY_MS,
+    private val loadMinDelayMs: Long = LOAD_MIN_DELAY_MS,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -49,13 +79,50 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private var openSourceJob: Job? = null
+    private var processingObserveJob: Job? = null
+    /** In-flight sources reload (search debounce, filter/sort, pull-to-refresh, tab clear). */
+    private var sourcesLoadJob: Job? = null
 
     init {
         loadHome()
     }
 
     fun loadSources() {
-        loadHome()
+        loadSourcesOnly()
+    }
+
+    fun onRefreshSources() {
+        if (_uiState.value.isRefreshingSources) return
+        sourcesLoadJob?.cancel()
+        sourcesLoadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingSources = true) }
+            try {
+                reloadSources()
+            } finally {
+                _uiState.update { it.copy(isRefreshingSources = false) }
+            }
+        }
+    }
+
+    fun onRetry() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    sourcesError = null,
+                    askError = null,
+                    notesError = null,
+                )
+            }
+            val refresh = refreshAuthSessionUseCase()
+            if (refresh.isFailure && getCurrentSessionUseCase() == null) {
+                _uiState.update {
+                    it.copy(isLoading = false, requiresReauth = true)
+                }
+                return@launch
+            }
+            loadHome()
+        }
     }
 
     fun loadHome() {
@@ -64,7 +131,16 @@ class HomeViewModel(
                 it.copy(isLoading = true, sourcesError = null, askError = null, notesError = null)
             }
 
-            val sourcesDeferred = async { getSourcesUseCase(spaceId) }
+            val loadingStartedAt = System.currentTimeMillis()
+            val state = _uiState.value
+            val sourcesDeferred = async {
+                getSourcesUseCase(
+                    spaceId = spaceId,
+                    sourceType = state.selectedFilter.toApiSourceType(),
+                    search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
+                    sort = state.selectedSort,
+                )
+            }
             val askDeferred = async { getAskTopicsUseCase(spaceId) }
             val notesDeferred = async { getNotesUseCase(spaceId) }
 
@@ -72,8 +148,11 @@ class HomeViewModel(
             val askResult = askDeferred.await()
             val notesResult = notesDeferred.await()
 
-            _uiState.update { state ->
-                var next = state.copy(isLoading = false)
+            val elapsed = System.currentTimeMillis() - loadingStartedAt
+            delay((loadMinDelayMs - elapsed).coerceAtLeast(0L))
+
+            _uiState.update { current ->
+                var next = current.copy(isLoading = false)
 
                 next = sourcesResult.fold(
                     onSuccess = { library ->
@@ -111,7 +190,7 @@ class HomeViewModel(
                 )
 
                 next.copy(
-                    visibleSources = filterSources(next),
+                    visibleSources = next.allSources,
                     visibleAskTopics = filterAskTopics(next),
                     visibleNotes = filterNotes(next),
                 )
@@ -119,22 +198,77 @@ class HomeViewModel(
         }
     }
 
+    private fun loadSourcesOnly() {
+        sourcesLoadJob?.cancel()
+        sourcesLoadJob = viewModelScope.launch {
+            reloadSources()
+        }
+    }
+
+    private suspend fun reloadSources() {
+        val state = _uiState.value
+        getSourcesUseCase(
+            spaceId = spaceId,
+            sourceType = state.selectedFilter.toApiSourceType(),
+            search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
+            sort = state.selectedSort,
+        ).fold(
+            onSuccess = { library ->
+                _uiState.update { current ->
+                    val next = current.copy(
+                        sourcesError = null,
+                        allSources = library.sources,
+                        allCount = library.allCount,
+                    )
+                    next.copy(visibleSources = next.allSources)
+                }
+            },
+            onFailure = { throwable ->
+                _uiState.update {
+                    it.copy(sourcesError = throwable.message.orEmpty())
+                }
+            },
+        )
+    }
+
     fun onSearchQueryChange(query: String) {
         _uiState.update { state ->
             val next = state.copy(searchQuery = query)
             next.copy(
-                visibleSources = filterSources(next),
                 visibleAskTopics = filterAskTopics(next),
                 visibleNotes = filterNotes(next),
+                visibleSources = next.allSources,
             )
+        }
+        if (_uiState.value.selectedTab != HomeTab.SOURCES) return
+        sourcesLoadJob?.cancel()
+        sourcesLoadJob = viewModelScope.launch {
+            delay(searchDebounceMs)
+            reloadSources()
         }
     }
 
     fun onFilterSelected(filter: SourceFilter) {
-        _uiState.update { state ->
-            val next = state.copy(selectedFilter = filter)
-            next.copy(visibleSources = filterSources(next))
+        if (filter == _uiState.value.selectedFilter) return
+        _uiState.update { it.copy(selectedFilter = filter) }
+        loadSourcesOnly()
+    }
+
+    fun onFilterSortClick() {
+        _uiState.update { it.copy(showSortSheet = true) }
+    }
+
+    fun onSortSheetDismiss() {
+        _uiState.update { it.copy(showSortSheet = false) }
+    }
+
+    fun onSortSelected(sort: SourceSort) {
+        if (sort == _uiState.value.selectedSort) {
+            _uiState.update { it.copy(showSortSheet = false) }
+            return
         }
+        _uiState.update { it.copy(showSortSheet = false, selectedSort = sort) }
+        loadSourcesOnly()
     }
 
     fun onNoteFilterSelected(filter: NoteFilter) {
@@ -145,46 +279,273 @@ class HomeViewModel(
     }
 
     fun onTabSelected(tab: HomeTab) {
+        val previousQuery = _uiState.value.searchQuery
         _uiState.update { state ->
             val next = state.copy(
                 selectedTab = tab,
                 searchQuery = "",
             )
             next.copy(
-                visibleSources = filterSources(next),
+                visibleSources = next.allSources,
                 visibleAskTopics = filterAskTopics(next),
                 visibleNotes = filterNotes(next),
             )
         }
+        if (previousQuery.isNotBlank()) {
+            // Search was cleared — reload sources without the query.
+            loadSourcesOnly()
+        } else {
+            // Drop any pending debounced search for the Sources tab.
+            sourcesLoadJob?.cancel()
+            sourcesLoadJob = null
+        }
+    }
+
+    fun onAddSourceClick() {
+        if (_uiState.value.isCreatingSource) return
+        _uiState.update { it.copy(showAddSourceSheet = true) }
+    }
+
+    fun onAddSourceSheetDismiss() {
+        if (_uiState.value.isCreatingSource) return
+        _uiState.update { it.copy(showAddSourceSheet = false) }
     }
 
     fun onAddSourceSubmit(draft: AddSourceDraft) {
-        val title = when (draft) {
-            is AddSourceDraft.Pdf -> draft.displayName.ifBlank {
-                "Untitled PDF"
+        if (_uiState.value.isCreatingSource) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingSource = true) }
+
+            val request = try {
+                buildCreateRequest(draft)
+            } catch (cancelled: CancellationException) {
+                _uiState.update { it.copy(isCreatingSource = false) }
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isCreatingSource = false,
+                        actionError = error.toHomeActionError(),
+                    )
+                }
+                return@launch
             }
-            is AddSourceDraft.Web -> draft.title.ifBlank { draft.url }
-            is AddSourceDraft.Text -> draft.title
+
+            val title = when (draft) {
+                is AddSourceDraft.File -> draft.displayName.ifBlank { "Untitled file" }
+                is AddSourceDraft.Web -> draft.title.ifBlank { draft.url }
+                is AddSourceDraft.Text ->
+                    draft.title.ifBlank { AddSourceInputRules.defaultManualTitle() }
+            }
+
+            val result = coroutineScope {
+                val createDeferred = async { createSourceUseCase(request) }
+                delay(createMinDelayMs)
+                createDeferred.await()
+            }
+
+            result
+                .onSuccess { created ->
+                    val displayTitle = created.title.ifBlank { title }
+                    _uiState.update {
+                        it.copy(
+                            isCreatingSource = false,
+                            showAddSourceSheet = false,
+                            processingSourceId = created.id,
+                            processingSourceTitle = displayTitle,
+                            processingProgress = 0,
+                            processingState = SourceProcessingState.ADDED,
+                            userMessage = HomeUserMessage.SOURCE_CREATED,
+                        )
+                    }
+                    // Observe before refresh: release SharedFlow has no replay, so
+                    // events emitted during reload would otherwise be dropped.
+                    startObservingProcessing(created.id)
+                    refreshSourcesAfterCreate()
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isCreatingSource = false,
+                            actionError = throwable.toHomeActionError(),
+                        )
+                    }
+                }
         }
-        _uiState.update {
-            it.copy(processingSourceTitle = title)
+    }
+
+    private suspend fun startObservingProcessing(sourceId: String) {
+        processingObserveJob?.cancel()
+        val subscribed = CompletableDeferred<Unit>()
+        processingObserveJob = viewModelScope.launch {
+            try {
+                observeSourceProcessingUseCase()
+                    .onStart { subscribed.complete(Unit) }
+                    .filter { it.sourceId == sourceId }
+                    .transformWhile { event ->
+                        emit(event)
+                        !event.isTerminal
+                    }
+                    .collect { event ->
+                        _uiState.update {
+                            it.copy(
+                                processingProgress = event.progress,
+                                processingState = event.state,
+                            )
+                        }
+                        if (event.isTerminal) {
+                            refreshSourcesAfterCreate()
+                        }
+                    }
+            } catch (cancelled: CancellationException) {
+                subscribed.complete(Unit)
+                throw cancelled
+            } catch (_: Exception) {
+                subscribed.complete(Unit)
+                // Keep last known progress; user can dismiss the sheet.
+            }
         }
+        subscribed.await()
+    }
+
+    private fun stopProcessingObservation() {
+        processingObserveJob?.cancel()
+        processingObserveJob = null
+    }
+
+    private suspend fun buildCreateRequest(draft: AddSourceDraft): CreateSourceRequest =
+        when (draft) {
+            is AddSourceDraft.Web -> {
+                val url = draft.url.trim()
+                CreateSourceRequest.Web(
+                    spaceId = spaceId,
+                    sourceUrl = url,
+                    // Blank title: backend fetches HTML <title> during processing.
+                    title = AddSourceInputRules.limitTitle(draft.title.trim()),
+                    author = AddSourceInputRules.limitAuthor(
+                        draft.author.trim().ifBlank {
+                            AddSourceInputRules.defaultWebAuthor(url)
+                        },
+                    ),
+                )
+            }
+            is AddSourceDraft.Text -> {
+                val session = getCurrentSessionUseCase()
+                CreateSourceRequest.Manual(
+                    spaceId = spaceId,
+                    title = AddSourceInputRules.limitTitle(
+                        draft.title.trim().ifBlank {
+                            AddSourceInputRules.defaultManualTitle()
+                        },
+                    ),
+                    author = AddSourceInputRules.limitAuthor(
+                        draft.author.trim().ifBlank {
+                            AddSourceInputRules.currentUserDisplayName(
+                                displayName = session?.displayName,
+                                email = session?.email,
+                            )
+                        },
+                    ),
+                    content = draft.content,
+                )
+            }
+            is AddSourceDraft.File -> {
+                val uri = draft.uri?.toString()?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalArgumentException(ERROR_FILE_REQUIRED)
+                val file = withContext(Dispatchers.IO) { sourceFileBytesReader.read(uri) }
+                if (!AddSourceInputRules.isSupportedExtension(file.fileName)) {
+                    throw IllegalArgumentException(ERROR_FILE_UNSUPPORTED)
+                }
+                if (file.bytes.size > AddSourceInputRules.MAX_FILE_BYTES) {
+                    throw IllegalArgumentException(ERROR_FILE_TOO_LARGE)
+                }
+                val session = getCurrentSessionUseCase()
+                val author = AddSourceInputRules.limitAuthor(
+                    draft.author.trim().ifBlank {
+                        AddSourceInputRules.currentUserDisplayName(
+                            displayName = session?.displayName,
+                            email = session?.email,
+                        )
+                    },
+                )
+                CreateSourceRequest.File(
+                    spaceId = spaceId,
+                    title = draft.displayName.trim().ifBlank { file.fileName },
+                    author = author,
+                    fileName = file.fileName,
+                    mimeType = file.mimeType,
+                    bytes = file.bytes,
+                )
+            }
+        }
+
+    private suspend fun refreshSourcesAfterCreate() {
+        sourcesLoadJob?.cancel()
+        val job = viewModelScope.launch {
+            reloadSources()
+        }
+        sourcesLoadJob = job
+        job.join()
     }
 
     fun onSourceProcessingDismiss() {
-        _uiState.update { it.copy(processingSourceTitle = null) }
+        stopProcessingObservation()
+        _uiState.update {
+            it.copy(
+                processingSourceId = null,
+                processingSourceTitle = null,
+                processingProgress = 0,
+                processingState = null,
+            )
+        }
     }
 
     fun onSourceProcessingOpenSource() {
-        _uiState.update { it.copy(processingSourceTitle = null) }
+        val sourceId = _uiState.value.processingSourceId
+        stopProcessingObservation()
+        _uiState.update {
+            it.copy(
+                processingSourceId = null,
+                processingSourceTitle = null,
+                processingProgress = 0,
+                processingState = null,
+                openSourceDetailId = sourceId,
+            )
+        }
     }
 
     fun onSourceProcessingAsk() {
+        stopProcessingObservation()
         _uiState.update {
             it.copy(
+                processingSourceId = null,
                 processingSourceTitle = null,
+                processingProgress = 0,
+                processingState = null,
                 selectedTab = HomeTab.ASK,
             )
+        }
+    }
+
+    fun onSourceProcessingRetry() {
+        val sourceId = _uiState.value.processingSourceId ?: return
+        viewModelScope.launch {
+            retrySourceUseCase(sourceId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            processingProgress = 0,
+                            processingState = SourceProcessingState.ADDED,
+                        )
+                    }
+                    startObservingProcessing(sourceId)
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(actionError = throwable.toHomeActionError())
+                    }
+                }
         }
     }
 
@@ -257,8 +618,31 @@ class HomeViewModel(
         }
     }
 
+    fun onSourceOptionsClick(source: Source) {
+        _uiState.update { it.copy(optionsSource = source) }
+    }
+
+    fun onSourceOptionsDismiss() {
+        _uiState.update { it.copy(optionsSource = null) }
+    }
+
     fun onEditSourceClick(source: Source) {
-        _uiState.update { it.copy(editingSource = source) }
+        _uiState.update { it.copy(optionsSource = null) }
+        if (source.type != SourceType.TEXT) {
+            _uiState.update {
+                it.copy(editingSource = source, editingSourceContent = "")
+            }
+            return
+        }
+        viewModelScope.launch {
+            val content = getSourceDetailUseCase(spaceId, source.id)
+                .getOrNull()
+                ?.plainContent
+                .orEmpty()
+            _uiState.update {
+                it.copy(editingSource = source, editingSourceContent = content)
+            }
+        }
     }
 
     fun onSourceClick(source: Source) {
@@ -280,16 +664,24 @@ class HomeViewModel(
     }
 
     fun onEditSourceDismiss() {
-        _uiState.update { it.copy(editingSource = null) }
+        _uiState.update { it.copy(editingSource = null, editingSourceContent = "") }
     }
 
-    fun onEditSourceSave(title: String, author: String) {
+    fun onEditSourceSave(title: String, author: String, content: String = "") {
         if (title.isBlank()) return
         val editing = _uiState.value.editingSource ?: return
-        val updated = editing.copy(title = title.trim(), author = author.trim())
+        val trimmedTitle = AddSourceInputRules.limitTitle(title.trim())
+        val trimmedAuthor = AddSourceInputRules.limitAuthor(author.trim())
+        val contentToSend = if (editing.type == SourceType.TEXT) {
+            if (!AddSourceInputRules.isContentValid(content)) return
+            content.trim()
+        } else {
+            null
+        }
+        val updated = editing.copy(title = trimmedTitle, author = trimmedAuthor)
 
         viewModelScope.launch {
-            updateSourceUseCase(updated)
+            updateSourceUseCase(updated, contentToSend)
                 .onSuccess { saved ->
                     _uiState.update { state ->
                         val updatedSources = state.allSources.map { source ->
@@ -298,21 +690,22 @@ class HomeViewModel(
                         val next = state.copy(
                             allSources = updatedSources,
                             editingSource = null,
+                            editingSourceContent = "",
                             userMessage = HomeUserMessage.SOURCE_UPDATED,
                         )
                         next.copy(visibleSources = filterSources(next))
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
                     _uiState.update {
-                        it.copy(userMessage = HomeUserMessage.SOURCE_UPDATE_FAILED)
+                        it.copy(actionError = throwable.toHomeActionError())
                     }
                 }
         }
     }
 
     fun onDeleteSourceClick(source: Source) {
-        _uiState.update { it.copy(deletingSource = source) }
+        _uiState.update { it.copy(optionsSource = null, deletingSource = source) }
     }
 
     fun onDeleteSourceDismiss() {
@@ -336,9 +729,9 @@ class HomeViewModel(
                         next.copy(visibleSources = filterSources(next))
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
                     _uiState.update {
-                        it.copy(userMessage = HomeUserMessage.SOURCE_DELETE_FAILED)
+                        it.copy(actionError = throwable.toHomeActionError())
                     }
                 }
         }
@@ -488,17 +881,11 @@ class HomeViewModel(
         _uiState.update { it.copy(userMessage = null) }
     }
 
-    private fun filterSources(state: HomeUiState): List<Source> {
-        val byType = when (state.selectedFilter) {
-            SourceFilter.ALL -> state.allSources
-            SourceFilter.PDF -> state.allSources.filter { it.type == SourceType.PDF }
-            SourceFilter.WEB -> state.allSources.filter { it.type == SourceType.WEB }
-            SourceFilter.TEXT -> state.allSources.filter { it.type == SourceType.TEXT }
-        }
-        val query = state.searchQuery.trim()
-        if (query.isEmpty()) return byType
-        return byType.filter { it.title.contains(query, ignoreCase = true) }
+    fun onActionErrorShown() {
+        _uiState.update { it.copy(actionError = null) }
     }
+
+    private fun filterSources(state: HomeUiState): List<Source> = state.allSources
 
     private fun filterAskTopics(state: HomeUiState): List<AskTopic> {
         val query = state.searchQuery.trim()
@@ -525,12 +912,19 @@ class HomeViewModel(
         private val spaceId: String,
         private val spaceTitle: String,
         private val getSourcesUseCase: GetSourcesUseCase,
+        private val createSourceUseCase: CreateSourceUseCase,
+        private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
         private val updateSourceUseCase: UpdateSourceUseCase,
         private val deleteSourceUseCase: DeleteSourceUseCase,
+        private val getSourceDetailUseCase: GetSourceDetailUseCase,
         private val getAskTopicsUseCase: GetAskTopicsUseCase,
         private val getNotesUseCase: GetNotesUseCase,
         private val updateNoteUseCase: UpdateNoteUseCase,
         private val deleteNoteUseCase: DeleteNoteUseCase,
+        private val sourceFileBytesReader: SourceFileBytesReader,
+        private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
+        private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
+        private val retrySourceUseCase: RetrySourceUseCase,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -538,17 +932,46 @@ class HomeViewModel(
                 spaceId = spaceId,
                 spaceTitle = spaceTitle,
                 getSourcesUseCase = getSourcesUseCase,
+                createSourceUseCase = createSourceUseCase,
+                observeSourceProcessingUseCase = observeSourceProcessingUseCase,
                 updateSourceUseCase = updateSourceUseCase,
                 deleteSourceUseCase = deleteSourceUseCase,
+                getSourceDetailUseCase = getSourceDetailUseCase,
                 getAskTopicsUseCase = getAskTopicsUseCase,
                 getNotesUseCase = getNotesUseCase,
                 updateNoteUseCase = updateNoteUseCase,
                 deleteNoteUseCase = deleteNoteUseCase,
+                sourceFileBytesReader = sourceFileBytesReader,
+                refreshAuthSessionUseCase = refreshAuthSessionUseCase,
+                getCurrentSessionUseCase = getCurrentSessionUseCase,
+                retrySourceUseCase = retrySourceUseCase,
             ) as T
         }
     }
 
     companion object {
-        private const val OPEN_SOURCE_DELAY_MS = 1_500L
+        private const val OPEN_SOURCE_DELAY_MS = 500L
+        private const val SEARCH_DEBOUNCE_MS = 300L
+        private const val CREATE_MIN_DELAY_MS = 1_500L
+        private const val LOAD_MIN_DELAY_MS = 1_000L
+
+        /** Allowlisted validation keys — never shown raw; mapped in [toHomeActionError]. */
+        internal const val ERROR_FILE_REQUIRED = "FILE_REQUIRED"
+        internal const val ERROR_FILE_UNSUPPORTED = "FILE_UNSUPPORTED"
+        internal const val ERROR_FILE_TOO_LARGE = "FILE_TOO_LARGE"
     }
+}
+
+/**
+ * Maps failures to safe UI codes. Never surfaces [Throwable.message] (CWE-209).
+ */
+private fun Throwable.toHomeActionError(): HomeActionError = when (this) {
+    is java.io.IOException -> HomeActionError.NETWORK
+    is IllegalArgumentException -> when (message) {
+        HomeViewModel.ERROR_FILE_REQUIRED -> HomeActionError.FILE_REQUIRED
+        HomeViewModel.ERROR_FILE_UNSUPPORTED -> HomeActionError.FILE_UNSUPPORTED
+        HomeViewModel.ERROR_FILE_TOO_LARGE -> HomeActionError.FILE_TOO_LARGE
+        else -> HomeActionError.GENERIC
+    }
+    else -> HomeActionError.GENERIC
 }

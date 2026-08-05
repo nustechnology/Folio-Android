@@ -3,6 +3,7 @@ package com.nus.folio.data.repository
 import com.nus.folio.data.auth.InMemoryAuthSessionStore
 import com.nus.folio.data.datasource.AuthDataSource
 import com.nus.folio.data.network.AuthApi
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.UserProfile
 import kotlinx.coroutines.async
@@ -171,6 +172,30 @@ class AuthRepositoryImplTest {
         assertEquals("alice@example.com", result.getOrNull()?.email)
         assertEquals("refresh-login", tokenOnlyRepository.getCurrentSession()?.refreshToken)
         assertEquals("access-only", tokenOnlyRepository.getCurrentSession()?.accessToken)
+    }
+
+    @Test
+    fun `refreshSession clears session when server rejects refresh`() = runTest {
+        repository.signIn("jordan@folio.app", "secret")
+        assertEquals("access-login", repository.getCurrentSession()?.accessToken)
+
+        val rejectedApi = object : AuthApi by fakeApi {
+            override suspend fun refresh(refreshToken: String): AuthSession {
+                throw AuthApiException("Refresh token expired")
+            }
+        }
+        val rejectedRepository = AuthRepositoryImpl(
+            dataSource = AuthDataSource(authApi = rejectedApi),
+            sessionStore = sessionStore,
+        )
+        rejectedRepository.restoreSession()
+
+        val result = rejectedRepository.refreshSession()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is AuthApiException)
+        assertNull(rejectedRepository.getCurrentSession())
+        assertNull(sessionStore.read())
     }
 
     @Test

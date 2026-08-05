@@ -14,4 +14,12 @@ interface SpaceRepository {
     ): Result<SpacePage>
 
     suspend fun createSpace(name: String, researchObjective: String): Result<Space>
+
+    suspend fun updateSpace(
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Result<Space>
+
+    suspend fun deleteSpace(spaceId: String): Result<Unit>
 }

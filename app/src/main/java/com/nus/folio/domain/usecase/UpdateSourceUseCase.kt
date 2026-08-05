@@ -6,6 +6,9 @@ import com.nus.folio.domain.repository.SourceRepository
 class UpdateSourceUseCase(
     private val repository: SourceRepository,
 ) {
-    suspend operator fun invoke(source: Source): Result<Source> =
-        repository.updateSource(source)
+    /**
+     * @param content Manual/TEXT body to PATCH; omit (null) for Web/File edits.
+     */
+    suspend operator fun invoke(source: Source, content: String? = null): Result<Source> =
+        repository.updateSource(source, content)
 }

@@ -9,10 +9,14 @@ enum class SourceDetailUserMessage {
 }
 
 data class SourceDetailUiState(
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
+    val isContentLoading: Boolean = false,
+    val isRetrying: Boolean = false,
     val error: String? = null,
     val detail: SourceDetail? = null,
     val selectedSheetIndex: Int = 0,
+    val previewUrl: String? = null,
     val openOriginalRequest: SourceFileLocation? = null,
     val userMessage: SourceDetailUserMessage? = null,
+    val actionError: String? = null,
 )

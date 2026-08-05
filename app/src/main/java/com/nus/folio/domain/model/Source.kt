@@ -8,10 +8,11 @@ data class Source(
     val addedLabel: String,
     val status: SourceStatus,
     val spaceId: String,
+    val fileExtension: String = "",
 )
 
 enum class SourceType {
-    PDF,
+    FILE,
     BOOK,
     WEB,
     TEXT,
@@ -25,7 +26,7 @@ enum class SourceStatus {
 
 enum class SourceFilter {
     ALL,
-    PDF,
+    FILE,
     WEB,
     TEXT,
 }

@@ -1,18 +1,11 @@
 package com.nus.folio.data.network
 
-import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.IOException
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 
 interface AuthApi {
     suspend fun signUp(
@@ -52,7 +45,7 @@ class AuthApiClient(
         password: String,
         confirmPassword: String,
     ): AuthSession = postAuth(
-        path = "/api/v1/auth/sign-up",
+        url = FolioApiPaths.authSignUp(baseUrl),
         body = JSONObject()
             .put("name", name)
             .put("email", email)
@@ -67,7 +60,7 @@ class AuthApiClient(
         email: String,
         password: String,
     ): AuthSession = postAuth(
-        path = "/api/v1/auth/login",
+        url = FolioApiPaths.authLogin(baseUrl),
         body = JSONObject()
             .put("email", email)
             .put("password", password),
@@ -79,7 +72,7 @@ class AuthApiClient(
     override suspend fun refresh(
         refreshToken: String,
     ): AuthSession = postAuth(
-        path = "/api/v1/auth/refresh",
+        url = FolioApiPaths.authRefresh(baseUrl),
         body = JSONObject().put("refreshToken", refreshToken),
         fallbackEmail = "",
         fallbackName = "",
@@ -87,110 +80,52 @@ class AuthApiClient(
     )
 
     override suspend fun logout(accessToken: String?): Unit = withContext(Dispatchers.IO) {
-        val connection = (URL("$baseUrl/api/v1/auth/logout").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doInput = true
-            doOutput = true
-            setFixedLengthStreamingMode(0)
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("ngrok-skip-browser-warning", "true")
-            if (!accessToken.isNullOrBlank()) {
-                setRequestProperty("Authorization", "Bearer $accessToken")
-            }
-        }
-
-        try {
-            connection.outputStream.use { /* empty body */ }
-
-            val code = connection.responseCode
-            val responseBody = readBody(
-                if (code in 200..299) connection.inputStream else connection.errorStream,
-            )
-            if (code !in 200..299) {
-                throw AuthApiException(parseErrorMessage(responseBody, code, "Logout"))
-            }
-        } finally {
-            connection.disconnect()
-        }
+        FolioHttp.postEmpty(
+            url = FolioApiPaths.authLogout(baseUrl),
+            accessToken = accessToken,
+            fixedLengthZero = true,
+            failureLabel = "Logout",
+            mapError = FolioHttp::authApiError,
+            parse = { },
+        )
     }
 
     override suspend fun getUser(
         id: String,
         accessToken: String,
     ): UserProfile = withContext(Dispatchers.IO) {
-        val encodedId = URLEncoder.encode(id, Charsets.UTF_8.name())
-        val connection = (URL("$baseUrl/api/v1/users/$encodedId").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doInput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("ngrok-skip-browser-warning", "true")
-            setRequestProperty("Authorization", "Bearer $accessToken")
-        }
-
-        try {
-            val code = connection.responseCode
-            val responseBody = readBody(
-                if (code in 200..299) connection.inputStream else connection.errorStream,
-            )
-            if (code !in 200..299) {
-                val message = parseErrorMessage(responseBody, code, "Get user")
-                throw if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                    UnauthorizedException(message)
-                } else {
-                    AuthApiException(message)
-                }
-            }
-            parseUserProfile(responseBody)
-        } finally {
-            connection.disconnect()
-        }
+        FolioHttp.get(
+            url = FolioApiPaths.user(id, baseUrl),
+            accessToken = accessToken,
+            failureLabel = "Get user",
+            mapError = FolioHttp::unauthorizedOrAuth,
+            parse = { response -> parseUserProfile(response.body) },
+        )
     }
 
     private suspend fun postAuth(
-        path: String,
+        url: String,
         body: JSONObject,
         fallbackEmail: String,
         fallbackName: String,
         failureLabel: String,
     ): AuthSession = withContext(Dispatchers.IO) {
-        val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doInput = true
-            doOutput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("ngrok-skip-browser-warning", "true")
-        }
-
-        try {
-            connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray(Charsets.UTF_8))
-            }
-
-            val code = connection.responseCode
-            val responseBody = readBody(
-                if (code in 200..299) connection.inputStream else connection.errorStream,
-            )
-
-            if (code !in 200..299) {
-                throw AuthApiException(parseErrorMessage(responseBody, code, failureLabel))
-            }
-
-            parseAuthSession(
-                responseBody = responseBody,
-                fallbackName = fallbackName,
-                fallbackEmail = fallbackEmail,
-                failureLabel = failureLabel,
-            )
-        } finally {
-            connection.disconnect()
-        }
+        // login / sign-up / refresh put secrets in the body without Authorization.
+        FolioHttp.requireHttps(url)
+        FolioHttp.postJson(
+            url = url,
+            jsonBody = body.toString(),
+            failureLabel = failureLabel,
+            mapError = FolioHttp::authApiError,
+            parse = { response ->
+                parseAuthSession(
+                    responseBody = response.body,
+                    fallbackName = fallbackName,
+                    fallbackEmail = fallbackEmail,
+                    failureLabel = failureLabel,
+                )
+            },
+        )
     }
 
     private fun parseUserProfile(responseBody: String): UserProfile {
@@ -263,37 +198,7 @@ class AuthApiClient(
         return null
     }
 
-    private fun parseErrorMessage(
-        responseBody: String,
-        code: Int,
-        failureLabel: String,
-    ): String {
-        val fallback = "$failureLabel failed (HTTP $code)"
-        if (responseBody.isBlank()) return fallback
-        return runCatching {
-            val json = JSONObject(responseBody)
-            listOf("message", "detail", "error")
-                .map { key ->
-                    when (val value = json.opt(key)) {
-                        is String -> value
-                        is org.json.JSONArray -> (0 until value.length())
-                            .mapNotNull { index -> value.optString(index).takeIf { it.isNotBlank() } }
-                            .joinToString("; ")
-                        else -> ""
-                    }
-                }
-                .firstOrNull { it.isNotBlank() }
-                ?: fallback
-        }.getOrDefault(fallback)
-    }
-
-    private fun readBody(stream: InputStream?): String {
-        if (stream == null) return ""
-        return BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-    }
-
     companion object {
-        const val DEFAULT_BASE_URL = "https://shale-crowd-satin.ngrok-free.dev"
-        private const val TIMEOUT_MS = 15_000
+        const val DEFAULT_BASE_URL = FolioApiPaths.BASE_URL
     }
 }

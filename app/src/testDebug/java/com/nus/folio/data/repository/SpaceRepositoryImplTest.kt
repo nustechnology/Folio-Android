@@ -21,6 +21,10 @@ class SpaceRepositoryImplTest {
         var lastLimit: Int? = null
         var lastCreateName: String? = null
         var lastCreateObjective: String? = null
+        var lastUpdateSpaceId: String? = null
+        var lastUpdateName: String? = null
+        var lastUpdateObjective: String? = null
+        var lastDeleteSpaceId: String? = null
 
         override suspend fun listSpaces(
             accessToken: String,
@@ -65,6 +69,32 @@ class SpaceRepositoryImplTest {
                 noteCount = 0,
                 updatedLabel = "Updated just now",
             )
+        }
+
+        override suspend fun updateSpace(
+            accessToken: String,
+            spaceId: String,
+            name: String,
+            researchObjective: String,
+        ): Space {
+            lastUpdateSpaceId = spaceId
+            lastUpdateName = name
+            lastUpdateObjective = researchObjective
+            return Space(
+                id = spaceId,
+                title = name,
+                description = researchObjective,
+                sourceCount = 2,
+                noteCount = 0,
+                updatedLabel = "Updated just now",
+            )
+        }
+
+        override suspend fun deleteSpace(
+            accessToken: String,
+            spaceId: String,
+        ) {
+            lastDeleteSpaceId = spaceId
         }
     }
 
@@ -122,5 +152,28 @@ class SpaceRepositoryImplTest {
         assertEquals("created", result.getOrNull()?.id)
         assertEquals("New Space", api.lastCreateName)
         assertEquals("Objective", api.lastCreateObjective)
+    }
+
+    @Test
+    fun `updateSpace returns updated space`() = runTest {
+        val result = repository.updateSpace(
+            spaceId = "1",
+            name = "Renamed Space",
+            researchObjective = "Updated objective",
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("1", result.getOrNull()?.id)
+        assertEquals("1", api.lastUpdateSpaceId)
+        assertEquals("Renamed Space", api.lastUpdateName)
+        assertEquals("Updated objective", api.lastUpdateObjective)
+    }
+
+    @Test
+    fun `deleteSpace returns success`() = runTest {
+        val result = repository.deleteSpace("1")
+
+        assertTrue(result.isSuccess)
+        assertEquals("1", api.lastDeleteSpaceId)
     }
 }
