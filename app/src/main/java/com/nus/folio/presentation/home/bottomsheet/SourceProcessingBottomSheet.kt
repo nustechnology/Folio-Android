@@ -1,12 +1,16 @@
 package com.nus.folio.presentation.home.bottomsheet
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,15 +27,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.domain.model.SourceProcessingEvent
+import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.presentation.home.HomeCardShape
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.ui.theme.CormorantGaramond
@@ -53,24 +56,26 @@ import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeCardBorder
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeSheetBackground
+import com.nus.folio.ui.theme.HomeStatusFailedBackground
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import kotlinx.coroutines.delay
 
 private val ProcessingStepLineWidth = 2.dp
 private val ProcessingStepSize = 28.dp
 private const val ProcessingStepCount = 4
-private const val ProcessingStepDelayMs = 700L
-private const val ProcessingStartDelayMs = 350L
 private const val ProcessingProgressAnimMs = 550
 
 @Composable
 internal fun SourceProcessingBottomSheet(
     sourceTitle: String,
+    progress: Int,
+    state: SourceProcessingState?,
     onDismiss: () -> Unit,
     onOpenSource: () -> Unit = {},
     onAsk: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     AnimatedModalSheet(
         onDismiss = onDismiss,
@@ -78,8 +83,11 @@ internal fun SourceProcessingBottomSheet(
         AddSourceDragHandle()
         SourceProcessingSheetContent(
             sourceTitle = sourceTitle,
+            progress = progress,
+            state = state,
             onOpenSourceClick = { requestDismiss { onOpenSource() } },
             onAskClick = { requestDismiss { onAsk() } },
+            onRetryClick = onRetry,
         )
     }
 }
@@ -87,8 +95,11 @@ internal fun SourceProcessingBottomSheet(
 @Composable
 private fun SourceProcessingSheetContent(
     sourceTitle: String,
+    progress: Int,
+    state: SourceProcessingState?,
     onOpenSourceClick: () -> Unit,
     onAskClick: () -> Unit,
+    onRetryClick: () -> Unit,
 ) {
     val steps = listOf(
         stringResource(R.string.source_processing_step_added),
@@ -96,25 +107,24 @@ private fun SourceProcessingSheetContent(
         stringResource(R.string.source_processing_step_index),
         stringResource(R.string.source_processing_step_ready),
     )
-    var completedStepCount by remember { mutableIntStateOf(0) }
+    val completedStepCount = SourceProcessingEvent(
+        sourceId = "",
+        state = state ?: SourceProcessingState.ADDED,
+        progress = progress,
+    ).completedStepCount()
     val isFinished = completedStepCount >= ProcessingStepCount
+    val isFailed = state == SourceProcessingState.FAILED
+    val showReadyActions = state == SourceProcessingState.READY
+    val showRetryAction = isFailed
     val animatedProgress by animateFloatAsState(
-        targetValue = completedStepCount / ProcessingStepCount.toFloat(),
+        targetValue = (progress.coerceIn(0, 100) / 100f),
         animationSpec = tween(durationMillis = ProcessingProgressAnimMs),
         label = "sourceProcessingProgress",
     )
-    val statusLabel = if (isFinished) {
-        steps.last()
-    } else {
-        steps[completedStepCount.coerceIn(0, steps.lastIndex)]
-    }
-
-    LaunchedEffect(Unit) {
-        delay(ProcessingStartDelayMs)
-        for (step in 1..ProcessingStepCount) {
-            completedStepCount = step
-            delay(ProcessingStepDelayMs)
-        }
+    val statusLabel = when {
+        isFailed -> stringResource(R.string.source_processing_step_failed)
+        isFinished -> steps.last()
+        else -> null
     }
 
     Column {
@@ -145,13 +155,19 @@ private fun SourceProcessingSheetContent(
                 .padding(20.dp),
         ) {
             steps.forEachIndexed { index, label ->
-                val isCompleted = index < completedStepCount
-                val isCurrent = !isFinished && index == completedStepCount
+                val isFailedStep = isFailed && index == steps.lastIndex
+                val isCompleted = index < completedStepCount && !isFailedStep
+                val isCurrent = !isFinished && !isFailed && index == completedStepCount
                 ProcessingStepRow(
                     stepNumber = index + 1,
-                    label = label,
+                    label = if (isFailedStep) {
+                        stringResource(R.string.source_processing_step_failed)
+                    } else {
+                        label
+                    },
                     isCompleted = isCompleted,
                     isCurrent = isCurrent,
+                    isFailed = isFailedStep,
                     showConnector = index < steps.lastIndex,
                 )
             }
@@ -170,17 +186,11 @@ private fun SourceProcessingSheetContent(
                     fontWeight = FontWeight.SemiBold,
                     color = HomeTextPrimary,
                 )
-                AnimatedContent(
-                    targetState = statusLabel,
-                    transitionSpec = {
-                        fadeIn(tween(220)) togetherWith fadeOut(tween(160))
-                    },
-                    label = "sourceProcessingStatus",
-                ) { label ->
-                    Text(
-                        text = label,
-                        fontSize = 13.sp,
-                        color = HomeTextSecondary,
+                if (statusLabel == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = HomeHeader,
+                        strokeWidth = 2.dp,
                     )
                 }
             }
@@ -196,20 +206,48 @@ private fun SourceProcessingSheetContent(
                 strokeCap = StrokeCap.Round,
             )
             Spacer(modifier = Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            AnimatedVisibility(
+                visible = showReadyActions,
+                enter = fadeIn(tween(280)) +
+                    expandVertically(animationSpec = tween(320)) +
+                    slideInVertically(
+                        animationSpec = tween(320),
+                        initialOffsetY = { it / 3 },
+                    ),
+                exit = fadeOut(tween(160)) + shrinkVertically(animationSpec = tween(200)),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    AddSourceSubmitButton(
+                        enabled = true,
+                        onClick = onOpenSourceClick,
+                        labelRes = R.string.source_processing_open,
+                        modifier = Modifier.weight(1f),
+                    )
+                    AddSourceCancelButton(
+                        onClick = onAskClick,
+                        labelRes = R.string.home_ask_submit,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visible = showRetryAction,
+                enter = fadeIn(tween(280)) +
+                    expandVertically(animationSpec = tween(320)) +
+                    slideInVertically(
+                        animationSpec = tween(320),
+                        initialOffsetY = { it / 3 },
+                    ),
+                exit = fadeOut(tween(160)) + shrinkVertically(animationSpec = tween(200)),
             ) {
                 AddSourceSubmitButton(
-                    enabled = isFinished,
-                    onClick = onOpenSourceClick,
-                    labelRes = R.string.source_processing_open,
-                    modifier = Modifier.weight(1f),
-                )
-                AddSourceCancelButton(
-                    onClick = onAskClick,
-                    labelRes = R.string.home_ask_submit,
-                    modifier = Modifier.weight(1f),
+                    enabled = true,
+                    onClick = onRetryClick,
+                    labelRes = R.string.home_retry,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -222,12 +260,22 @@ private fun ProcessingStepRow(
     label: String,
     isCompleted: Boolean,
     isCurrent: Boolean,
+    isFailed: Boolean,
     showConnector: Boolean,
 ) {
     val connectorColor by animateColorAsState(
-        targetValue = if (isCompleted) HomeStatusReadyText else HomeCardBorder,
+        targetValue = when {
+            isFailed -> HomeStatusFailedText
+            isCompleted -> HomeStatusReadyText
+            else -> HomeCardBorder
+        },
         animationSpec = tween(durationMillis = 320),
         label = "processingConnector",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (isFailed) HomeStatusFailedText else HomeTextPrimary,
+        animationSpec = tween(durationMillis = 320),
+        label = "processingStepLabel",
     )
 
     Row(
@@ -242,6 +290,7 @@ private fun ProcessingStepRow(
                 stepNumber = stepNumber,
                 isCompleted = isCompleted,
                 isCurrent = isCurrent,
+                isFailed = isFailed,
             )
             if (showConnector) {
                 Box(
@@ -258,7 +307,7 @@ private fun ProcessingStepRow(
             modifier = Modifier.padding(top = 4.dp),
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            color = HomeTextPrimary,
+            color = labelColor,
         )
     }
 }
@@ -268,8 +317,10 @@ private fun ProcessingStepIndicator(
     stepNumber: Int,
     isCompleted: Boolean,
     isCurrent: Boolean,
+    isFailed: Boolean,
 ) {
     val state = when {
+        isFailed -> StepVisualState.Failed
         isCompleted -> StepVisualState.Completed
         isCurrent -> StepVisualState.Current
         else -> StepVisualState.Pending
@@ -300,6 +351,23 @@ private fun ProcessingStepIndicator(
                         painter = painterResource(R.drawable.ic_check),
                         contentDescription = null,
                         tint = HomeCardBackground,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            StepVisualState.Failed -> {
+                Box(
+                    modifier = Modifier
+                        .size(ProcessingStepSize)
+                        .clip(CircleShape)
+                        .background(HomeStatusFailedBackground)
+                        .border(1.dp, HomeStatusFailedText, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_toast_error),
+                        contentDescription = null,
+                        tint = HomeStatusFailedText,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -346,6 +414,7 @@ private enum class StepVisualState {
     Pending,
     Current,
     Completed,
+    Failed,
 }
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
@@ -364,8 +433,38 @@ private fun SourceProcessingSheetContentPreview() {
                 AddSourceDragHandle()
                 SourceProcessingSheetContent(
                     sourceTitle = "Care Technology Adoption Survey 2026",
+                    progress = 25,
+                    state = SourceProcessingState.EXTRACTING_TEXT,
                     onOpenSourceClick = {},
                     onAskClick = {},
+                    onRetryClick = {},
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6, name = "Processing — failed")
+@Composable
+private fun SourceProcessingSheetFailedPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(HomeSheetBackground, HomeSheetShape)
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+            ) {
+                AddSourceDragHandle()
+                SourceProcessingSheetContent(
+                    sourceTitle = "Care Technology Adoption Survey 2026",
+                    progress = 100,
+                    state = SourceProcessingState.FAILED,
+                    onOpenSourceClick = {},
+                    onAskClick = {},
+                    onRetryClick = {},
                 )
             }
         }

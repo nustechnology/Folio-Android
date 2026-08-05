@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,7 @@ import com.nus.folio.domain.model.SourceType
 import com.nus.folio.presentation.home.HomeBadgeShape
 import com.nus.folio.presentation.home.HomeCardShape
 import com.nus.folio.presentation.home.HomeStatusShape
+import com.nus.folio.presentation.home.sourceTypeBadgeColors
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
@@ -74,7 +76,6 @@ import com.nus.folio.ui.theme.HomeStatusReadyBackground
 import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeTypeBadgeBackground
 
 @Composable
 fun SourceDetailScreen(
@@ -88,13 +89,16 @@ fun SourceDetailScreen(
             spaceId = spaceId,
             sourceId = sourceId,
             getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
-            getSourceOriginalFileUseCase = LocalAppContainer.current.getSourceOriginalFileUseCase,
+            getSourcePreviewUrlUseCase = LocalAppContainer.current.getSourcePreviewUrlUseCase,
+            retrySourceUseCase = LocalAppContainer.current.retrySourceUseCase,
+            observeSourceProcessingUseCase = LocalAppContainer.current.observeSourceProcessingUseCase,
         ),
     ),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
+    var showOpenOriginalSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.openOriginalRequest) {
         val request = uiState.openOriginalRequest ?: return@LaunchedEffect
@@ -108,13 +112,25 @@ fun SourceDetailScreen(
         viewModel.onUserMessageShown()
     }
 
+    LaunchedEffect(uiState.actionError) {
+        val message = uiState.actionError ?: return@LaunchedEffect
+        toastHostState.showToast(
+            FolioToastVisuals(
+                title = message,
+                style = FolioToastStyle.Error,
+            ),
+        )
+        viewModel.onActionErrorShown()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         SourceDetailContent(
             uiState = uiState,
             onBackClick = onBackClick,
             onAskSourceClick = onAskSourceClick,
-            onOpenOriginalClick = viewModel::onOpenOriginalClick,
-            onRetry = viewModel::loadDetail,
+            onOpenOriginalClick = { showOpenOriginalSheet = true },
+            onRetryLoad = viewModel::loadDetail,
+            onRetryProcessing = viewModel::onRetryProcessing,
             onSheetSelected = viewModel::onSheetSelected,
         )
 
@@ -125,6 +141,18 @@ fun SourceDetailScreen(
                 .statusBarsPadding()
                 .padding(top = 12.dp),
         )
+
+        if (showOpenOriginalSheet) {
+            val detail = uiState.detail
+            OpenOriginalBottomSheet(
+                fileName = detail?.originalFileName
+                    ?.takeIf { it.isNotBlank() }
+                    ?: detail?.title
+                    ?: stringResource(R.string.source_detail_title),
+                onDismiss = { showOpenOriginalSheet = false },
+                onConfirm = viewModel::onOpenOriginalClick,
+            )
+        }
     }
 }
 
@@ -134,7 +162,8 @@ private fun SourceDetailContent(
     onBackClick: () -> Unit,
     onAskSourceClick: () -> Unit,
     onOpenOriginalClick: () -> Unit,
-    onRetry: () -> Unit,
+    onRetryLoad: () -> Unit,
+    onRetryProcessing: () -> Unit,
     onSheetSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -146,25 +175,19 @@ private fun SourceDetailContent(
     ) {
         SourceDetailHeader(
             detail = uiState.detail,
+            showOpenOriginal = uiState.detail?.status == SourceStatus.READY &&
+                !uiState.previewUrl.isNullOrBlank(),
             onBackClick = onBackClick,
             onAskSourceClick = onAskSourceClick,
             onOpenOriginalClick = onOpenOriginalClick,
         )
 
         when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = HomeHeader)
-                }
-            }
-            uiState.error != null -> {
+            uiState.error != null && uiState.detail == null -> {
                 SourceDetailMessageState(
                     message = uiState.error,
                     actionLabel = stringResource(R.string.home_retry),
-                    onAction = onRetry,
+                    onAction = onRetryLoad,
                     isError = true,
                 )
             }
@@ -172,8 +195,14 @@ private fun SourceDetailContent(
                 SourceDetailBody(
                     detail = uiState.detail,
                     selectedSheetIndex = uiState.selectedSheetIndex,
+                    isContentLoading = uiState.isContentLoading,
+                    isRetrying = uiState.isRetrying,
                     onSheetSelected = onSheetSelected,
+                    onRetryProcessing = onRetryProcessing,
                 )
+            }
+            uiState.isLoading || uiState.isContentLoading -> {
+                SourceDetailContentLoading()
             }
         }
     }
@@ -182,6 +211,7 @@ private fun SourceDetailContent(
 @Composable
 private fun SourceDetailHeader(
     detail: SourceDetail?,
+    showOpenOriginal: Boolean,
     onBackClick: () -> Unit,
     onAskSourceClick: () -> Unit,
     onOpenOriginalClick: () -> Unit,
@@ -227,9 +257,6 @@ private fun SourceDetailHeader(
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 32.sp,
             )
-            if (detail != null && detail.status != SourceStatus.FAILED) {
-                OpenOriginalIconButton(onClick = onOpenOriginalClick)
-            }
         }
 
         if (detail != null) {
@@ -244,15 +271,21 @@ private fun SourceDetailHeader(
                     modifier = Modifier.weight(1f),
                 ) {
                     SourceTypeBadge(
-                        label = sourceTypeLabel(detail.type),
-                    )
-                    SourceTypeBadge(
-                        label = detail.fileExtension.uppercase(),
+                        label = sourceDetailBadgeLabel(detail),
+                        type = detail.type,
                     )
                     SourceStatusBadge(status = detail.status)
                 }
-                if (detail.status == SourceStatus.READY) {
-                    AskSourceButton(onClick = onAskSourceClick)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (detail.status == SourceStatus.READY) {
+                        AskSourceButton(onClick = onAskSourceClick)
+                    }
+                    if (showOpenOriginal) {
+                        OpenOriginalIconButton(onClick = onOpenOriginalClick)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -327,23 +360,19 @@ private fun AskSourceButton(onClick: () -> Unit) {
 private fun SourceDetailBody(
     detail: SourceDetail,
     selectedSheetIndex: Int,
+    isContentLoading: Boolean,
+    isRetrying: Boolean,
     onSheetSelected: (Int) -> Unit,
+    onRetryProcessing: () -> Unit,
 ) {
     when (detail.status) {
         SourceStatus.PROCESSING -> {
-            SourceDetailMessageState(
-                message = stringResource(R.string.source_detail_processing),
-                actionLabel = null,
-                onAction = {},
-                isError = false,
-            )
+            SourceDetailProcessingState()
         }
         SourceStatus.FAILED -> {
-            SourceDetailMessageState(
-                message = stringResource(R.string.source_detail_failed),
-                actionLabel = null,
-                onAction = {},
-                isError = true,
+            SourceDetailFailedState(
+                isRetrying = isRetrying,
+                onRetry = onRetryProcessing,
             )
         }
         SourceStatus.READY -> {
@@ -352,7 +381,10 @@ private fun SourceDetailBody(
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
             ) {
-                if (detail.contentFormat == SourceContentFormat.SHEET && detail.sheets.size > 1) {
+                if (!isContentLoading &&
+                    detail.contentFormat == SourceContentFormat.SHEET &&
+                    detail.sheets.size > 1
+                ) {
                     SheetTabSelector(
                         sheets = detail.sheets,
                         selectedIndex = selectedSheetIndex,
@@ -361,25 +393,54 @@ private fun SourceDetailBody(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                val htmlBody = when (detail.contentFormat) {
-                    SourceContentFormat.SHEET -> {
-                        detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable.orEmpty()
+                if (isContentLoading) {
+                    SourceDetailHtmlLoading()
+                } else {
+                    val htmlBody = when (detail.contentFormat) {
+                        SourceContentFormat.SHEET -> {
+                            detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
+                                ?: detail.htmlContent.orEmpty()
+                        }
+                        else -> detail.htmlContent.orEmpty()
                     }
-                    else -> detail.htmlContent.orEmpty()
-                }
 
-                SourceHtmlRenderer(
-                    htmlBody = htmlBody,
-                    contentFormat = detail.contentFormat,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(HomeCardShape)
-                        .background(HomeCardBackground)
-                        .border(1.dp, HomeCardBorder, HomeCardShape)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                )
+                    SourceHtmlRenderer(
+                        htmlBody = htmlBody,
+                        contentFormat = detail.contentFormat,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(HomeCardShape)
+                            .background(HomeCardBackground)
+                            .border(1.dp, HomeCardBorder, HomeCardShape)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SourceDetailContentLoading() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(color = HomeHeader)
+    }
+}
+
+@Composable
+private fun SourceDetailHtmlLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(HomeCardShape)
+            .background(HomeCardBackground)
+            .border(1.dp, HomeCardBorder, HomeCardShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(color = HomeHeader)
     }
 }
 
@@ -448,11 +509,130 @@ private fun SheetTabSelector(
 }
 
 @Composable
+private fun SourceDetailProcessingState() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(HomeStatusProcessingBackground)
+                    .border(1.dp, HomeStatusProcessingText.copy(alpha = 0.35f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_toast_warning),
+                    contentDescription = null,
+                    tint = HomeStatusProcessingText,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.source_detail_processing_title),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextPrimary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.source_detail_processing),
+                fontSize = 14.sp,
+                color = HomeTextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SourceDetailFailedState(
+    isRetrying: Boolean,
+    onRetry: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(HomeStatusFailedBackground)
+                    .border(1.dp, HomeStatusFailedText.copy(alpha = 0.35f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_toast_error),
+                    contentDescription = null,
+                    tint = HomeStatusFailedText,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.source_detail_failed_title),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextPrimary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.source_detail_failed),
+                fontSize = 14.sp,
+                color = HomeTextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onRetry,
+                enabled = !isRetrying,
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HomeHeader,
+                    contentColor = Color.White,
+                    disabledContainerColor = HomeHeader.copy(alpha = 0.7f),
+                    disabledContentColor = Color.White,
+                ),
+            ) {
+                if (isRetrying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+                Text(
+                    text = stringResource(R.string.source_detail_retry_processing),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun SourceDetailMessageState(
     message: String,
     actionLabel: String?,
     onAction: () -> Unit,
     isError: Boolean,
+    isActionLoading: Boolean = false,
 ) {
     Box(
         modifier = Modifier
@@ -465,33 +645,45 @@ private fun SourceDetailMessageState(
                 text = message,
                 fontSize = 15.sp,
                 color = if (isError) HomeStatusFailedText else HomeTextSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
             )
             if (actionLabel != null) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = actionLabel,
-                    modifier = Modifier.clickable(onClick = onAction),
-                    color = HomeHeader,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
+                if (isActionLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = HomeHeader,
+                        strokeWidth = 2.5.dp,
+                    )
+                } else {
+                    Text(
+                        text = actionLabel,
+                        modifier = Modifier.clickable(onClick = onAction),
+                        color = HomeHeader,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SourceTypeBadge(label: String) {
+private fun SourceTypeBadge(
+    label: String,
+    type: SourceType,
+) {
+    val colors = sourceTypeBadgeColors(type)
     Text(
         text = label,
         modifier = Modifier
             .clip(HomeBadgeShape)
-            .background(HomeTypeBadgeBackground)
+            .background(colors.background)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        color = HomeTextSecondary,
+        color = colors.content,
     )
 }
 
@@ -527,8 +719,21 @@ private fun SourceStatusBadge(status: SourceStatus) {
 }
 
 @Composable
+private fun sourceDetailBadgeLabel(detail: SourceDetail): String {
+    when (detail.type) {
+        SourceType.TEXT -> return sourceTypeLabel(SourceType.TEXT)
+        SourceType.WEB -> return sourceTypeLabel(SourceType.WEB)
+        SourceType.FILE, SourceType.BOOK -> Unit
+    }
+    val extension = detail.fileExtension.trim()
+        .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    if (extension != null) return extension.uppercase()
+    return sourceTypeLabel(detail.type)
+}
+
+@Composable
 private fun sourceTypeLabel(type: SourceType): String = when (type) {
-    SourceType.PDF -> stringResource(R.string.home_type_pdf)
+    SourceType.FILE -> stringResource(R.string.home_type_file)
     SourceType.BOOK -> stringResource(R.string.home_type_book)
     SourceType.WEB -> stringResource(R.string.home_type_web)
     SourceType.TEXT -> stringResource(R.string.home_type_text)
@@ -544,7 +749,7 @@ private fun SourceDetailUserMessage.toToastVisuals(context: android.content.Cont
         SourceDetailUserMessage.OPEN_ORIGINAL_FAILED -> FolioToastStyle.Error
     }
     return FolioToastVisuals(
-        message = context.getString(messageRes),
+        title = context.getString(messageRes),
         style = style,
     )
 }
@@ -560,7 +765,7 @@ private fun SourceDetailDocumentPreview() {
                     title = "Alan Turing: Computing Machinery",
                     author = "Alan Turing",
                     addedLabel = "Added 2d ago",
-                    type = SourceType.PDF,
+                    type = SourceType.FILE,
                     status = SourceStatus.READY,
                     spaceId = "1",
                     fileExtension = "pdf",
@@ -568,11 +773,13 @@ private fun SourceDetailDocumentPreview() {
                     originalFileName = "alan-turing-computing-machinery.pdf",
                     htmlContent = "<h1>Computing Machinery and Intelligence</h1><p>Preview content.</p>",
                 ),
+                previewUrl = "https://example.org/preview/paper.pdf",
             ),
             onBackClick = {},
             onAskSourceClick = {},
             onOpenOriginalClick = {},
-            onRetry = {},
+            onRetryLoad = {},
+            onRetryProcessing = {},
             onSheetSelected = {},
         )
     }
@@ -596,11 +803,42 @@ private fun SourceDetailProcessingPreview() {
                     contentFormat = SourceContentFormat.DOCUMENT,
                     originalFileName = "weapons-of-math-destruction.epub",
                 ),
+                previewUrl = "https://example.org/preview/book.epub",
             ),
             onBackClick = {},
             onAskSourceClick = {},
             onOpenOriginalClick = {},
-            onRetry = {},
+            onRetryLoad = {},
+            onRetryProcessing = {},
+            onSheetSelected = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Source detail — failed")
+@Composable
+private fun SourceDetailFailedPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SourceDetailContent(
+            uiState = SourceDetailUiState(
+                detail = SourceDetail(
+                    id = "4",
+                    title = "The Age of Surveillance Capitalism",
+                    author = "Shoshana Zuboff",
+                    addedLabel = "Added 2d ago",
+                    type = SourceType.FILE,
+                    status = SourceStatus.FAILED,
+                    spaceId = "1",
+                    fileExtension = "pdf",
+                    contentFormat = SourceContentFormat.DOCUMENT,
+                    originalFileName = "surveillance-capitalism.pdf",
+                ),
+            ),
+            onBackClick = {},
+            onAskSourceClick = {},
+            onOpenOriginalClick = {},
+            onRetryLoad = {},
+            onRetryProcessing = {},
             onSheetSelected = {},
         )
     }

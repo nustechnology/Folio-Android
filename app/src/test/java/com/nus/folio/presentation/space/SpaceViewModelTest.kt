@@ -1,15 +1,18 @@
 package com.nus.folio.presentation.space
 
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.Space
 import com.nus.folio.domain.model.SpacePage
 import com.nus.folio.domain.model.SpacePaging
 import com.nus.folio.domain.model.SpaceSort
 import com.nus.folio.domain.usecase.CreateSpaceUseCase
+import com.nus.folio.domain.usecase.DeleteSpaceUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
+import com.nus.folio.domain.usecase.UpdateSpaceUseCase
 import com.nus.folio.testing.FakeAuthRepository
 import com.nus.folio.testing.FakeSpaceRepository
 import com.nus.folio.testing.MainDispatcherRule
@@ -62,11 +65,14 @@ class SpaceViewModelTest {
         return SpaceViewModel(
             getSpacesUseCase = GetSpacesUseCase(spaceRepository),
             createSpaceUseCase = CreateSpaceUseCase(spaceRepository),
+            updateSpaceUseCase = UpdateSpaceUseCase(spaceRepository),
+            deleteSpaceUseCase = DeleteSpaceUseCase(spaceRepository),
             getCurrentSessionUseCase = GetCurrentSessionUseCase(authRepository),
             syncCurrentUserUseCase = SyncCurrentUserUseCase(authRepository),
             refreshAuthSessionUseCase = RefreshAuthSessionUseCase(authRepository),
             searchDebounceMs = 0L,
             createMinDelayMs = 0L,
+            loadMinDelayMs = 0L,
             pageLimit = pageLimit,
         )
     }
@@ -157,6 +163,53 @@ class SpaceViewModelTest {
         assertNull(viewModel.uiState.value.error)
         assertEquals(1, viewModel.uiState.value.visibleSpaces.size)
         assertEquals(1, spaceRepository.lastPage)
+        assertFalse(viewModel.uiState.value.requiresReauth)
+    }
+
+    @Test
+    fun `onRefresh reloads first page without full-screen loading`() = runTest {
+        val viewModel = createViewModel()
+        assertFalse(viewModel.uiState.value.isLoading)
+        val loadsBefore = spaceRepository.getSpacesCallCount
+
+        val refreshStarted = CompletableDeferred<Unit>()
+        val releaseRefresh = CompletableDeferred<Unit>()
+        spaceRepository.getSpacesGate = {
+            refreshStarted.complete(Unit)
+            releaseRefresh.await()
+        }
+
+        viewModel.onRefresh()
+        refreshStarted.await()
+
+        assertEquals(loadsBefore + 1, spaceRepository.getSpacesCallCount)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.isRefreshing)
+
+        releaseRefresh.complete(Unit)
+
+        assertEquals(1, spaceRepository.lastPage)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertTrue(viewModel.uiState.value.visibleSpaces.isNotEmpty())
+    }
+
+    @Test
+    fun `onRetry requires reauth when refresh clears session`() {
+        spaceRepository.spacesResult = Result.failure(IllegalStateException("unauthorized"))
+        val viewModel = createViewModel()
+        assertEquals("unauthorized", viewModel.uiState.value.error)
+
+        authRepository.refreshSessionResult = Result.failure(
+            AuthApiException("Refresh token expired"),
+        )
+
+        viewModel.onRetry()
+
+        assertEquals(1, authRepository.refreshSessionCallCount)
+        assertTrue(viewModel.uiState.value.requiresReauth)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertNull(authRepository.getCurrentSession())
     }
 
     @Test
@@ -405,24 +458,50 @@ class SpaceViewModelTest {
     }
 
     @Test
-    fun `onRenameSpaceSave updates space title`() {
+    fun `onRenameSpaceSave updates space title and objective`() {
         val viewModel = createViewModel()
         val space = viewModel.uiState.value.visibleSpaces.first()
         viewModel.onSpaceOptionsClick(space)
         viewModel.onRenameSpaceClick()
 
-        viewModel.onRenameSpaceSave("Renamed space")
+        viewModel.onRenameSpaceSave(
+            name = "Renamed space",
+            researchObjective = "Updated research objective",
+        )
 
         assertNull(viewModel.uiState.value.renamingSpace)
-        assertEquals(
-            "Renamed space",
-            viewModel.uiState.value.allSpaces.first { it.id == space.id }.title,
-        )
+        assertFalse(viewModel.uiState.value.isUpdatingSpace)
+        assertEquals(1, spaceRepository.updateSpaceCallCount)
+        assertEquals(space.id, spaceRepository.lastUpdateSpaceId)
+        assertEquals("Renamed space", spaceRepository.lastUpdateName)
+        assertEquals("Updated research objective", spaceRepository.lastUpdateObjective)
+        val updated = viewModel.uiState.value.allSpaces.first { it.id == space.id }
+        assertEquals("Renamed space", updated.title)
+        assertEquals("Updated research objective", updated.description)
         assertEquals(SpaceUserMessage.SPACE_UPDATED, viewModel.uiState.value.userMessage)
     }
 
     @Test
-    fun `onDeleteSpaceClick dismisses options and sets message`() {
+    fun `onRenameSpaceSave keeps sheet open when update fails`() {
+        spaceRepository.updateSpaceResult = Result.failure(IllegalStateException("offline"))
+        val viewModel = createViewModel()
+        val space = viewModel.uiState.value.visibleSpaces.first()
+        viewModel.onSpaceOptionsClick(space)
+        viewModel.onRenameSpaceClick()
+
+        viewModel.onRenameSpaceSave(
+            name = "Renamed space",
+            researchObjective = space.description,
+        )
+
+        assertEquals(space, viewModel.uiState.value.renamingSpace)
+        assertFalse(viewModel.uiState.value.isUpdatingSpace)
+        assertEquals("offline", viewModel.uiState.value.actionError)
+        assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onDeleteSpaceClick opens delete confirmation`() {
         val viewModel = createViewModel()
         val space = viewModel.uiState.value.visibleSpaces.first()
         viewModel.onSpaceOptionsClick(space)
@@ -430,6 +509,62 @@ class SpaceViewModelTest {
         viewModel.onDeleteSpaceClick()
 
         assertNull(viewModel.uiState.value.optionsSpace)
-        assertEquals(SpaceUserMessage.DELETE_SPACE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertEquals(space, viewModel.uiState.value.deletingSpace)
+    }
+
+    @Test
+    fun `onDeleteSpaceConfirm removes space and sets deleted message`() {
+        val viewModel = createViewModel()
+        val space = viewModel.uiState.value.visibleSpaces.first()
+        viewModel.onSpaceOptionsClick(space)
+        viewModel.onDeleteSpaceClick()
+
+        viewModel.onDeleteSpaceConfirm()
+
+        assertNull(viewModel.uiState.value.deletingSpace)
+        assertFalse(viewModel.uiState.value.isDeletingSpace)
+        assertEquals(1, spaceRepository.deleteSpaceCallCount)
+        assertEquals(space.id, spaceRepository.lastDeletedSpaceId)
+        assertTrue(viewModel.uiState.value.allSpaces.none { it.id == space.id })
+        assertEquals(SpaceUserMessage.SPACE_DELETED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onDeleteSpaceConfirm ignores repeated confirm while deleting`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        spaceRepository.deleteSpaceGate = { gate.await() }
+        val viewModel = createViewModel()
+        val space = viewModel.uiState.value.visibleSpaces.first()
+        viewModel.onSpaceOptionsClick(space)
+        viewModel.onDeleteSpaceClick()
+
+        viewModel.onDeleteSpaceConfirm()
+        assertTrue(viewModel.uiState.value.isDeletingSpace)
+        viewModel.onDeleteSpaceConfirm()
+        viewModel.onDeleteSpaceDismiss()
+
+        assertEquals(1, spaceRepository.deleteSpaceCallCount)
+        assertEquals(space, viewModel.uiState.value.deletingSpace)
+
+        gate.complete(Unit)
+        assertNull(viewModel.uiState.value.deletingSpace)
+        assertFalse(viewModel.uiState.value.isDeletingSpace)
+    }
+
+    @Test
+    fun `onDeleteSpaceConfirm closes sheet when delete fails`() {
+        spaceRepository.deleteSpaceResult = Result.failure(IllegalStateException("offline"))
+        val viewModel = createViewModel()
+        val space = viewModel.uiState.value.visibleSpaces.first()
+        viewModel.onSpaceOptionsClick(space)
+        viewModel.onDeleteSpaceClick()
+
+        viewModel.onDeleteSpaceConfirm()
+
+        assertNull(viewModel.uiState.value.deletingSpace)
+        assertFalse(viewModel.uiState.value.isDeletingSpace)
+        assertTrue(viewModel.uiState.value.allSpaces.any { it.id == space.id })
+        assertEquals("offline", viewModel.uiState.value.actionError)
+        assertNull(viewModel.uiState.value.userMessage)
     }
 }

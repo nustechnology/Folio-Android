@@ -53,4 +53,30 @@ class SpaceRepositoryImplTest {
         assertEquals("Objective", result.getOrNull()?.description)
         assertEquals(5, repository.getSpaces(limit = 20).getOrNull()?.spaces?.size)
     }
+
+    @Test
+    fun `updateSpace returns updated space`() = runTest {
+        val result = repository.updateSpace(
+            spaceId = "1",
+            name = "Renamed Space",
+            researchObjective = "Updated objective",
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("Renamed Space", result.getOrNull()?.title)
+        assertEquals("Updated objective", result.getOrNull()?.description)
+        assertEquals(
+            "Renamed Space",
+            repository.getSpaces().getOrNull()?.spaces?.first { it.id == "1" }?.title,
+        )
+    }
+
+    @Test
+    fun `deleteSpace removes space`() = runTest {
+        val result = repository.deleteSpace("1")
+
+        assertTrue(result.isSuccess)
+        assertEquals(3, repository.getSpaces(limit = 20).getOrNull()?.spaces?.size)
+        assertTrue(repository.getSpaces().getOrNull()!!.spaces.none { it.id == "1" })
+    }
 }

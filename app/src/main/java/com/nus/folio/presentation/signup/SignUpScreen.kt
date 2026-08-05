@@ -104,9 +104,13 @@ fun SignUpScreen(
         }
     }
 
-    LaunchedEffect(uiState.toastMessage) {
-        val message = uiState.toastMessage ?: return@LaunchedEffect
-        toastHostState.showToast(message = message, style = FolioToastStyle.Error)
+    val emailAlreadyExistsToast = stringResource(R.string.signup_error_email_already_exists)
+    LaunchedEffect(uiState.toastError, uiState.toastMessage) {
+        val message = when (uiState.toastError) {
+            SignUpError.EMAIL_ALREADY_EXISTS -> emailAlreadyExistsToast
+            else -> uiState.toastMessage
+        } ?: return@LaunchedEffect
+        toastHostState.showToast(title = message, style = FolioToastStyle.Error)
         viewModel.onToastMessageShown()
     }
 
@@ -450,7 +454,11 @@ private fun signUpTextFieldColors() = OutlinedTextFieldDefaults.colors(
 private fun signUpErrorMessage(error: SignUpError): String = when (error) {
     SignUpError.NAME_REQUIRED -> stringResource(R.string.signup_error_name_required)
     SignUpError.EMAIL_REQUIRED -> stringResource(R.string.signup_error_email_required)
+    SignUpError.EMAIL_INVALID -> stringResource(R.string.signup_error_email_invalid)
+    SignUpError.EMAIL_ALREADY_EXISTS ->
+        stringResource(R.string.signup_error_email_already_exists)
     SignUpError.PASSWORD_REQUIRED -> stringResource(R.string.signup_error_password_required)
+    SignUpError.PASSWORD_TOO_SHORT -> stringResource(R.string.signup_error_password_too_short)
     SignUpError.CONFIRM_PASSWORD_REQUIRED ->
         stringResource(R.string.signup_error_confirm_password_required)
     SignUpError.PASSWORDS_DO_NOT_MATCH ->

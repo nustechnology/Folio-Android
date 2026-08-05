@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
+import com.nus.folio.domain.util.AuthInputRules
 import java.io.InterruptedIOException
 import java.net.SocketException
 import java.net.UnknownHostException
@@ -42,7 +43,7 @@ class SignUpViewModel(
     }
 
     fun onToastMessageShown() {
-        _uiState.update { it.copy(toastMessage = null) }
+        _uiState.update { it.copy(toastMessage = null, toastError = null) }
     }
 
     fun onNavigationHandled() {
@@ -59,8 +60,16 @@ class SignUpViewModel(
 
     fun onSignUpClick(name: String, email: String, password: String, confirmPassword: String) {
         val nameError = if (name.isBlank()) SignUpError.NAME_REQUIRED else null
-        val emailError = if (email.isBlank()) SignUpError.EMAIL_REQUIRED else null
-        val passwordError = if (password.isBlank()) SignUpError.PASSWORD_REQUIRED else null
+        val emailError = when {
+            email.isBlank() -> SignUpError.EMAIL_REQUIRED
+            !AuthInputRules.isValidEmail(email) -> SignUpError.EMAIL_INVALID
+            else -> null
+        }
+        val passwordError = when {
+            password.isBlank() -> SignUpError.PASSWORD_REQUIRED
+            !AuthInputRules.isPasswordLongEnough(password) -> SignUpError.PASSWORD_TOO_SHORT
+            else -> null
+        }
         val confirmPasswordError = when {
             confirmPassword.isBlank() -> SignUpError.CONFIRM_PASSWORD_REQUIRED
             password.isNotBlank() && password != confirmPassword -> SignUpError.PASSWORDS_DO_NOT_MATCH
@@ -79,6 +88,8 @@ class SignUpViewModel(
                     passwordError = passwordError,
                     confirmPasswordError = confirmPasswordError,
                     formError = null,
+                    toastError = null,
+                    toastMessage = null,
                 )
             }
             return
@@ -97,6 +108,7 @@ class SignUpViewModel(
                     passwordError = null,
                     confirmPasswordError = null,
                     formError = null,
+                    toastError = null,
                     toastMessage = null,
                     shouldNavigateToHome = false,
                 )
@@ -127,6 +139,7 @@ class SignUpViewModel(
                     passwordError = null,
                     confirmPasswordError = null,
                     formError = null,
+                    toastError = null,
                     toastMessage = null,
                     shouldNavigateToHome = false,
                 )
@@ -149,24 +162,38 @@ class SignUpViewModel(
                     it.copy(
                         isLoading = false,
                         formError = SignUpError.NETWORK_ERROR,
+                        toastError = null,
                         toastMessage = null,
                     )
                 }
             }
             // AuthApiClient surfaces HTTP error bodies as AuthApiException.
             error is AuthApiException -> {
+                if (error.indicatesEmailAlreadyExists()) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            formError = null,
+                            toastError = SignUpError.EMAIL_ALREADY_EXISTS,
+                            toastMessage = null,
+                        )
+                    }
+                    return
+                }
                 val apiMessage = error.message?.takeIf { it.isNotBlank() }
                 _uiState.update {
                     if (apiMessage != null) {
                         it.copy(
                             isLoading = false,
                             formError = null,
+                            toastError = null,
                             toastMessage = apiMessage,
                         )
                     } else {
                         it.copy(
                             isLoading = false,
                             formError = SignUpError.SIGN_UP_FAILED,
+                            toastError = null,
                             toastMessage = null,
                         )
                     }
@@ -177,6 +204,7 @@ class SignUpViewModel(
                     it.copy(
                         isLoading = false,
                         formError = SignUpError.SIGN_UP_FAILED,
+                        toastError = null,
                         toastMessage = null,
                     )
                 }

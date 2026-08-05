@@ -12,8 +12,11 @@ data class SpaceAccountItem(
 
 data class SpaceUiState(
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val isCreatingSpace: Boolean = false,
+    val isUpdatingSpace: Boolean = false,
+    val isDeletingSpace: Boolean = false,
     val error: String? = null,
     val actionError: String? = null,
     val allSpaces: List<Space> = emptyList(),
@@ -28,11 +31,14 @@ data class SpaceUiState(
     val showSortSheet: Boolean = false,
     val optionsSpace: Space? = null,
     val renamingSpace: Space? = null,
+    val deletingSpace: Space? = null,
     val userMessage: SpaceUserMessage? = null,
+    /** True when the auth session was cleared and the user must sign in again. */
+    val requiresReauth: Boolean = false,
 )
 
 enum class SpaceUserMessage {
     SPACE_CREATED,
     SPACE_UPDATED,
-    DELETE_SPACE_NOT_SUPPORTED,
+    SPACE_DELETED,
 }

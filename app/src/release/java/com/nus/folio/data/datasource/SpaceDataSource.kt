@@ -74,6 +74,44 @@ class SpaceDataSource(
         return space
     }
 
+    suspend fun updateSpace(
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Space {
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        require(name.isNotBlank()) { "Name is required" }
+        delay(200)
+        val trimmedId = spaceId.trim()
+        val updated = spacesMutex.withLock {
+            val index = spaces.indexOfFirst { it.id == trimmedId }
+            if (index < 0) {
+                throw NoSuchElementException("Space not found: $trimmedId")
+            }
+            val space = spaces[index].copy(
+                title = name.trim(),
+                description = researchObjective.trim(),
+                updatedLabel = "Updated just now",
+            )
+            spaces = spaces.toMutableList().also { it[index] = space }
+            space
+        }
+        return updated
+    }
+
+    suspend fun deleteSpace(spaceId: String) {
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        delay(200)
+        val trimmedId = spaceId.trim()
+        spacesMutex.withLock {
+            val index = spaces.indexOfFirst { it.id == trimmedId }
+            if (index < 0) {
+                throw NoSuchElementException("Space not found: $trimmedId")
+            }
+            spaces = spaces.toMutableList().also { it.removeAt(index) }
+        }
+    }
+
     companion object {
         const val DEFAULT_SORT = "recently-updated"
 

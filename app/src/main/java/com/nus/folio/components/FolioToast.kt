@@ -13,7 +13,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -57,6 +59,7 @@ import com.nus.folio.ui.theme.HomeStatusProcessingText
 import com.nus.folio.ui.theme.HomeStatusReadyBackground
 import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
+import com.nus.folio.ui.theme.HomeTextSecondary
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,8 +79,11 @@ enum class FolioToastStyle {
 }
 
 data class FolioToastVisuals(
-    val message: String,
+    /** Primary line shown at the top. */
+    val title: String,
     val style: FolioToastStyle,
+    /** Supporting line shown directly under [title]. */
+    val description: String? = null,
 )
 
 private data class FolioToastColors(
@@ -103,13 +109,18 @@ class FolioToastHostState {
     }
 
     suspend fun showToast(
-        message: String,
+        title: String,
         style: FolioToastStyle = FolioToastStyle.Info,
+        description: String? = null,
         durationMillis: Long = DefaultToastDurationMillis,
     ) {
         val generation = mutex.withLock {
             showGeneration++
-            currentToast = FolioToastVisuals(message = message, style = style)
+            currentToast = FolioToastVisuals(
+                title = title,
+                style = style,
+                description = description,
+            )
             showGeneration
         }
         delay(durationMillis)
@@ -122,8 +133,9 @@ class FolioToastHostState {
 
     suspend fun showToast(visuals: FolioToastVisuals, durationMillis: Long = DefaultToastDurationMillis) {
         showToast(
-            message = visuals.message,
+            title = visuals.title,
             style = visuals.style,
+            description = visuals.description,
             durationMillis = durationMillis,
         )
     }
@@ -168,7 +180,8 @@ fun FolioToastHost(
     ) {
         displayedToast?.let { toast ->
             FolioToast(
-                message = toast.message,
+                title = toast.title,
+                description = toast.description,
                 style = toast.style,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -238,11 +251,13 @@ private fun FolioToastStyle.colors(): FolioToastColors = when (this) {
 
 @Composable
 internal fun FolioToast(
-    message: String,
+    title: String,
     style: FolioToastStyle,
     modifier: Modifier = Modifier,
+    description: String? = null,
 ) {
     val colors = style.colors()
+    val hasDescription = !description.isNullOrBlank()
 
     Row(
         modifier = modifier
@@ -262,10 +277,11 @@ internal fun FolioToast(
                 },
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (hasDescription) Alignment.Top else Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
+                .padding(top = if (hasDescription) 2.dp else 0.dp)
                 .size(32.dp)
                 .clip(CircleShape)
                 .background(colors.iconBackground),
@@ -278,16 +294,34 @@ internal fun FolioToast(
                 modifier = Modifier.size(18.dp),
             )
         }
-        Text(
-            text = message,
+        // Title on top, description on the next line — always stacked vertically.
+        Column(
             modifier = Modifier
                 .weight(1f)
+                .fillMaxWidth()
                 .padding(start = 12.dp),
-            color = colors.contentColor,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            lineHeight = 20.sp,
-        )
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.Start,
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                color = colors.contentColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 20.sp,
+            )
+            if (hasDescription) {
+                Text(
+                    text = description.orEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = HomeTextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    lineHeight = 18.sp,
+                )
+            }
+        }
     }
 }
 
@@ -296,7 +330,7 @@ internal fun FolioToast(
 private fun FolioToastInfoPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         FolioToast(
-            message = "Ask is coming soon.",
+            title = "Ask is coming soon.",
             style = FolioToastStyle.Info,
             modifier = Modifier.padding(20.dp),
         )
@@ -308,7 +342,7 @@ private fun FolioToastInfoPreview() {
 private fun FolioToastWarningPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         FolioToast(
-            message = "Adding sources is not supported yet.",
+            title = "Adding sources is not supported yet.",
             style = FolioToastStyle.Warning,
             modifier = Modifier.padding(20.dp),
         )
@@ -320,7 +354,8 @@ private fun FolioToastWarningPreview() {
 private fun FolioToastSuccessPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         FolioToast(
-            message = "Source updated",
+            title = "Source added",
+            description = "We're processing it so you can ask and cite soon.",
             style = FolioToastStyle.Success,
             modifier = Modifier.padding(20.dp),
         )
@@ -332,7 +367,7 @@ private fun FolioToastSuccessPreview() {
 private fun FolioToastErrorPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         FolioToast(
-            message = "Could not delete source. Please try again.",
+            title = "Could not delete source. Please try again.",
             style = FolioToastStyle.Error,
             modifier = Modifier.padding(20.dp),
         )

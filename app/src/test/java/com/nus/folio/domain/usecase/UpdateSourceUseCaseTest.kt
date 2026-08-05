@@ -24,6 +24,19 @@ class UpdateSourceUseCaseTest {
         assertEquals(updated, result.getOrNull())
         assertEquals(1, repository.updateSourceCallCount)
         assertEquals(updated, repository.lastUpdatedSource)
+        assertEquals(null, repository.lastUpdatedContent)
+    }
+
+    @Test
+    fun `invoke forwards content for text sources`() = runTest {
+        val original = FakeSourceRepository.sampleSources.first { it.type == SourceType.TEXT }
+        val updated = original.copy(title = "Updated notes", author = "Alice")
+        val content = "Updated manual source content text note..."
+
+        val result = useCase(updated, content)
+
+        assertTrue(result.isSuccess)
+        assertEquals(content, repository.lastUpdatedContent)
     }
 
     @Test
@@ -31,7 +44,7 @@ class UpdateSourceUseCaseTest {
         repository.updateSourceResult = Result.failure(IllegalStateException("offline"))
         val source = FakeSourceRepository.sampleSources.first().copy(
             title = "Nope",
-            type = SourceType.PDF,
+            type = SourceType.FILE,
             status = SourceStatus.READY,
         )
 

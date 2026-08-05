@@ -4,12 +4,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceType
+import com.nus.folio.ui.theme.HomeTypeFileBackground
+import com.nus.folio.ui.theme.HomeTypeFileText
+import com.nus.folio.ui.theme.HomeTypeTextBackground
+import com.nus.folio.ui.theme.HomeTypeTextText
+import com.nus.folio.ui.theme.HomeTypeWebBackground
+import com.nus.folio.ui.theme.HomeTypeWebText
 import com.nus.folio.ui.theme.LoginCopper
 
 internal val HomeCardShape = RoundedCornerShape(12.dp)
 internal val HomeChipShape = RoundedCornerShape(50)
 internal val HomeSourceFilterChipSelected = Color(0xFFE3EDF7)
 internal val HomeSourceFilterChipSelectedBorder = Color(0xFFB8C9DC)
+internal val HomeFilterActiveDot = Color(0xFFE24B4A)
 internal val HomeBadgeShape = RoundedCornerShape(8.dp)
 internal val HomeStatusShape = RoundedCornerShape(8.dp)
 internal val HomeNavPillShape = RoundedCornerShape(14.dp)
@@ -31,3 +40,29 @@ internal val AskSparkleBorder = Color(0xFFD9D9D9)
 internal val AskInputMinHeight = 88.dp
 internal val AskInputMaxHeight = 176.dp
 
+internal data class SourceTypeBadgeColors(
+    val background: Color,
+    val content: Color,
+)
+
+internal fun sourceTypeBadgeColors(type: SourceType): SourceTypeBadgeColors = when (type) {
+    SourceType.FILE, SourceType.BOOK -> SourceTypeBadgeColors(
+        background = HomeTypeFileBackground,
+        content = HomeTypeFileText,
+    )
+    SourceType.WEB -> SourceTypeBadgeColors(
+        background = HomeTypeWebBackground,
+        content = HomeTypeWebText,
+    )
+    SourceType.TEXT -> SourceTypeBadgeColors(
+        background = HomeTypeTextBackground,
+        content = HomeTypeTextText,
+    )
+}
+
+internal fun sourceFilterBadgeColors(filter: SourceFilter): SourceTypeBadgeColors? = when (filter) {
+    SourceFilter.ALL -> null
+    SourceFilter.FILE -> sourceTypeBadgeColors(SourceType.FILE)
+    SourceFilter.WEB -> sourceTypeBadgeColors(SourceType.WEB)
+    SourceFilter.TEXT -> sourceTypeBadgeColors(SourceType.TEXT)
+}

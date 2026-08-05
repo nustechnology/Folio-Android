@@ -5,13 +5,17 @@ data class LoginUiState(
     val isLoading: Boolean = false,
     val authUnavailable: Boolean = false,
     val error: LoginError? = null,
+    /** Fixed client toast (invalid credentials); mapped to strings in the screen. */
+    val toastError: LoginError? = null,
     val toastMessage: String? = null,
     val shouldNavigateToHome: Boolean = false,
 )
 
 enum class LoginError {
     EMAIL_REQUIRED,
+    EMAIL_INVALID,
     PASSWORD_REQUIRED,
+    INVALID_CREDENTIALS,
     SIGN_IN_FAILED,
     AUTH_UNAVAILABLE,
 }

@@ -18,6 +18,8 @@ class FakeSpaceRepository(
     var createSpaceResult: Result<Space> = Result.success(
         Space("new", "New Space", "Objective", 0, 0, "Updated just now"),
     ),
+    var updateSpaceResult: Result<Space>? = null,
+    var deleteSpaceResult: Result<Unit> = Result.success(Unit),
 ) : SpaceRepository {
 
     var lastSearchQuery: String? = null
@@ -26,9 +28,16 @@ class FakeSpaceRepository(
     var lastLimit: Int? = null
     var lastCreateName: String? = null
     var lastCreateObjective: String? = null
+    var lastUpdateSpaceId: String? = null
+    var lastUpdateName: String? = null
+    var lastUpdateObjective: String? = null
+    var lastDeletedSpaceId: String? = null
     var getSpacesCallCount = 0
     var createSpaceCallCount = 0
+    var updateSpaceCallCount = 0
+    var deleteSpaceCallCount = 0
     var getSpacesGate: (suspend (searchQuery: String?) -> Unit)? = null
+    var deleteSpaceGate: (suspend () -> Unit)? = null
 
     /** Optional per-call overrides keyed by page for load-more tests. */
     var pageResults: Map<Int, Result<SpacePage>>? = null
@@ -56,6 +65,35 @@ class FakeSpaceRepository(
         lastCreateName = name
         lastCreateObjective = researchObjective
         return createSpaceResult
+    }
+
+    override suspend fun updateSpace(
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Result<Space> {
+        updateSpaceCallCount++
+        lastUpdateSpaceId = spaceId
+        lastUpdateName = name
+        lastUpdateObjective = researchObjective
+        updateSpaceResult?.let { return it }
+        return Result.success(
+            Space(
+                id = spaceId,
+                title = name,
+                description = researchObjective,
+                sourceCount = 0,
+                noteCount = 0,
+                updatedLabel = "Updated just now",
+            ),
+        )
+    }
+
+    override suspend fun deleteSpace(spaceId: String): Result<Unit> {
+        deleteSpaceCallCount++
+        lastDeletedSpaceId = spaceId
+        deleteSpaceGate?.invoke()
+        return deleteSpaceResult
     }
 
     companion object {

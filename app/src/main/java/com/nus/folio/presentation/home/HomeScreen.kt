@@ -3,15 +3,20 @@ package com.nus.folio.presentation.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,8 +26,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -45,6 +52,7 @@ import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.presentation.home.bottomsheet.AddNoteBottomSheet
@@ -56,6 +64,7 @@ import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditNoteBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ExportNotebookBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.SortSourcesBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SourceProcessingBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ViewNoteBottomSheet
 import com.nus.folio.presentation.home.pane.AskPane
@@ -65,6 +74,8 @@ import com.nus.folio.presentation.home.pane.SourcesPane
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
+import com.nus.folio.ui.theme.HomeSearchField
+import com.nus.folio.ui.theme.HomeSearchPlaceholder
 import kotlinx.coroutines.launch
 
 @Composable
@@ -84,12 +95,19 @@ fun HomeScreen(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
             getSourcesUseCase = LocalAppContainer.current.getSourcesUseCase,
+            createSourceUseCase = LocalAppContainer.current.createSourceUseCase,
+            observeSourceProcessingUseCase = LocalAppContainer.current.observeSourceProcessingUseCase,
             updateSourceUseCase = LocalAppContainer.current.updateSourceUseCase,
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
+            getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
             getAskTopicsUseCase = LocalAppContainer.current.getAskTopicsUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
             updateNoteUseCase = LocalAppContainer.current.updateNoteUseCase,
             deleteNoteUseCase = LocalAppContainer.current.deleteNoteUseCase,
+            sourceFileBytesReader = LocalAppContainer.current.sourceFileBytesReader,
+            refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
+            getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
+            retrySourceUseCase = LocalAppContainer.current.retrySourceUseCase,
         ),
     ),
 ) {
@@ -97,17 +115,31 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showAddSourceSheet by remember { mutableStateOf(false) }
     var showAddNoteSheet by remember { mutableStateOf(false) }
     var showConversationSheet by remember { mutableStateOf(false) }
     var showAnswerScopeSheet by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
     val toastHostState = rememberFolioToastHostState()
 
+    LaunchedEffect(uiState.requiresReauth) {
+        if (uiState.requiresReauth) onSignOut()
+    }
+
     LaunchedEffect(uiState.userMessage) {
         val message = uiState.userMessage ?: return@LaunchedEffect
         toastHostState.showToast(message.toHomeToastVisuals(context))
         viewModel.onUserMessageShown()
+    }
+
+    LaunchedEffect(uiState.actionError) {
+        val error = uiState.actionError ?: return@LaunchedEffect
+        toastHostState.showToast(
+            FolioToastVisuals(
+                title = context.getString(error.toStringRes()),
+                style = FolioToastStyle.Error,
+            ),
+        )
+        viewModel.onActionErrorShown()
     }
 
     LaunchedEffect(initialTab) {
@@ -131,24 +163,25 @@ fun HomeScreen(
     Box(modifier = modifier.fillMaxSize()) {
         HomeContent(
             uiState = uiState,
-            onRetry = viewModel::loadSources,
+            onRetry = viewModel::onRetry,
+            onRefreshSources = viewModel::onRefreshSources,
             onSearchQueryChange = viewModel::onSearchQueryChange,
             onFilterSelected = viewModel::onFilterSelected,
+            onFilterSortClick = viewModel::onFilterSortClick,
             onNoteFilterSelected = viewModel::onNoteFilterSelected,
             onTabSelected = viewModel::onTabSelected,
             onAddClick = {
                 when (uiState.selectedTab) {
                     HomeTab.NOTES -> showAddNoteSheet = true
                     HomeTab.ASK -> showConversationSheet = true
-                    HomeTab.SOURCES -> showAddSourceSheet = true
+                    HomeTab.SOURCES -> viewModel.onAddSourceClick()
                     HomeTab.NOTEBOOK -> viewModel.onNotebookAddClick()
                 }
             },
             onBackClick = onNavigateBack,
             onAskSubmit = viewModel::onAskSubmit,
             onScopeChipClick = { showAnswerScopeSheet = true },
-            onSourceEditClick = viewModel::onEditSourceClick,
-            onSourceDeleteClick = viewModel::onDeleteSourceClick,
+            onSourceMoreClick = viewModel::onSourceOptionsClick,
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
@@ -168,22 +201,31 @@ fun HomeScreen(
             SourceOpeningScreen()
         }
 
-        if (showAddSourceSheet) {
+        if (uiState.showAddSourceSheet) {
             AddSourceBottomSheet(
-                onDismiss = { showAddSourceSheet = false },
-                onSubmit = { draft ->
-                    showAddSourceSheet = false
-                    viewModel.onAddSourceSubmit(draft)
-                },
+                isSubmitting = uiState.isCreatingSource,
+                onDismiss = viewModel::onAddSourceSheetDismiss,
+                onSubmit = viewModel::onAddSourceSubmit,
+            )
+        }
+
+        if (uiState.showSortSheet) {
+            SortSourcesBottomSheet(
+                selectedSort = uiState.selectedSort,
+                onSortSelected = viewModel::onSortSelected,
+                onDismiss = viewModel::onSortSheetDismiss,
             )
         }
 
         uiState.processingSourceTitle?.let { title ->
             SourceProcessingBottomSheet(
                 sourceTitle = title,
+                progress = uiState.processingProgress,
+                state = uiState.processingState,
                 onDismiss = viewModel::onSourceProcessingDismiss,
                 onOpenSource = viewModel::onSourceProcessingOpenSource,
                 onAsk = viewModel::onSourceProcessingAsk,
+                onRetry = viewModel::onSourceProcessingRetry,
             )
         }
 
@@ -215,6 +257,7 @@ fun HomeScreen(
         uiState.editingSource?.let { source ->
             EditSourceBottomSheet(
                 source = source,
+                initialContent = uiState.editingSourceContent,
                 onDismiss = viewModel::onEditSourceDismiss,
                 onSave = viewModel::onEditSourceSave,
             )
@@ -282,6 +325,24 @@ fun HomeScreen(
             )
         }
 
+        uiState.optionsSource?.let { source ->
+            ItemOptionsBottomSheet(
+                title = source.title,
+                actions = listOf(
+                    ItemOptionAction(
+                        label = stringResource(R.string.source_options_edit),
+                        onClick = { viewModel.onEditSourceClick(source) },
+                    ),
+                    ItemOptionAction(
+                        label = stringResource(R.string.source_options_delete),
+                        style = ItemOptionStyle.Destructive,
+                        onClick = { viewModel.onDeleteSourceClick(source) },
+                    ),
+                ),
+                onDismiss = viewModel::onSourceOptionsDismiss,
+            )
+        }
+
         uiState.optionsNote?.let { note ->
             ItemOptionsBottomSheet(
                 title = note.title,
@@ -338,16 +399,17 @@ fun HomeScreen(
 internal fun HomeContent(
     uiState: HomeUiState,
     onRetry: () -> Unit,
+    onRefreshSources: () -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onFilterSelected: (SourceFilter) -> Unit,
+    onFilterSortClick: () -> Unit = {},
     onNoteFilterSelected: (NoteFilter) -> Unit,
     onTabSelected: (HomeTab) -> Unit,
     onAddClick: () -> Unit,
     onBackClick: () -> Unit,
     onAskSubmit: () -> Unit,
     onScopeChipClick: () -> Unit,
-    onSourceEditClick: (Source) -> Unit,
-    onSourceDeleteClick: (Source) -> Unit,
+    onSourceMoreClick: (Source) -> Unit,
     onSourceClick: (Source) -> Unit,
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
@@ -379,17 +441,30 @@ internal fun HomeContent(
                     uiState.selectedTab == HomeTab.NOTES
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    FolioSearchField(
-                        query = uiState.searchQuery,
-                        onQueryChange = onSearchQueryChange,
-                        placeholder = stringResource(
-                            if (uiState.selectedTab == HomeTab.NOTES) {
-                                R.string.home_search_notes
-                            } else {
-                                R.string.home_search_sources
-                            },
-                        ),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FolioSearchField(
+                            query = uiState.searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            placeholder = stringResource(
+                                if (uiState.selectedTab == HomeTab.NOTES) {
+                                    R.string.home_search_notes
+                                } else {
+                                    R.string.home_search_sources
+                                },
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (uiState.selectedTab == HomeTab.SOURCES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -397,10 +472,10 @@ internal fun HomeContent(
                 HomeTab.SOURCES -> SourcesPane(
                     uiState = uiState,
                     onRetry = onRetry,
+                    onRefresh = onRefreshSources,
                     onAddClick = onAddClick,
                     onFilterSelected = onFilterSelected,
-                    onSourceEditClick = onSourceEditClick,
-                    onSourceDeleteClick = onSourceDeleteClick,
+                    onSourceMoreClick = onSourceMoreClick,
                     onSourceClick = onSourceClick,
                     modifier = Modifier
                         .weight(1f)
@@ -447,6 +522,43 @@ internal fun HomeContent(
 }
 
 @Composable
+private fun HomeFilterSortButton(
+    onClick: () -> Unit,
+    showActiveIndicator: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(HomeCardShape)
+            .background(HomeSearchField)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_filter_sort),
+            contentDescription = stringResource(R.string.home_filter_sort),
+            tint = HomeSearchPlaceholder,
+            modifier = Modifier.size(20.dp),
+        )
+        if (showActiveIndicator) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 10.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(HomeFilterActiveDot),
+            )
+        }
+    }
+}
+
+@Composable
 private fun SourceOpeningScreen(
     modifier: Modifier = Modifier,
 ) {
@@ -472,11 +584,11 @@ private fun HomeContentPreview() {
         HomeContent(
             uiState = HomeUiState(
                 visibleSources = listOf(
-                    Source("1", "Alan Turing: Computing Machinery", SourceType.PDF, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("2", "The Origins of Totalitarianism", SourceType.PDF, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1"),
-                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1"),
-                    Source("4", "The Age of Surveillance Capitalism", SourceType.PDF, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1"),
-                    Source("5", "Attention Is All You Need", SourceType.PDF, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1"),
+                    Source("1", "Alan Turing: Computing Machinery", SourceType.FILE, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
+                    Source("2", "The Origins of Totalitarianism", SourceType.FILE, "Hannah Arendt", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
+                    Source("3", "Weapons of Math Destruction", SourceType.BOOK, "Cathy O'Neil", "Added 2d ago", SourceStatus.PROCESSING, "1", "epub"),
+                    Source("4", "The Age of Surveillance Capitalism", SourceType.FILE, "Shoshana Zuboff", "Added 2d ago", SourceStatus.FAILED, "1", "pdf"),
+                    Source("5", "Attention Is All You Need", SourceType.FILE, "Vaswani et al.", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
                 ),
                 spaceTitle = "Dissertation Research",
                 allCount = 128,
@@ -490,8 +602,7 @@ private fun HomeContentPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -518,8 +629,7 @@ private fun HomeContentEmptyPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -550,8 +660,7 @@ private fun HomeAskPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -635,8 +744,7 @@ private fun HomeNotesPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -667,8 +775,7 @@ private fun HomeNotesEmptyPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -700,8 +807,7 @@ private fun HomeNotesSearchEmptyPreview() {
             onBackClick = {},
             onAskSubmit = {},
             onScopeChipClick = {},
-            onSourceEditClick = {},
-            onSourceDeleteClick = {},
+            onSourceMoreClick = {},
             onSourceClick = {},
             onNoteClick = {},
             onNoteMoreClick = {},
@@ -714,8 +820,10 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
     val messageRes = when (this) {
         HomeUserMessage.SOURCE_UPDATED -> R.string.toast_source_updated
         HomeUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
+        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created
         HomeUserMessage.SOURCE_UPDATE_FAILED -> R.string.toast_source_update_failed
         HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
+        HomeUserMessage.SOURCE_RETRY_FAILED -> R.string.toast_source_retry_failed
         HomeUserMessage.NOTE_UPDATED -> R.string.toast_note_updated
         HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
         HomeUserMessage.ASK_NOT_SUPPORTED -> R.string.home_ask_not_supported
@@ -726,9 +834,14 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
         HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED -> R.string.note_convert_not_supported
         HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED -> R.string.note_delete_not_supported
     }
+    val descriptionRes = when (this) {
+        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created_description
+        else -> null
+    }
     val style = when (this) {
         HomeUserMessage.SOURCE_UPDATED,
         HomeUserMessage.SOURCE_DELETED,
+        HomeUserMessage.SOURCE_CREATED,
         HomeUserMessage.NOTE_UPDATED,
         HomeUserMessage.NOTE_DELETED,
         -> FolioToastStyle.Success
@@ -742,11 +855,21 @@ private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context)
         -> FolioToastStyle.Warning
         HomeUserMessage.SOURCE_UPDATE_FAILED,
         HomeUserMessage.SOURCE_DELETE_FAILED,
+        HomeUserMessage.SOURCE_RETRY_FAILED,
         HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED,
         -> FolioToastStyle.Error
     }
     return FolioToastVisuals(
-        message = context.getString(messageRes),
+        title = context.getString(messageRes),
+        description = descriptionRes?.let(context::getString),
         style = style,
     )
+}
+
+private fun HomeActionError.toStringRes(): Int = when (this) {
+    HomeActionError.GENERIC -> R.string.home_error_generic
+    HomeActionError.NETWORK -> R.string.home_error_network
+    HomeActionError.FILE_REQUIRED -> R.string.add_source_file_required
+    HomeActionError.FILE_UNSUPPORTED -> R.string.add_source_file_unsupported_format
+    HomeActionError.FILE_TOO_LARGE -> R.string.add_source_file_size_exceeded
 }

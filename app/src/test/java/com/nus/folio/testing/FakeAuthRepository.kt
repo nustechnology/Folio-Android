@@ -1,5 +1,6 @@
 package com.nus.folio.testing
 
+import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.repository.AuthRepository
 
@@ -38,6 +39,10 @@ class FakeAuthRepository : AuthRepository {
     var clearSessionCallCount = 0
 
     private var currentSession: AuthSession? = null
+
+    fun seedSession(session: AuthSession?) {
+        currentSession = session
+    }
 
     override suspend fun signUp(
         name: String,
@@ -78,6 +83,12 @@ class FakeAuthRepository : AuthRepository {
         refreshSessionCallCount++
         return refreshSessionResult.also { result ->
             result.onSuccess { currentSession = it }
+            result.onFailure { error ->
+                if (error is AuthApiException) {
+                    currentSession = null
+                    clearSessionCallCount++
+                }
+            }
         }
     }
 

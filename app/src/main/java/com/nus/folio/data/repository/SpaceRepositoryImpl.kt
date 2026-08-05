@@ -33,6 +33,23 @@ class SpaceRepositoryImpl(
         dataSource.createSpace(name = name, researchObjective = researchObjective)
     }
 
+    override suspend fun updateSpace(
+        spaceId: String,
+        name: String,
+        researchObjective: String,
+    ): Result<Space> = runSuspendCatching {
+        dataSource.updateSpace(
+            spaceId = spaceId,
+            name = name,
+            researchObjective = researchObjective,
+        )
+    }
+
+    override suspend fun deleteSpace(spaceId: String): Result<Unit> =
+        runSuspendCatching {
+            dataSource.deleteSpace(spaceId)
+        }
+
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> =
         try {
             Result.success(block())

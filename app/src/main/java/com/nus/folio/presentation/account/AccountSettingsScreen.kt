@@ -305,7 +305,7 @@ private fun AccountUserMessage.toAccountToastVisuals(context: android.content.Co
         AccountUserMessage.EXPORT_DATA_NOT_SUPPORTED -> R.string.account_export_data_not_supported
     }
     return FolioToastVisuals(
-        message = context.getString(messageRes),
+        title = context.getString(messageRes),
         style = FolioToastStyle.Warning,
     )
 }

@@ -97,21 +97,33 @@ internal fun AddSourceDestructiveButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     labelRes: Int = R.string.source_delete_confirm,
+    isLoading: Boolean = false,
 ) {
     Button(
         onClick = onClick,
+        enabled = !isLoading,
         modifier = modifier.height(52.dp),
         shape = HomeBottomSheetButtonShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = HomeStatusFailedBackground,
             contentColor = HomeStatusFailedText,
+            disabledContainerColor = HomeStatusFailedBackground.copy(alpha = 0.35f),
+            disabledContentColor = HomeStatusFailedText.copy(alpha = 0.7f),
         ),
     ) {
-        Text(
-            text = stringResource(labelRes),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = HomeStatusFailedText,
+                strokeWidth = 2.5.dp,
+            )
+        } else {
+            Text(
+                text = stringResource(labelRes),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 

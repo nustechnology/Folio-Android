@@ -50,6 +50,52 @@ class SpaceDataSourceTest {
     }
 
     @Test
+    fun `updateSpace persists name and objective`() = runTest {
+        val updated = dataSource.updateSpace(
+            spaceId = "1",
+            name = "  Renamed Research  ",
+            researchObjective = "  New objective  ",
+        )
+
+        assertEquals("1", updated.id)
+        assertEquals("Renamed Research", updated.title)
+        assertEquals("New objective", updated.description)
+
+        val page = dataSource.fetchSpaces(searchQuery = "Renamed")
+        assertEquals(1, page.spaces.size)
+        assertEquals("Renamed Research", page.spaces.first().title)
+        assertEquals("New objective", page.spaces.first().description)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `updateSpace rejects blank name`() = runTest {
+        dataSource.updateSpace(spaceId = "1", name = " ", researchObjective = "Objective")
+    }
+
+    @Test(expected = NoSuchElementException::class)
+    fun `updateSpace throws when space is missing`() = runTest {
+        dataSource.updateSpace(
+            spaceId = "missing",
+            name = "Renamed",
+            researchObjective = "Objective",
+        )
+    }
+
+    @Test
+    fun `deleteSpace removes space from list`() = runTest {
+        dataSource.deleteSpace(spaceId = "1")
+
+        val page = dataSource.fetchSpaces(limit = 20)
+        assertEquals(3, page.spaces.size)
+        assertTrue(page.spaces.none { it.id == "1" })
+    }
+
+    @Test(expected = NoSuchElementException::class)
+    fun `deleteSpace throws when space is missing`() = runTest {
+        dataSource.deleteSpace(spaceId = "missing")
+    }
+
+    @Test
     fun `concurrent createSpace calls keep both spaces`() = runTest {
         val first = async {
             dataSource.createSpace(name = "Alpha Lab", researchObjective = "A")

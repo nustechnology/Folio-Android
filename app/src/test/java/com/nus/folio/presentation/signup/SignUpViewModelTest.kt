@@ -68,6 +68,21 @@ class SignUpViewModelTest {
     }
 
     @Test
+    fun `onSignUpClick with invalid email sets EMAIL_INVALID`() {
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "not-an-email",
+            password = "secret",
+            confirmPassword = "secret",
+        )
+
+        assertEquals(SignUpError.EMAIL_INVALID, viewModel.uiState.value.emailError)
+        assertEquals(0, repository.signUpCallCount)
+    }
+
+    @Test
     fun `onSignUpClick with blank password sets PASSWORD_REQUIRED`() {
         val viewModel = createViewModel()
 
@@ -79,6 +94,21 @@ class SignUpViewModelTest {
         )
 
         assertEquals(SignUpError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
+        assertEquals(0, repository.signUpCallCount)
+    }
+
+    @Test
+    fun `onSignUpClick with short password sets PASSWORD_TOO_SHORT`() {
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick(
+            name = "Jordan Lee",
+            email = "a@folio.app",
+            password = "abc",
+            confirmPassword = "abc",
+        )
+
+        assertEquals(SignUpError.PASSWORD_TOO_SHORT, viewModel.uiState.value.passwordError)
         assertEquals(0, repository.signUpCallCount)
     }
 
@@ -133,13 +163,40 @@ class SignUpViewModelTest {
     }
 
     @Test
-    fun `onSignUpClick failure with api message sets toastMessage`() {
+    fun `onSignUpClick existing email sets EMAIL_ALREADY_EXISTS toastError`() {
         repository.signUpResult = Result.failure(AuthApiException("Email already registered"))
         val viewModel = createViewModel()
 
         viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
 
-        assertEquals("Email already registered", viewModel.uiState.value.toastMessage)
+        assertEquals(SignUpError.EMAIL_ALREADY_EXISTS, viewModel.uiState.value.toastError)
+        assertNull(viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.formError)
+        assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignUpClick conflict status sets EMAIL_ALREADY_EXISTS toastError`() {
+        repository.signUpResult = Result.failure(
+            AuthApiException(message = "Conflict", statusCode = 409),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals(SignUpError.EMAIL_ALREADY_EXISTS, viewModel.uiState.value.toastError)
+        assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignUpClick failure with other api message sets toastMessage`() {
+        repository.signUpResult = Result.failure(AuthApiException("Rate limited"))
+        val viewModel = createViewModel()
+
+        viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
+
+        assertEquals("Rate limited", viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.toastError)
         assertNull(viewModel.uiState.value.formError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
@@ -153,6 +210,7 @@ class SignUpViewModelTest {
 
         assertEquals(SignUpError.SIGN_UP_FAILED, viewModel.uiState.value.formError)
         assertNull(viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.toastError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
@@ -247,7 +305,7 @@ class SignUpViewModelTest {
     }
 
     @Test
-    fun `onToastMessageShown clears toastMessage`() {
+    fun `onToastMessageShown clears toastMessage and toastError`() {
         repository.signUpResult = Result.failure(AuthApiException("Email already registered"))
         val viewModel = createViewModel()
         viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
@@ -255,6 +313,7 @@ class SignUpViewModelTest {
         viewModel.onToastMessageShown()
 
         assertNull(viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.toastError)
     }
 
     @Test
