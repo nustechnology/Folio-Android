@@ -22,11 +22,15 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.ModalSheetDismiss
+import com.nus.folio.domain.util.NoteInputRules
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.presentation.home.HomeUploadZoneShape
@@ -49,6 +55,7 @@ import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeSheetBackground
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
@@ -61,6 +68,10 @@ internal fun AddNoteBottomSheet(
     onSubmit: (String, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
+    var hasUnsavedContent by remember { mutableStateOf(false) }
+    var bypassDiscardConfirm by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    val dismissHolder = remember { DiscardDismissHolder() }
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -74,26 +85,84 @@ internal fun AddNoteBottomSheet(
 
     AnimatedModalSheet(
         onDismiss = onDismiss,
+        dismissOnScrimClick = true,
+        confirmDismiss = {
+            if (bypassDiscardConfirm || !hasUnsavedContent) {
+                true
+            } else {
+                showDiscardConfirm = true
+                false
+            }
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         AddNoteSheetContent(
+            onDirtyChange = { hasUnsavedContent = it },
             onCancelClick = { requestDismiss() },
             onSubmit = { title, content ->
+                bypassDiscardConfirm = true
                 requestDismiss { onSubmit(title, content) }
             },
         )
     }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text(text = stringResource(R.string.add_note_discard_title)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                        bypassDiscardConfirm = true
+                        dismissHolder.requestDismiss?.invoke()
+                    },
+                ) {
+                    Text(text = stringResource(R.string.add_note_discard_yes))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text(text = stringResource(R.string.add_note_discard_no))
+                }
+            },
+        )
+    }
+}
+
+private class DiscardDismissHolder {
+    var requestDismiss: ModalSheetDismiss? = null
 }
 
 @Composable
 private fun AddNoteSheetContent(
     onCancelClick: () -> Unit,
     onSubmit: (String, String) -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
-    val canSubmit = title.isNotBlank() && content.isNotBlank()
+    var submitAttempted by rememberSaveable { mutableStateOf(false) }
+
+    val isDirty = title.isNotEmpty() || content.isNotEmpty()
+    SideEffect {
+        onDirtyChange(isDirty)
+    }
+
+    val titleError = when (NoteInputRules.titleValidationError(title)) {
+        NoteInputRules.TitleValidationError.TOO_LONG ->
+            stringResource(R.string.add_note_title_too_long)
+        null -> null
+    }
+    val contentError = when (NoteInputRules.contentValidationError(content)) {
+        NoteInputRules.ContentValidationError.TOO_LONG ->
+            stringResource(R.string.add_note_content_too_long)
+        NoteInputRules.ContentValidationError.EMPTY ->
+            if (submitAttempted) stringResource(R.string.add_note_content_empty) else null
+        null -> null
+    }
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -118,6 +187,7 @@ private fun AddNoteSheetContent(
             onValueChange = { title = it },
             placeholder = stringResource(R.string.add_note_title_placeholder),
             singleLine = true,
+            errorMessage = titleError,
         )
         Spacer(modifier = Modifier.height(16.dp))
         AddNoteLabeledField(
@@ -126,6 +196,7 @@ private fun AddNoteSheetContent(
             onValueChange = { content = it },
             placeholder = stringResource(R.string.add_note_content_placeholder),
             singleLine = false,
+            errorMessage = contentError,
             fieldModifier = Modifier
                 .fillMaxWidth()
                 .height(AddNoteContentHeight),
@@ -140,8 +211,13 @@ private fun AddNoteSheetContent(
                 modifier = Modifier.weight(1f),
             )
             AddSourceSubmitButton(
-                enabled = canSubmit,
-                onClick = { onSubmit(title.trim(), content.trim()) },
+                enabled = true,
+                onClick = {
+                    submitAttempted = true
+                    if (NoteInputRules.canSave(title, content)) {
+                        onSubmit(title.trim(), content.trim())
+                    }
+                },
                 labelRes = R.string.add_note_submit,
                 modifier = Modifier.weight(1f),
             )
@@ -156,6 +232,7 @@ internal fun AddNoteLabeledField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     singleLine: Boolean,
+    errorMessage: String? = null,
     fieldModifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -171,8 +248,17 @@ internal fun AddNoteLabeledField(
             onValueChange = onValueChange,
             placeholder = placeholder,
             singleLine = singleLine,
+            isError = errorMessage != null,
             modifier = fieldModifier,
         )
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = errorMessage,
+                color = HomeStatusFailedText,
+                fontSize = 12.sp,
+            )
+        }
     }
 }
 
@@ -182,14 +268,16 @@ internal fun AddNoteField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     singleLine: Boolean,
+    isError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
+    val borderColor = if (isError) HomeStatusFailedText else HomeSheetInputBorder
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(HomeUploadZoneShape)
-            .border(1.dp, HomeSheetInputBorder, HomeUploadZoneShape)
+            .border(1.dp, borderColor, HomeUploadZoneShape)
             .background(HomeCardBackground)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
@@ -222,16 +310,6 @@ internal fun AddNoteField(
 }
 
 internal val NoteSheetContentHeight = AddNoteContentHeight
-
-
-private fun Context.findActivityOrNull(): Activity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is Activity) return current
-        current = current.baseContext
-    }
-    return current as? Activity
-}
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
 @Composable

@@ -1,19 +1,24 @@
 package com.nus.folio.testing
 
+import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.repository.NoteRepository
+import com.nus.folio.domain.util.NoteUpdatedLabelFormatter
 
 class FakeNoteRepository : NoteRepository {
 
     var getNotesResult: Result<NoteLibrary>? = null
+    var createNoteResult: Result<Note>? = null
     var updateNoteResult: Result<Note>? = null
     var deleteNoteResult: Result<Unit>? = null
     var getNotesCallCount = 0
+    var createNoteCallCount = 0
     var updateNoteCallCount = 0
     var deleteNoteCallCount = 0
     var lastSpaceId: String? = null
+    var lastCreatedRequest: CreateNoteRequest? = null
     var lastUpdatedNote: Note? = null
     var lastDeletedNoteId: String? = null
 
@@ -24,6 +29,26 @@ class FakeNoteRepository : NoteRepository {
         lastSpaceId = spaceId
         getNotesResult?.let { return it }
         return Result.success(libraryFor(spaceId))
+    }
+
+    override suspend fun createNote(request: CreateNoteRequest): Result<Note> {
+        createNoteCallCount++
+        lastCreatedRequest = request
+        createNoteResult?.let { return it }
+        val note = Note(
+            id = "created-${createNoteCallCount}",
+            title = request.title,
+            content = request.content,
+            project = request.project,
+            updatedLabel = NoteUpdatedLabelFormatter.formatNow(),
+            isPinned = false,
+            spaceId = request.spaceId,
+            origin = request.origin,
+            citationCount = request.citationCount,
+            citations = request.citations,
+        )
+        notes.add(0, note)
+        return Result.success(note)
     }
 
     override suspend fun updateNote(note: Note): Result<Note> {

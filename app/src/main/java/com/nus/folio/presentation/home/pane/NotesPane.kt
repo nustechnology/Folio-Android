@@ -198,8 +198,8 @@ private fun NoteCardSkeleton(modifier: Modifier = Modifier) {
                 FolioSkeletonBar(
                     modifier = Modifier.size(width = 56.dp, height = 20.dp),
                     shape = HomeBadgeShape,
-                )
-            }
+            )
+        }
         }
     }
 }
@@ -316,6 +316,14 @@ private fun NoteCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             NoteOriginBadges(note = note)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = note.updatedLabel,
+                fontSize = 12.sp,
+                color = HomeTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         IconButton(
             onClick = onMoreClick,

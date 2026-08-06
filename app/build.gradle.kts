@@ -28,6 +28,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -39,7 +40,17 @@ android {
     }
 }
 
+tasks.withType<Test>().configureEach {
+    // FolioHttp PATCH uses reflection on HttpURLConnection; JDK 17+ blocks that by default.
+    jvmArgs(
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/sun.net.www.protocol.http=ALL-UNNAMED",
+        "--add-opens=java.base/sun.net.www.protocol.https=ALL-UNNAMED",
+    )
+}
+
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

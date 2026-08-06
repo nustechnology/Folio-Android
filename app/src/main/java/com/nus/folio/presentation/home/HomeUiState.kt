@@ -1,6 +1,6 @@
 package com.nus.folio.presentation.home
 
-import com.nus.folio.R
+import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
@@ -8,6 +8,7 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
+import com.nus.folio.domain.model.SourceStatus
 
 data class HomeUiState(
     val spaceId: String = "",
@@ -53,11 +54,39 @@ data class HomeUiState(
     val processingState: SourceProcessingState? = null,
     val isOpeningSource: Boolean = false,
     val openSourceDetailId: String? = null,
+    /** Passage to highlight when opening Source Reader from a citation. */
+    val openSourceDetailHighlight: String? = null,
     val userMessage: HomeUserMessage? = null,
     /** API/action failure shown as an error toast (safe, localized — never raw Throwable text). */
     val actionError: HomeActionError? = null,
-    val askScope: AskScope = AskScope.CURRENT_SOURCE,
+    /** One-shot info toast with dynamic text. */
+    val infoToast: String? = null,
+    /** Citation opened in the Ask citation preview sheet. */
+    val previewCitation: AskCitation? = null,
+    /** Draft for saving an Ask answer as a note; null when the sheet is closed. */
+    val saveAskNoteDraft: SaveAskNoteDraft? = null,
+    /** Assistant message id currently being persisted as a note; null when idle. */
+    val savingAskMessageId: String? = null,
+    val askScope: AskScope = AskScope.ENTIRE_SPACE,
     val askSourceId: String? = null,
+    /** Messages in the active Ask conversation; cleared when scope changes. */
+    val askMessages: List<AskMessage> = emptyList(),
+    /**
+     * Dynamic suggested questions for the selected Ready source.
+     * Empty means the UI should show the static Entire-Space fallback chips.
+     */
+    val askSuggestions: List<String> = emptyList(),
+    /** Bumped when Ask chat context resets so the input field can clear. */
+    val askConversationEpoch: Int = 0,
+    /**
+     * User message id currently playing the send enter animation.
+     * Null when idle — returning to Ask must not replay completed animations.
+     */
+    val pendingUserEnterAnimationId: String? = null,
+    /** Signed-in user display name for Ask message avatars. */
+    val userDisplayName: String = "",
+    /** Signed-in user email fallback for Ask avatar initials. */
+    val userEmail: String = "",
     /** True when the auth session was cleared and the user must sign in again. */
     val requiresReauth: Boolean = false,
 )
@@ -67,15 +96,63 @@ enum class AskScope {
     CURRENT_SOURCE,
 }
 
+enum class AskFeedback {
+    NONE,
+    USEFUL,
+    NOT_USEFUL,
+}
+
+data class AskMessage(
+    val id: String,
+    val role: AskMessageRole,
+    val content: String,
+    val isStreaming: Boolean = false,
+    val wasStopped: Boolean = false,
+    val citations: List<AskCitation> = emptyList(),
+    val limitation: String? = null,
+    val feedback: AskFeedback = AskFeedback.NONE,
+    val isSavedAsNote: Boolean = false,
+)
+
+/** Prefill state for the Save Ask Answer as Note sheet (AC2). */
+data class SaveAskNoteDraft(
+    val messageId: String,
+    val initialTitle: String,
+    val content: String,
+    val citations: List<AskCitation>,
+)
+
+enum class AskMessageRole {
+    USER,
+    ASSISTANT,
+}
+
+/** Sources in this space available in the Ask scope dropdown. */
+fun HomeUiState.askScopeSources(): List<Source> = allSources
+
+/** Ready sources used when grounding answers across the entire space. */
+fun HomeUiState.askReadySourceCount(): Int =
+    allSources.count { it.status == SourceStatus.READY }
+
+fun HomeUiState.hasAskEvidence(): Boolean = when (askScope) {
+    AskScope.ENTIRE_SPACE -> askReadySourceCount() > 0
+    AskScope.CURRENT_SOURCE ->
+        askSourceId
+            ?.let { id -> allSources.find { it.id == id } }
+            ?.status == SourceStatus.READY
+}
+
+fun HomeUiState.isAskStreaming(): Boolean =
+    askMessages.any { it.role == AskMessageRole.ASSISTANT && it.isStreaming }
+
 fun HomeUiState.askSourceTitle(): String =
     askSourceId
         ?.let { id -> allSources.find { it.id == id }?.title }
-        ?: allSources.firstOrNull()?.title.orEmpty()
+        .orEmpty()
 
-fun HomeUiState.askScopeChipLabelRes(): Int = when (askScope) {
-    AskScope.ENTIRE_SPACE -> R.string.answer_scope_entire_space
-    AskScope.CURRENT_SOURCE -> R.string.home_ask_current_source
-}
+/** Selected source title for the scope chip when asking a single document; blank for entire space. */
+fun HomeUiState.askScopeSelectedSourceLabel(): String =
+    if (askScope == AskScope.CURRENT_SOURCE) askSourceTitle() else ""
 
 enum class HomeUserMessage {
     SOURCE_UPDATED,
@@ -83,11 +160,14 @@ enum class HomeUserMessage {
     SOURCE_CREATED,
     SOURCE_UPDATE_FAILED,
     SOURCE_DELETE_FAILED,
+    SOURCE_CREATE_FAILED,
     SOURCE_RETRY_FAILED,
     NOTE_UPDATED,
     NOTE_DELETED,
+    NOTE_SAVED,
+    NOTE_SAVED_FROM_ASK,
+    ASK_FEEDBACK_RECORDED,
     ASK_NOT_SUPPORTED,
-    ADD_NOTE_NOT_SUPPORTED,
     COPY_NOTEBOOK_NOT_SUPPORTED,
     EXPORT_NOTEBOOK_NOT_SUPPORTED,
     EDIT_NOTE_NOT_SUPPORTED,

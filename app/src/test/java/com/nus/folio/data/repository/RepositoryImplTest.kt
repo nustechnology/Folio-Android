@@ -19,6 +19,14 @@ class AskRepositoryImplTest {
         assertEquals(2, result.getOrNull()?.size)
         assertEquals("Core dissertation arguments", result.getOrNull()?.first()?.title)
     }
+
+    @Test
+    fun `getSuggestedQuestions returns success list for source`() = runTest {
+        val result = repository.getSuggestedQuestions("1")
+
+        assertTrue(result.isSuccess)
+        assertEquals(3, result.getOrNull()?.size)
+    }
 }
 
 class NoteRepositoryImplTest {

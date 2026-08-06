@@ -1,8 +1,11 @@
 package com.nus.folio.data.datasource
 
+import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.util.NoteUpdatedLabelFormatter
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,6 +18,26 @@ class NoteDataSource {
     suspend fun fetchNotes(spaceId: String): NoteLibrary {
         delay(200)
         return libraryFor(spaceId)
+    }
+
+    suspend fun createNote(request: CreateNoteRequest): Note {
+        delay(200)
+        return mutex.withLock {
+            val note = Note(
+                id = UUID.randomUUID().toString(),
+                title = request.title,
+                content = request.content,
+                project = request.project,
+                updatedLabel = NoteUpdatedLabelFormatter.formatNow(),
+                isPinned = false,
+                spaceId = request.spaceId,
+                origin = request.origin,
+                citationCount = request.citationCount,
+                citations = request.citations,
+            )
+            notes.add(0, note)
+            note
+        }
     }
 
     suspend fun updateNote(note: Note): Note {

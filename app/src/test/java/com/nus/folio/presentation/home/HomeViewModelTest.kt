@@ -1,18 +1,24 @@
 package com.nus.folio.presentation.home
 
+import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.NoteFilter
+import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourceLibrary
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.repository.SourceFileBytes
 import com.nus.folio.domain.repository.SourceFileBytesReader
+import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
@@ -21,6 +27,7 @@ import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
+import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.model.CreateSourceRequest
@@ -75,7 +82,10 @@ class HomeViewModelTest {
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
             getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskTopicsUseCase = GetAskTopicsUseCase(askRepository),
+            getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
+            streamAskAnswerUseCase = StreamAskAnswerUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
+            createNoteUseCase = CreateNoteUseCase(noteRepository),
             updateNoteUseCase = UpdateNoteUseCase(noteRepository),
             deleteNoteUseCase = DeleteNoteUseCase(noteRepository),
             sourceFileBytesReader = sourceFileBytesReader,
@@ -532,12 +542,415 @@ class HomeViewModelTest {
                 content = "Body",
             ),
         )
+        val sourceId = viewModel.uiState.value.processingSourceId!!
 
         viewModel.onSourceProcessingAsk()
 
         assertNull(viewModel.uiState.value.processingSourceTitle)
         assertNull(viewModel.uiState.value.processingSourceId)
         assertEquals(HomeTab.ASK, viewModel.uiState.value.selectedTab)
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals(sourceId, viewModel.uiState.value.askSourceId)
+        assertEquals(1, viewModel.uiState.value.askConversationEpoch)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+    }
+
+    @Test
+    fun `ask scope defaults to entire space`() {
+        val viewModel = createViewModel()
+
+        assertEquals(AskScope.ENTIRE_SPACE, viewModel.uiState.value.askScope)
+        assertNull(viewModel.uiState.value.askSourceId)
+        assertEquals(0, viewModel.uiState.value.askConversationEpoch)
+    }
+
+    @Test
+    fun `onAskScopeOptionSelected switches to source and resets conversation`() {
+        val viewModel = createViewModel()
+        val sourceId = viewModel.uiState.value.allSources.first().id
+
+        viewModel.onAskScopeOptionSelected(sourceId)
+
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals(sourceId, viewModel.uiState.value.askSourceId)
+        assertEquals(1, viewModel.uiState.value.askConversationEpoch)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+    }
+
+    @Test
+    fun `onAskScopeOptionSelected switching sources resets conversation`() {
+        val viewModel = createViewModel()
+        val sources = viewModel.uiState.value.allSources
+        val firstId = sources[0].id
+        val secondId = sources[1].id
+
+        viewModel.onAskScopeOptionSelected(firstId)
+        viewModel.onAskScopeOptionSelected(secondId)
+
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals(secondId, viewModel.uiState.value.askSourceId)
+        assertEquals(2, viewModel.uiState.value.askConversationEpoch)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+    }
+
+    @Test
+    fun `onAskScopeOptionSelected same option does not reset conversation`() {
+        val viewModel = createViewModel()
+        val sourceId = viewModel.uiState.value.allSources.first().id
+        viewModel.onAskScopeOptionSelected(sourceId)
+        val epochAfterFirst = viewModel.uiState.value.askConversationEpoch
+
+        viewModel.onAskScopeOptionSelected(sourceId)
+
+        assertEquals(epochAfterFirst, viewModel.uiState.value.askConversationEpoch)
+    }
+
+    @Test
+    fun `onNewConversation clears messages and keeps scope`() = runTest {
+        val viewModel = createViewModel()
+        val sourceId = viewModel.uiState.value.allSources.first().id
+        viewModel.onAskScopeOptionSelected(sourceId)
+        viewModel.onAskSubmit("What problems appear most often?")
+        advanceUntilIdle()
+        val epochBefore = viewModel.uiState.value.askConversationEpoch
+        assertTrue(viewModel.uiState.value.askMessages.isNotEmpty())
+
+        viewModel.onNewConversation()
+
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals(sourceId, viewModel.uiState.value.askSourceId)
+        assertEquals(epochBefore + 1, viewModel.uiState.value.askConversationEpoch)
+        assertNull(viewModel.uiState.value.saveAskNoteDraft)
+        assertNull(viewModel.uiState.value.savingAskMessageId)
+        assertNull(viewModel.uiState.value.previewCitation)
+    }
+
+    @Test
+    fun `onAskScopeOptionSelected entire space clears source selection`() {
+        val viewModel = createViewModel()
+        val sourceId = viewModel.uiState.value.allSources.first().id
+        viewModel.onAskScopeOptionSelected(sourceId)
+
+        viewModel.onAskScopeOptionSelected(null)
+
+        assertEquals(AskScope.ENTIRE_SPACE, viewModel.uiState.value.askScope)
+        assertNull(viewModel.uiState.value.askSourceId)
+        assertEquals(2, viewModel.uiState.value.askConversationEpoch)
+    }
+
+    @Test
+    fun `onAskCitationClick opens citation preview sheet`() = runTest {
+        val viewModel = createViewModel()
+        val citation = AskCitation(
+            index = 1,
+            sourceId = "1",
+            sourceTitle = "Alan Turing: Computing Machinery",
+            sourceType = SourceType.FILE,
+            fileExtension = "pdf",
+            locationLabel = "Page 14",
+            evidenceText = "imitation game",
+        )
+
+        viewModel.onAskCitationClick(citation)
+
+        assertEquals(citation, viewModel.uiState.value.previewCitation)
+    }
+
+    @Test
+    fun `onCitationOpenInSource navigates with highlight`() = runTest {
+        val viewModel = createViewModel()
+        val citation = AskCitation(
+            index = 1,
+            sourceId = "1",
+            sourceTitle = "Alan Turing: Computing Machinery",
+            sourceType = SourceType.FILE,
+            fileExtension = "pdf",
+            locationLabel = "Page 14",
+            evidenceText = "imitation game",
+        )
+        viewModel.onAskCitationClick(citation)
+
+        viewModel.onCitationOpenInSource()
+
+        assertNull(viewModel.uiState.value.previewCitation)
+        assertEquals("1", viewModel.uiState.value.openSourceDetailId)
+        assertEquals("imitation game", viewModel.uiState.value.openSourceDetailHighlight)
+    }
+
+    @Test
+    fun `onCitationPreviewDismiss clears preview`() {
+        val viewModel = createViewModel()
+        viewModel.onAskCitationClick(
+            AskCitation(1, "1", "Title", evidenceText = "passage"),
+        )
+
+        viewModel.onCitationPreviewDismiss()
+
+        assertNull(viewModel.uiState.value.previewCitation)
+    }
+
+    @Test
+    fun `onAskSubmit streams assistant response`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onAskSubmit("Summarize all the evidence.")
+        advanceUntilIdle()
+
+        val messages = viewModel.uiState.value.askMessages
+        assertEquals(2, messages.size)
+        assertEquals(AskMessageRole.USER, messages[0].role)
+        assertEquals("Summarize all the evidence.", messages[0].content)
+        assertEquals(AskMessageRole.ASSISTANT, messages[1].role)
+        assertFalse(messages[1].isStreaming)
+        assertTrue(messages[1].content.isNotBlank())
+        assertEquals(1, askRepository.streamAnswerCallCount)
+        assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onAskStop retains partial assistant text`() = runTest {
+        askRepository.streamEvents = listOf(
+            AskStreamEvent.Delta("Partial "),
+            AskStreamEvent.Delta("answer"),
+        )
+        askRepository.hangAfterStreamEvents = true
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        viewModel.onAskStop()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertFalse(assistant.isStreaming)
+        assertTrue(assistant.wasStopped)
+        assertEquals("Partial answer", assistant.content)
+    }
+
+    @Test
+    fun `onAskFeedback records rating and toast`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskFeedback(assistantId, useful = true)
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertEquals(AskFeedback.USEFUL, assistant.feedback)
+        assertEquals(HomeUserMessage.ASK_FEEDBACK_RECORDED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onAskSaveAsNote opens draft with question title`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("What is the imitation game?")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskSaveAsNote(assistantId)
+
+        val draft = viewModel.uiState.value.saveAskNoteDraft
+        assertEquals(assistantId, draft?.messageId)
+        assertEquals("What is the imitation game?", draft?.initialTitle)
+        assertEquals(0, noteRepository.createNoteCallCount)
+        assertNull(viewModel.uiState.value.savingAskMessageId)
+    }
+
+    @Test
+    fun `onAskSaveAsNoteConfirm creates saved answer note`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("What is the imitation game?")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskSaveAsNote(assistantId)
+        viewModel.onAskSaveAsNoteConfirm("Custom title")
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertTrue(assistant.isSavedAsNote)
+        assertNull(viewModel.uiState.value.savingAskMessageId)
+        assertNull(viewModel.uiState.value.saveAskNoteDraft)
+        assertEquals(1, noteRepository.createNoteCallCount)
+        assertEquals("Custom title", noteRepository.lastCreatedRequest?.title)
+        assertEquals(NoteOrigin.SAVED_ANSWER, noteRepository.lastCreatedRequest?.origin)
+        assertEquals(1, noteRepository.lastCreatedRequest?.citationCount)
+        assertEquals(1, noteRepository.lastCreatedRequest?.citations?.size)
+        assertFalse(noteRepository.lastCreatedRequest?.content.orEmpty().contains("Citations"))
+        assertEquals(HomeUserMessage.NOTE_SAVED_FROM_ASK, viewModel.uiState.value.userMessage)
+        assertTrue(
+            viewModel.uiState.value.allNotes.any { it.origin == NoteOrigin.SAVED_ANSWER },
+        )
+    }
+
+    @Test
+    fun `onAskSaveAsNote ignored when already saved`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+        viewModel.onAskSaveAsNote(assistantId)
+        viewModel.onAskSaveAsNoteConfirm("Title")
+        advanceUntilIdle()
+
+        viewModel.onAskSaveAsNote(assistantId)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.saveAskNoteDraft)
+        assertEquals(1, noteRepository.createNoteCallCount)
+    }
+
+    @Test
+    fun `onAskSaveAsNoteDismiss clears draft without creating`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+        viewModel.onAskSaveAsNote(assistantId)
+
+        viewModel.onAskSaveAsNoteDismiss()
+
+        assertNull(viewModel.uiState.value.saveAskNoteDraft)
+        assertEquals(0, noteRepository.createNoteCallCount)
+    }
+
+    @Test
+    fun `onAddNoteSubmit creates user note with default title when blank`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onAddNoteSubmit(title = "  ", content = "Insight from fieldwork")
+        advanceUntilIdle()
+
+        assertEquals(1, noteRepository.createNoteCallCount)
+        assertEquals("Untitled Note", noteRepository.lastCreatedRequest?.title)
+        assertEquals("Insight from fieldwork", noteRepository.lastCreatedRequest?.content)
+        assertEquals(NoteOrigin.USER_CREATED, noteRepository.lastCreatedRequest?.origin)
+        assertEquals(HomeUserMessage.NOTE_SAVED, viewModel.uiState.value.userMessage)
+        assertTrue(viewModel.uiState.value.allNotes.any { it.title == "Untitled Note" })
+    }
+
+    @Test
+    fun `onAddNoteSubmit ignores empty content`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onAddNoteSubmit(title = "Draft", content = "   ")
+        advanceUntilIdle()
+
+        assertEquals(0, noteRepository.createNoteCallCount)
+        assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onAddNoteSubmit ignores title over 150 characters`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onAddNoteSubmit(title = "a".repeat(151), content = "Body")
+        advanceUntilIdle()
+
+        assertEquals(0, noteRepository.createNoteCallCount)
+    }
+
+    @Test
+    fun `onAskSubmit ignored when no ready sources`() = runTest {
+        sourceRepository.getSourcesResult = Result.success(
+            SourceLibrary(
+                sources = emptyList(),
+                allCount = 0,
+                papersCount = 0,
+                booksCount = 0,
+                webCount = 0,
+                textCount = 0,
+            ),
+        )
+        val viewModel = createViewModel()
+        viewModel.onRetry()
+        advanceUntilIdle()
+
+        viewModel.onAskSubmit("Question")
+
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertEquals(0, askRepository.streamAnswerCallCount)
+    }
+
+    @Test
+    fun `onAskSubmit ignores blank questions`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAskSubmit("   ")
+
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `selecting ready source with metadata loads dynamic suggestions`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onAskScopeOptionSelected("1")
+
+        assertEquals(3, viewModel.uiState.value.askSuggestions.size)
+        assertEquals(
+            "What is Turing's main claim about machine intelligence?",
+            viewModel.uiState.value.askSuggestions.first(),
+        )
+        assertEquals(1, askRepository.getSuggestedQuestionsCallCount)
+        assertEquals("1", askRepository.lastSuggestedSourceId)
+    }
+
+    @Test
+    fun `entire space clears dynamic suggestions for fallback chips`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskScopeOptionSelected("1")
+        assertEquals(3, viewModel.uiState.value.askSuggestions.size)
+
+        viewModel.onAskScopeOptionSelected(null)
+
+        assertTrue(viewModel.uiState.value.askSuggestions.isEmpty())
+    }
+
+    @Test
+    fun `ready source without metadata keeps empty suggestions for fallback`() = runTest {
+        val viewModel = createViewModel()
+
+        // Source 10 is Ready in samples but has no suggestion metadata in FakeAskRepository.
+        viewModel.onAskScopeOptionSelected("10")
+
+        assertTrue(viewModel.uiState.value.askSuggestions.isEmpty())
+        assertEquals(1, askRepository.getSuggestedQuestionsCallCount)
+    }
+
+    @Test
+    fun `non-ready source does not fetch dynamic suggestions`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onAskScopeOptionSelected("4") // FAILED
+
+        assertTrue(viewModel.uiState.value.askSuggestions.isEmpty())
+        assertEquals(0, askRepository.getSuggestedQuestionsCallCount)
+    }
+
+    @Test
+    fun `onAskSourceSelected auto-selects source and resets conversation`() {
+        val viewModel = createViewModel()
+        val sourceId = viewModel.uiState.value.allSources.first().id
+        viewModel.onAskScopeOptionSelected(sourceId)
+        val epochBefore = viewModel.uiState.value.askConversationEpoch
+
+        viewModel.onAskSourceSelected(sourceId)
+
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals(sourceId, viewModel.uiState.value.askSourceId)
+        assertEquals(epochBefore + 1, viewModel.uiState.value.askConversationEpoch)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
     }
 
     @Test

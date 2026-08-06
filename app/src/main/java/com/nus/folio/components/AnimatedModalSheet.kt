@@ -80,6 +80,12 @@ fun interface ModalSheetDismiss {
 internal fun AnimatedModalSheet(
     onDismiss: () -> Unit,
     dismissOnScrimClick: Boolean = false,
+    /**
+     * Called before a user-initiated dismiss (back, scrim, drag, cancel).
+     * Return false to keep the sheet open (e.g. show a discard confirmation).
+     * Programmatic dismiss with a non-null [ModalSheetDismiss] after-action always proceeds.
+     */
+    confirmDismiss: () -> Boolean = { true },
     contentWindowInsets: WindowInsets = WindowInsets.navigationBars,
     content: @Composable (requestDismiss: ModalSheetDismiss) -> Unit,
 ) {
@@ -94,6 +100,15 @@ internal fun AnimatedModalSheet(
 
     val requestDismiss = ModalSheetDismiss { after ->
         if (!visibleState.targetState) return@ModalSheetDismiss
+        if (after == null && !confirmDismiss()) {
+            scope.launch {
+                dragOffsetY.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(),
+                )
+            }
+            return@ModalSheetDismiss
+        }
         pendingAction = after
         visibleState.targetState = false
     }

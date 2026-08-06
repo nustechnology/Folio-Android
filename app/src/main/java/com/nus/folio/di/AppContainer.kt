@@ -23,11 +23,13 @@ import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.repository.SourceRepository
 import com.nus.folio.domain.repository.SpaceRepository
 import com.nus.folio.domain.usecase.ClearAuthSessionUseCase
+import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.CreateSpaceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSpaceUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
@@ -43,6 +45,7 @@ import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
+import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
@@ -137,6 +140,14 @@ class AppContainer(
         GetAskTopicsUseCase(askRepository)
     }
 
+    val getAskSuggestionsUseCase: GetAskSuggestionsUseCase by lazy {
+        GetAskSuggestionsUseCase(askRepository)
+    }
+
+    val streamAskAnswerUseCase: StreamAskAnswerUseCase by lazy {
+        StreamAskAnswerUseCase(askRepository)
+    }
+
     private val noteDataSource: NoteDataSource by lazy { NoteDataSource() }
 
     private val noteRepository: NoteRepository by lazy {
@@ -145,6 +156,10 @@ class AppContainer(
 
     val getNotesUseCase: GetNotesUseCase by lazy {
         GetNotesUseCase(noteRepository)
+    }
+
+    val createNoteUseCase: CreateNoteUseCase by lazy {
+        CreateNoteUseCase(noteRepository)
     }
 
     val updateNoteUseCase: UpdateNoteUseCase by lazy {

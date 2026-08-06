@@ -10,6 +10,7 @@ data class Note(
     val spaceId: String,
     val origin: NoteOrigin = NoteOrigin.USER_CREATED,
     val citationCount: Int = 0,
+    val citations: List<AskCitation> = emptyList(),
 )
 
 enum class NoteOrigin {

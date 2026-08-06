@@ -120,22 +120,26 @@ class FolioHttpTest {
     }
 
     @Test
-    fun `patchOverrideHeaders uses POST override instead of wire PATCH`() {
-        val headers = FolioHttp.patchOverrideHeaders("token-123")
+    fun `jsonContentHeaders includes content type and bearer`() {
+        val headers = FolioHttp.jsonContentHeaders("token-123")
         assertEquals("application/json", headers["Content-Type"])
+        assertEquals("application/json", headers["Accept"])
         assertEquals("Bearer token-123", headers["Authorization"])
-        assertEquals("PATCH", headers["X-HTTP-Method-Override"])
+        assertTrue(!headers.containsKey("X-HTTP-Method-Override"))
     }
 
     @Test
-    fun `open rejects PATCH connection method`() {
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            FolioHttp.open(
-                method = "PATCH",
-                url = "https://example.com/api/v1/sources/1",
-                headers = FolioHttp.jsonContentHeaders("token-123"),
-            )
+    fun `open accepts PATCH connection method`() {
+        val connection = FolioHttp.open(
+            method = "PATCH",
+            url = "https://example.com/api/v1/spaces/1",
+            headers = FolioHttp.jsonContentHeaders("token-123"),
+            doOutput = true,
+        )
+        try {
+            assertEquals("PATCH", connection.requestMethod)
+        } finally {
+            connection.disconnect()
         }
-        assertTrue(error.message!!.contains("X-HTTP-Method-Override"))
     }
 }

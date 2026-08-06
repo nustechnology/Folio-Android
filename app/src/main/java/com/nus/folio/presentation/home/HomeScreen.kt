@@ -1,22 +1,22 @@
 package com.nus.folio.presentation.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,24 +26,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
-import com.nus.folio.components.BouncingDotsIndicator
 import com.nus.folio.components.FolioSearchField
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
-import com.nus.folio.components.ItemOptionAction
-import com.nus.folio.components.ItemOptionStyle
-import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.AskTopic
@@ -55,18 +49,6 @@ import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
-import com.nus.folio.presentation.home.bottomsheet.AddNoteBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.AddSourceBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.AnswerScopeBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.ConversationBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.ConvertNoteBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.EditNoteBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.ExportNotebookBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.SortSourcesBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.SourceProcessingBottomSheet
-import com.nus.folio.presentation.home.bottomsheet.ViewNoteBottomSheet
 import com.nus.folio.presentation.home.pane.AskPane
 import com.nus.folio.presentation.home.pane.NotebookPane
 import com.nus.folio.presentation.home.pane.NotesPane
@@ -74,8 +56,6 @@ import com.nus.folio.presentation.home.pane.SourcesPane
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
-import com.nus.folio.ui.theme.HomeSearchField
-import com.nus.folio.ui.theme.HomeSearchPlaceholder
 import kotlinx.coroutines.launch
 
 @Composable
@@ -83,7 +63,7 @@ fun HomeScreen(
     spaceId: String,
     spaceTitle: String,
     onNavigateBack: () -> Unit,
-    onNavigateToSourceDetail: (sourceId: String) -> Unit,
+    onNavigateToSourceDetail: (sourceId: String, highlightText: String?) -> Unit,
     onSignOut: () -> Unit,
     initialTab: HomeTab? = null,
     onInitialTabHandled: () -> Unit = {},
@@ -101,7 +81,10 @@ fun HomeScreen(
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
             getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
             getAskTopicsUseCase = LocalAppContainer.current.getAskTopicsUseCase,
+            getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
+            streamAskAnswerUseCase = LocalAppContainer.current.streamAskAnswerUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
+            createNoteUseCase = LocalAppContainer.current.createNoteUseCase,
             updateNoteUseCase = LocalAppContainer.current.updateNoteUseCase,
             deleteNoteUseCase = LocalAppContainer.current.deleteNoteUseCase,
             sourceFileBytesReader = LocalAppContainer.current.sourceFileBytesReader,
@@ -131,6 +114,17 @@ fun HomeScreen(
         viewModel.onUserMessageShown()
     }
 
+    LaunchedEffect(uiState.infoToast) {
+        val message = uiState.infoToast ?: return@LaunchedEffect
+        toastHostState.showToast(
+            FolioToastVisuals(
+                title = message,
+                style = FolioToastStyle.Info,
+            ),
+        )
+        viewModel.onInfoToastShown()
+    }
+
     LaunchedEffect(uiState.actionError) {
         val error = uiState.actionError ?: return@LaunchedEffect
         toastHostState.showToast(
@@ -156,7 +150,7 @@ fun HomeScreen(
 
     LaunchedEffect(uiState.openSourceDetailId) {
         val sourceId = uiState.openSourceDetailId ?: return@LaunchedEffect
-        onNavigateToSourceDetail(sourceId)
+        onNavigateToSourceDetail(sourceId, uiState.openSourceDetailHighlight)
         viewModel.onOpenSourceDetailHandled()
     }
 
@@ -180,7 +174,13 @@ fun HomeScreen(
             },
             onBackClick = onNavigateBack,
             onAskSubmit = viewModel::onAskSubmit,
+            onAskStop = viewModel::onAskStop,
+            onAskUserEnterAnimationFinished = viewModel::onAskUserEnterAnimationFinished,
             onScopeChipClick = { showAnswerScopeSheet = true },
+            onAskAddSourceClick = viewModel::onAddSourceClick,
+            onAskSaveAsNote = viewModel::onAskSaveAsNote,
+            onAskFeedback = viewModel::onAskFeedback,
+            onAskCitationClick = viewModel::onAskCitationClick,
             onSourceMoreClick = viewModel::onSourceOptionsClick,
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
@@ -197,201 +197,65 @@ fun HomeScreen(
                 .padding(top = 12.dp),
         )
 
-        if (uiState.isOpeningSource) {
-            SourceOpeningScreen()
-        }
-
-        if (uiState.showAddSourceSheet) {
-            AddSourceBottomSheet(
-                isSubmitting = uiState.isCreatingSource,
-                onDismiss = viewModel::onAddSourceSheetDismiss,
-                onSubmit = viewModel::onAddSourceSubmit,
-            )
-        }
-
-        if (uiState.showSortSheet) {
-            SortSourcesBottomSheet(
-                selectedSort = uiState.selectedSort,
-                onSortSelected = viewModel::onSortSelected,
-                onDismiss = viewModel::onSortSheetDismiss,
-            )
-        }
-
-        uiState.processingSourceTitle?.let { title ->
-            SourceProcessingBottomSheet(
-                sourceTitle = title,
-                progress = uiState.processingProgress,
-                state = uiState.processingState,
-                onDismiss = viewModel::onSourceProcessingDismiss,
-                onOpenSource = viewModel::onSourceProcessingOpenSource,
-                onAsk = viewModel::onSourceProcessingAsk,
-                onRetry = viewModel::onSourceProcessingRetry,
-            )
-        }
-
-        if (showAddNoteSheet) {
-            AddNoteBottomSheet(
-                onDismiss = { showAddNoteSheet = false },
-                onSubmit = { title, content ->
-                    viewModel.onAddNoteSubmit(title, content)
-                },
-            )
-        }
-
-        if (showConversationSheet) {
-            ConversationBottomSheet(
-                onDismiss = { showConversationSheet = false },
-            )
-        }
-
-        if (showAnswerScopeSheet) {
-            AnswerScopeBottomSheet(
-                selectedScope = uiState.askScope,
-                sourceCount = uiState.allCount,
-                currentSourceTitle = uiState.askSourceTitle(),
-                onScopeSelected = viewModel::onAskScopeSelected,
-                onDismiss = { showAnswerScopeSheet = false },
-            )
-        }
-
-        uiState.editingSource?.let { source ->
-            EditSourceBottomSheet(
-                source = source,
-                initialContent = uiState.editingSourceContent,
-                onDismiss = viewModel::onEditSourceDismiss,
-                onSave = viewModel::onEditSourceSave,
-            )
-        }
-
-        uiState.deletingSource?.let {
-            DeleteConfirmationBottomSheet(
-                onDismiss = viewModel::onDeleteSourceDismiss,
-                onConfirm = viewModel::onDeleteSourceConfirm,
-            )
-        }
-
-        if (uiState.editingNote == null &&
-            uiState.deletingNote == null &&
-            uiState.convertingNote == null
-        ) {
-            uiState.viewingNote?.let { note ->
-                ViewNoteBottomSheet(
-                    note = note,
-                    onDismiss = viewModel::onViewNoteDismiss,
-                    onConvertClick = viewModel::onConvertNoteClick,
-                    onEditClick = viewModel::onEditNoteClick,
-                )
-            }
-        }
-
-        uiState.editingNote?.let { note ->
-            EditNoteBottomSheet(
-                note = note,
-                onDismiss = viewModel::onEditNoteDismiss,
-                onSave = viewModel::onEditNoteSave,
-                onDelete = viewModel::onDeleteNoteClick,
-            )
-        }
-
-        uiState.convertingNote?.let { note ->
-            ConvertNoteBottomSheet(
-                note = note,
-                onDismiss = viewModel::onConvertNoteDismiss,
-                onCreateSource = viewModel::onConvertNoteCreate,
-            )
-        }
-
-        uiState.deletingNote?.let {
-            DeleteConfirmationBottomSheet(
-                titleRes = R.string.note_delete_title,
-                messageRes = R.string.note_delete_message,
-                onDismiss = viewModel::onDeleteNoteDismiss,
-                onConfirm = viewModel::onDeleteNoteConfirm,
-            )
-        }
-
-        if (showSignOutConfirm) {
-            DeleteConfirmationBottomSheet(
-                titleRes = R.string.account_sign_out_title,
-                messageRes = R.string.account_sign_out_message,
-                confirmLabelRes = R.string.account_sign_out,
-                onDismiss = { showSignOutConfirm = false },
-                onConfirm = {
-                    scope.launch {
-                        container.clearAuthSessionUseCase()
-                        onSignOut()
-                    }
-                },
-            )
-        }
-
-        uiState.optionsSource?.let { source ->
-            ItemOptionsBottomSheet(
-                title = source.title,
-                actions = listOf(
-                    ItemOptionAction(
-                        label = stringResource(R.string.source_options_edit),
-                        onClick = { viewModel.onEditSourceClick(source) },
-                    ),
-                    ItemOptionAction(
-                        label = stringResource(R.string.source_options_delete),
-                        style = ItemOptionStyle.Destructive,
-                        onClick = { viewModel.onDeleteSourceClick(source) },
-                    ),
-                ),
-                onDismiss = viewModel::onSourceOptionsDismiss,
-            )
-        }
-
-        uiState.optionsNote?.let { note ->
-            ItemOptionsBottomSheet(
-                title = note.title,
-                actions = listOf(
-                    ItemOptionAction(
-                        label = stringResource(R.string.note_options_view),
-                        onClick = viewModel::onViewNoteClick,
-                    ),
-                    ItemOptionAction(
-                        label = stringResource(R.string.note_options_edit),
-                        onClick = viewModel::onEditNoteClick,
-                    ),
-                    ItemOptionAction(
-                        label = stringResource(R.string.note_options_convert),
-                        onClick = viewModel::onConvertNoteClick,
-                    ),
-                    ItemOptionAction(
-                        label = stringResource(R.string.note_options_delete),
-                        style = ItemOptionStyle.Destructive,
-                        onClick = viewModel::onDeleteNoteClick,
-                    ),
-                ),
-                onDismiss = viewModel::onNoteOptionsDismiss,
-            )
-        }
-
-        if (uiState.showNotebookActions) {
-            ItemOptionsBottomSheet(
-                title = stringResource(R.string.notebook_actions_title),
-                actions = listOf(
-                    ItemOptionAction(
-                        label = stringResource(R.string.notebook_actions_copy),
-                        onClick = viewModel::onCopyNotebookClick,
-                    ),
-                    ItemOptionAction(
-                        label = stringResource(R.string.notebook_actions_export),
-                        onClick = viewModel::onExportNotebookClick,
-                    ),
-                ),
-                onDismiss = viewModel::onNotebookActionsDismiss,
-            )
-        }
-
-        if (uiState.showNotebookExport) {
-            ExportNotebookBottomSheet(
-                onDismiss = viewModel::onNotebookExportDismiss,
-                onExport = viewModel::onNotebookExportConfirm,
-            )
-        }
+        HomeOverlaySheets(
+            uiState = uiState,
+            showAddNoteSheet = showAddNoteSheet,
+            showConversationSheet = showConversationSheet,
+            showAnswerScopeSheet = showAnswerScopeSheet,
+            showSignOutConfirm = showSignOutConfirm,
+            onAddSourceSheetDismiss = viewModel::onAddSourceSheetDismiss,
+            onAddSourceSubmit = viewModel::onAddSourceSubmit,
+            onSortSelected = viewModel::onSortSelected,
+            onSortSheetDismiss = viewModel::onSortSheetDismiss,
+            onSourceProcessingDismiss = viewModel::onSourceProcessingDismiss,
+            onSourceProcessingOpenSource = viewModel::onSourceProcessingOpenSource,
+            onSourceProcessingAsk = viewModel::onSourceProcessingAsk,
+            onSourceProcessingRetry = viewModel::onSourceProcessingRetry,
+            onAddNoteSheetDismiss = { showAddNoteSheet = false },
+            onAddNoteSubmit = { title, content ->
+                viewModel.onAddNoteSubmit(title, content)
+            },
+            onAskSaveAsNoteDismiss = viewModel::onAskSaveAsNoteDismiss,
+            onAskSaveAsNoteConfirm = viewModel::onAskSaveAsNoteConfirm,
+            onAskCitationClick = viewModel::onAskCitationClick,
+            onConversationSheetDismiss = { showConversationSheet = false },
+            onNewConversation = viewModel::onNewConversation,
+            onAskScopeOptionSelected = viewModel::onAskScopeOptionSelected,
+            onAnswerScopeSheetDismiss = { showAnswerScopeSheet = false },
+            onCitationPreviewDismiss = viewModel::onCitationPreviewDismiss,
+            onCitationOpenInSource = viewModel::onCitationOpenInSource,
+            onEditSourceDismiss = viewModel::onEditSourceDismiss,
+            onEditSourceSave = viewModel::onEditSourceSave,
+            onDeleteSourceDismiss = viewModel::onDeleteSourceDismiss,
+            onDeleteSourceConfirm = viewModel::onDeleteSourceConfirm,
+            onViewNoteDismiss = viewModel::onViewNoteDismiss,
+            onConvertNoteClick = viewModel::onConvertNoteClick,
+            onEditNoteClick = viewModel::onEditNoteClick,
+            onEditNoteDismiss = viewModel::onEditNoteDismiss,
+            onEditNoteSave = viewModel::onEditNoteSave,
+            onDeleteNoteClick = viewModel::onDeleteNoteClick,
+            onConvertNoteDismiss = viewModel::onConvertNoteDismiss,
+            onConvertNoteCreate = viewModel::onConvertNoteCreate,
+            onDeleteNoteDismiss = viewModel::onDeleteNoteDismiss,
+            onDeleteNoteConfirm = viewModel::onDeleteNoteConfirm,
+            onSignOutConfirmDismiss = { showSignOutConfirm = false },
+            onSignOutConfirm = {
+                scope.launch {
+                    container.clearAuthSessionUseCase()
+                    onSignOut()
+                }
+            },
+            onEditSourceClick = viewModel::onEditSourceClick,
+            onDeleteSourceClick = viewModel::onDeleteSourceClick,
+            onSourceOptionsDismiss = viewModel::onSourceOptionsDismiss,
+            onViewNoteClick = viewModel::onViewNoteClick,
+            onNoteOptionsDismiss = viewModel::onNoteOptionsDismiss,
+            onCopyNotebookClick = viewModel::onCopyNotebookClick,
+            onExportNotebookClick = viewModel::onExportNotebookClick,
+            onNotebookActionsDismiss = viewModel::onNotebookActionsDismiss,
+            onNotebookExportDismiss = viewModel::onNotebookExportDismiss,
+            onNotebookExportConfirm = viewModel::onNotebookExportConfirm,
+        )
     }
 }
 
@@ -407,8 +271,14 @@ internal fun HomeContent(
     onTabSelected: (HomeTab) -> Unit,
     onAddClick: () -> Unit,
     onBackClick: () -> Unit,
-    onAskSubmit: () -> Unit,
+    onAskSubmit: (String) -> Unit,
+    onAskStop: () -> Unit = {},
+    onAskUserEnterAnimationFinished: (String) -> Unit = {},
     onScopeChipClick: () -> Unit,
+    onAskAddSourceClick: () -> Unit = {},
+    onAskSaveAsNote: (String) -> Unit = {},
+    onAskFeedback: (String, Boolean) -> Unit = { _, _ -> },
+    onAskCitationClick: (com.nus.folio.domain.model.AskCitation) -> Unit = {},
     onSourceMoreClick: (Source) -> Unit,
     onSourceClick: (Source) -> Unit,
     onNoteClick: (Note) -> Unit,
@@ -416,6 +286,9 @@ internal fun HomeContent(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val hideBottomNavForAskInput = isImeVisible && uiState.selectedTab == HomeTab.ASK
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -485,10 +358,22 @@ internal fun HomeContent(
                     uiState = uiState,
                     onRetry = onRetry,
                     onAskSubmit = onAskSubmit,
+                    onAskStop = onAskStop,
                     onScopeChipClick = onScopeChipClick,
+                    onAddSourceClick = onAskAddSourceClick,
+                    onSaveAsNote = onAskSaveAsNote,
+                    onFeedback = onAskFeedback,
+                    onCitationClick = onAskCitationClick,
+                    onUserEnterAnimationFinished = onAskUserEnterAnimationFinished,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(bottom = HomeBottomNavClearance),
+                        .then(
+                            if (hideBottomNavForAskInput) {
+                                Modifier.padding(bottom = HomeBottomNavClearance + 110.dp )
+                            } else {
+                                Modifier.padding(bottom = HomeBottomNavClearance )
+                            },
+                        ),
                 )
                 HomeTab.NOTES -> NotesPane(
                     uiState = uiState,
@@ -510,70 +395,16 @@ internal fun HomeContent(
             }
         }
 
-        HomeBottomNav(
-            selectedTab = uiState.selectedTab,
-            onTabSelected = onTabSelected,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun HomeFilterSortButton(
-    onClick: () -> Unit,
-    showActiveIndicator: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .clip(HomeCardShape)
-            .background(HomeSearchField)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_filter_sort),
-            contentDescription = stringResource(R.string.home_filter_sort),
-            tint = HomeSearchPlaceholder,
-            modifier = Modifier.size(20.dp),
-        )
-        if (showActiveIndicator) {
-            Box(
+        if (!hideBottomNavForAskInput) {
+            HomeBottomNav(
+                selectedTab = uiState.selectedTab,
+                onTabSelected = onTabSelected,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 10.dp, end = 10.dp)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(HomeFilterActiveDot),
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun SourceOpeningScreen(
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.48f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        BouncingDotsIndicator()
     }
 }
 
@@ -814,56 +645,6 @@ private fun HomeNotesSearchEmptyPreview() {
             onSignOut = {},
         )
     }
-}
-
-private fun HomeUserMessage.toHomeToastVisuals(context: android.content.Context): FolioToastVisuals {
-    val messageRes = when (this) {
-        HomeUserMessage.SOURCE_UPDATED -> R.string.toast_source_updated
-        HomeUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
-        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created
-        HomeUserMessage.SOURCE_UPDATE_FAILED -> R.string.toast_source_update_failed
-        HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
-        HomeUserMessage.SOURCE_RETRY_FAILED -> R.string.toast_source_retry_failed
-        HomeUserMessage.NOTE_UPDATED -> R.string.toast_note_updated
-        HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
-        HomeUserMessage.ASK_NOT_SUPPORTED -> R.string.home_ask_not_supported
-        HomeUserMessage.ADD_NOTE_NOT_SUPPORTED -> R.string.add_note_not_supported
-        HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_copy_not_supported
-        HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED -> R.string.notebook_export_not_supported
-        HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED -> R.string.note_edit_not_supported
-        HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED -> R.string.note_convert_not_supported
-        HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED -> R.string.note_delete_not_supported
-    }
-    val descriptionRes = when (this) {
-        HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created_description
-        else -> null
-    }
-    val style = when (this) {
-        HomeUserMessage.SOURCE_UPDATED,
-        HomeUserMessage.SOURCE_DELETED,
-        HomeUserMessage.SOURCE_CREATED,
-        HomeUserMessage.NOTE_UPDATED,
-        HomeUserMessage.NOTE_DELETED,
-        -> FolioToastStyle.Success
-        HomeUserMessage.ASK_NOT_SUPPORTED,
-        -> FolioToastStyle.Info
-        HomeUserMessage.ADD_NOTE_NOT_SUPPORTED,
-        HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED,
-        HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED,
-        HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED,
-        HomeUserMessage.CONVERT_NOTE_NOT_SUPPORTED,
-        -> FolioToastStyle.Warning
-        HomeUserMessage.SOURCE_UPDATE_FAILED,
-        HomeUserMessage.SOURCE_DELETE_FAILED,
-        HomeUserMessage.SOURCE_RETRY_FAILED,
-        HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED,
-        -> FolioToastStyle.Error
-    }
-    return FolioToastVisuals(
-        title = context.getString(messageRes),
-        description = descriptionRes?.let(context::getString),
-        style = style,
-    )
 }
 
 private fun HomeActionError.toStringRes(): Int = when (this) {
