@@ -28,8 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.model.SourceType
+import com.nus.folio.presentation.home.CitedAnswerContent
 import com.nus.folio.presentation.home.HomeBadgeShape
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.presentation.home.HomeUploadZoneShape
@@ -50,6 +53,7 @@ internal fun ViewNoteBottomSheet(
     onDismiss: () -> Unit,
     onConvertClick: () -> Unit = {},
     onEditClick: () -> Unit = {},
+    onCitationClick: (AskCitation) -> Unit = {},
 ) {
     AnimatedModalSheet(
         onDismiss = onDismiss,
@@ -61,6 +65,7 @@ internal fun ViewNoteBottomSheet(
             onConvertClick = { requestDismiss { onConvertClick() } },
             onEditClick = { requestDismiss { onEditClick() } },
             onCloseClick = { requestDismiss() },
+            onCitationClick = onCitationClick,
         )
     }
 }
@@ -71,6 +76,7 @@ private fun ViewNoteSheetContent(
     onConvertClick: () -> Unit,
     onEditClick: () -> Unit,
     onCloseClick: () -> Unit,
+    onCitationClick: (AskCitation) -> Unit = {},
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -105,7 +111,11 @@ private fun ViewNoteSheetContent(
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        ViewNoteContentBox(content = note.content)
+        ViewNoteContentBox(
+            content = note.content,
+            citations = note.citations,
+            onCitationClick = onCitationClick,
+        )
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -168,7 +178,11 @@ private fun ViewNoteBadge(label: String) {
 }
 
 @Composable
-private fun ViewNoteContentBox(content: String) {
+private fun ViewNoteContentBox(
+    content: String,
+    citations: List<AskCitation>,
+    onCitationClick: (AskCitation) -> Unit,
+) {
     val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
@@ -179,15 +193,27 @@ private fun ViewNoteContentBox(content: String) {
             .background(HomeReadOnlyFieldBackground)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(
-            text = content,
-            color = HomeTextPrimary,
-            fontSize = 15.sp,
-            lineHeight = 22.sp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(scrollState),
-        )
+        if (citations.isNotEmpty() || content.contains(Regex("""\[\d+\]"""))) {
+            CitedAnswerContent(
+                content = content,
+                citations = citations,
+                onCitationClick = onCitationClick,
+                interactiveCitations = citations.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState),
+            )
+        } else {
+            Text(
+                text = content,
+                color = HomeTextPrimary,
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState),
+            )
+        }
     }
 }
 
@@ -209,13 +235,22 @@ private fun ViewNoteSheetContentPreview() {
                     note = Note(
                         id = "3",
                         title = "Turing Test — Key Takeaways",
-                        content = "The imitation game reframes intelligence as observable linguistic behavior.",
+                        content = "The imitation game reframes intelligence as observable linguistic behavior [1].",
                         project = "Dissertation Research",
                         updatedLabel = "Updated 3d ago",
                         isPinned = false,
                         spaceId = "1",
                         origin = NoteOrigin.SAVED_ANSWER,
-                        citationCount = 4,
+                        citationCount = 1,
+                        citations = listOf(
+                            AskCitation(
+                                index = 1,
+                                sourceId = "1",
+                                sourceTitle = "Computing Machinery",
+                                sourceType = SourceType.FILE,
+                                locationLabel = "Page 14",
+                            ),
+                        ),
                     ),
                     onConvertClick = {},
                     onEditClick = {},

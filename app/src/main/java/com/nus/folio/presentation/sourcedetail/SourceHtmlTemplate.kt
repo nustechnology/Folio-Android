@@ -98,6 +98,14 @@ internal object SourceHtmlTemplate {
             line-height: 1.6;
             color: #3D3429;
         }
+        mark.folio-citation-highlight,
+        #folio-citation-highlight {
+            background: #F6E7A1;
+            color: inherit;
+            padding: 0 2px;
+            border-radius: 2px;
+            scroll-margin-top: 35vh;
+        }
     """.trimIndent()
 
     private val documentStyles = ""

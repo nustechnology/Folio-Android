@@ -24,9 +24,11 @@ import kotlinx.coroutines.sync.withLock
  * terminal processing events share one coherent view. On HTTP 401, refreshes once and retries.
  */
 class SourceDataSource(
-    private val sourcesApi: SourcesApi = SourcesApiClient(),
     private val accessTokenProvider: () -> String? = { null },
     private val refreshAccessToken: suspend () -> String? = { null },
+    private val sourcesApi: SourcesApi = SourcesApiClient(
+        refreshAccessToken = refreshAccessToken,
+    ),
 ) {
 
     private val mutex = Mutex()

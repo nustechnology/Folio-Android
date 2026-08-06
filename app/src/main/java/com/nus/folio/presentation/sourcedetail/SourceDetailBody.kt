@@ -1,0 +1,171 @@
+package com.nus.folio.presentation.sourcedetail
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nus.folio.R
+import com.nus.folio.domain.model.SourceContentFormat
+import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceSheetTab
+import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.presentation.home.HomeCardShape
+import com.nus.folio.ui.theme.HomeCardBackground
+import com.nus.folio.ui.theme.HomeCardBorder
+import com.nus.folio.ui.theme.HomeTextPrimary
+import com.nus.folio.ui.theme.HomeTextSecondary
+
+@Composable
+internal fun SourceDetailBody(
+    detail: SourceDetail,
+    selectedSheetIndex: Int,
+    isContentLoading: Boolean,
+    isRetrying: Boolean,
+    highlightText: String?,
+    onSheetSelected: (Int) -> Unit,
+    onRetryProcessing: () -> Unit,
+) {
+    when (detail.status) {
+        SourceStatus.PROCESSING -> {
+            SourceDetailProcessingState()
+        }
+        SourceStatus.FAILED -> {
+            SourceDetailFailedState(
+                isRetrying = isRetrying,
+                onRetry = onRetryProcessing,
+            )
+        }
+        SourceStatus.READY -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+            ) {
+                if (!isContentLoading &&
+                    detail.contentFormat == SourceContentFormat.SHEET &&
+                    detail.sheets.size > 1
+                ) {
+                    SheetTabSelector(
+                        sheets = detail.sheets,
+                        selectedIndex = selectedSheetIndex,
+                        onSheetSelected = onSheetSelected,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (isContentLoading) {
+                    SourceDetailHtmlLoading()
+                } else {
+                    val htmlBody = when (detail.contentFormat) {
+                        SourceContentFormat.SHEET -> {
+                            detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
+                                ?: detail.htmlContent.orEmpty()
+                        }
+                        else -> detail.htmlContent.orEmpty()
+                    }
+
+                    SourceHtmlRenderer(
+                        htmlBody = htmlBody,
+                        contentFormat = detail.contentFormat,
+                        highlightText = highlightText,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(HomeCardShape)
+                            .background(HomeCardBackground)
+                            .border(1.dp, HomeCardBorder, HomeCardShape)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetTabSelector(
+    sheets: List<SourceSheetTab>,
+    selectedIndex: Int,
+    onSheetSelected: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedSheet = sheets.getOrNull(selectedIndex)
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(HomeCardShape)
+                .background(HomeCardBackground)
+                .border(1.dp, HomeCardBorder, HomeCardShape)
+                .clickable { expanded = true }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.source_detail_sheet_label),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = HomeTextSecondary,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = selectedSheet?.name.orEmpty(),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextPrimary,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = HomeTextSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            sheets.forEachIndexed { index, sheet ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = sheet.name,
+                            fontWeight = if (index == selectedIndex) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSheetSelected(index)
+                    },
+                )
+            }
+        }
+    }
+}

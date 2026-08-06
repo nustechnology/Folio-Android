@@ -147,10 +147,10 @@ internal object FolioHttp {
     )
 
     /**
-     * JSON update via POST with header `X-HTTP-Method-Override: PATCH`.
+     * JSON update with wire method PATCH.
      *
-     * Do not call [HttpURLConnection.setRequestMethod] with `"PATCH"`: on API 24
-     * that throws [java.net.ProtocolException], so source/space updates would fail.
+     * [HttpURLConnection.setRequestMethod] rejects `"PATCH"` on some API levels;
+     * [open] applies a reflection fallback so the request still goes out as PATCH.
      */
     fun <T> patchJson(
         url: String,
@@ -162,9 +162,9 @@ internal object FolioHttp {
         mapError: (body: String, code: Int, label: String) -> Throwable = ::unauthorizedOrIo,
         parse: (Response) -> T,
     ): T = execute(
-        method = "POST",
+        method = "PATCH",
         url = url,
-        headers = patchOverrideHeaders(accessToken),
+        headers = jsonContentHeaders(accessToken),
         connectTimeoutMs = connectTimeoutMs,
         readTimeoutMs = readTimeoutMs,
         writeBody = { write(jsonBody.toByteArray(Charsets.UTF_8)) },
@@ -174,10 +174,6 @@ internal object FolioHttp {
         mapError = mapError,
         parse = parse,
     )
-
-    /** Headers for [patchJson]: JSON body + method override (never wire PATCH). */
-    internal fun patchOverrideHeaders(accessToken: String? = null): Map<String, String> =
-        jsonContentHeaders(accessToken) + ("X-HTTP-Method-Override" to "PATCH")
 
     fun <T> postEmpty(
         url: String,
@@ -258,17 +254,63 @@ internal object FolioHttp {
         readTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
         doOutput: Boolean = false,
     ): HttpURLConnection {
-        require(method.uppercase(Locale.US) != "PATCH") {
-            "HttpURLConnection rejects PATCH on API 24; use POST with X-HTTP-Method-Override"
-        }
         requireHttpsForCredentialedRequest(url, headers)
         return (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
+            setRequestMethodCompat(method)
             connectTimeout = connectTimeoutMs
             readTimeout = readTimeoutMs
             doInput = true
             this.doOutput = doOutput
             headers.forEach { (key, value) -> setRequestProperty(key, value) }
+        }
+    }
+
+    /**
+     * Sets the HTTP method, including PATCH which [HttpURLConnection.setRequestMethod]
+     * rejects on older Android runtimes (ProtocolException on API 24).
+     */
+    internal fun HttpURLConnection.setRequestMethodCompat(method: String) {
+        val normalized = method.uppercase(Locale.US)
+        try {
+            requestMethod = normalized
+            return
+        } catch (_: java.net.ProtocolException) {
+            // Fall through to reflection for PATCH / other non-enumerated methods.
+        }
+        forceRequestMethod(this, normalized)
+    }
+
+    private fun forceRequestMethod(connection: HttpURLConnection, method: String) {
+        val targets = mutableListOf<Any>(connection)
+        try {
+            val delegateField = connection.javaClass.getDeclaredField("delegate")
+            delegateField.isAccessible = true
+            delegateField.get(connection)?.let { targets += it }
+        } catch (_: ReflectiveOperationException) {
+            // JDK modules / non-HTTPS wrappers may block delegate access.
+        } catch (_: RuntimeException) {
+            // InaccessibleObjectException / SecurityException without --add-opens.
+        }
+        var applied = false
+        for (target in targets) {
+            var type: Class<*>? = target.javaClass
+            while (type != null) {
+                try {
+                    val methodField = type.getDeclaredField("method")
+                    methodField.isAccessible = true
+                    methodField.set(target, method)
+                    applied = true
+                    break
+                } catch (_: ReflectiveOperationException) {
+                    type = type.superclass
+                } catch (_: RuntimeException) {
+                    // InaccessibleObjectException / SecurityException without --add-opens.
+                    type = type.superclass
+                }
+            }
+        }
+        if (!applied) {
+            throw java.net.ProtocolException("Unsupported HTTP method: $method")
         }
     }
 

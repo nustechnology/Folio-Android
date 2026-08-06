@@ -42,8 +42,18 @@ object FolioDestination {
     fun home(spaceId: String, spaceTitle: String = ""): String =
         "$HOME/${Uri.encode(spaceId)}?title=${Uri.encode(spaceTitle)}"
 
-    fun sourceDetail(spaceId: String, sourceId: String): String =
-        "$SOURCE_DETAIL/${Uri.encode(sourceId)}?spaceId=${Uri.encode(spaceId)}"
+    fun sourceDetail(
+        spaceId: String,
+        sourceId: String,
+        highlightText: String? = null,
+    ): String {
+        val base = "$SOURCE_DETAIL/${Uri.encode(sourceId)}?spaceId=${Uri.encode(spaceId)}"
+        return if (highlightText.isNullOrBlank()) {
+            base
+        } else {
+            "$base&highlight=${Uri.encode(highlightText)}"
+        }
+    }
 }
 
 /** Pops only when there is a destination underneath; avoids an empty (blank) NavHost. */
@@ -170,11 +180,12 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                         navController.popBackStackOrIgnore()
                     }
                 },
-                onNavigateToSourceDetail = { sourceId ->
+                onNavigateToSourceDetail = { sourceId, highlightText ->
                     navController.navigate(
                         FolioDestination.sourceDetail(
                             spaceId = entry.arguments?.getString("spaceId").orEmpty(),
                             sourceId = sourceId,
+                            highlightText = highlightText,
                         ),
                     )
                 },
@@ -194,15 +205,22 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(
-            route = "${FolioDestination.SOURCE_DETAIL}/{sourceId}?spaceId={spaceId}",
+            route = "${FolioDestination.SOURCE_DETAIL}/{sourceId}?spaceId={spaceId}&highlight={highlight}",
             arguments = listOf(
                 navArgument("sourceId") { type = NavType.StringType },
                 navArgument("spaceId") { type = NavType.StringType },
+                navArgument("highlight") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                    nullable = true
+                },
             ),
         ) { entry ->
             SourceDetailScreen(
                 spaceId = entry.arguments?.getString("spaceId").orEmpty(),
                 sourceId = entry.arguments?.getString("sourceId").orEmpty(),
+                highlightText = entry.arguments?.getString("highlight").orEmpty()
+                    .takeIf { it.isNotBlank() },
                 onBackClick = { navController.popBackStackOrIgnore() },
                 onAskSourceClick = {
                     val sourceId = entry.arguments?.getString("sourceId").orEmpty()

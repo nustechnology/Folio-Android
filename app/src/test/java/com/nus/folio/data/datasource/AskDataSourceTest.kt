@@ -26,4 +26,19 @@ class AskDataSourceTest {
         assertEquals("Week 7 lecture prep", topics.first().title)
         assertTrue(topics.all { it.spaceId == "4" })
     }
+
+    @Test
+    fun `fetchSuggestedQuestions returns context-aware questions`() = runTest {
+        val suggestions = dataSource.fetchSuggestedQuestions("1")
+
+        assertEquals(3, suggestions.size)
+        assertTrue(suggestions.first().contains("Turing"))
+    }
+
+    @Test
+    fun `fetchSuggestedQuestions returns empty when metadata missing`() = runTest {
+        val suggestions = dataSource.fetchSuggestedQuestions("10")
+
+        assertTrue(suggestions.isEmpty())
+    }
 }

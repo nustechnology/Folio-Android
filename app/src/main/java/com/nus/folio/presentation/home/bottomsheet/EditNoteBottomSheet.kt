@@ -152,15 +152,6 @@ private fun EditNoteSheetContent(
     }
 }
 
-private fun Context.findActivityOrNull(): Activity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is Activity) return current
-        current = current.baseContext
-    }
-    return current as? Activity
-}
-
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
 @Composable
 private fun EditNoteSheetContentPreview() {

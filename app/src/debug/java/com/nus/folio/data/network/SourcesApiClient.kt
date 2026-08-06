@@ -10,28 +10,19 @@ import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.DataOutputStream
 import java.io.IOException
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
 
 interface SourcesApi {
     suspend fun listSources(
@@ -114,6 +105,7 @@ class SourcesApiClient(
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val multipartBoundaryFactory: () -> String = ::randomMultipartBoundary,
     private val delayMillis: suspend (Long) -> Unit = { delay(it) },
+    private val refreshAccessToken: suspend () -> String? = { null },
 ) : SourcesApi {
 
     override suspend fun listSources(
@@ -145,7 +137,7 @@ class SourcesApiClient(
             connectTimeoutMs = TIMEOUT_MS,
             readTimeoutMs = TIMEOUT_MS,
             failureLabel = "Get sources",
-            parse = { response -> parseSourcesList(response.body) },
+            parse = { response -> SourcesJsonParsers.parseSourcesList(response.body, nowMillis()) },
         )
     }
 
@@ -159,7 +151,9 @@ class SourcesApiClient(
             connectTimeoutMs = TIMEOUT_MS,
             readTimeoutMs = TIMEOUT_MS,
             failureLabel = "Get source",
-            parse = { response -> parseSourceDetailResponse(response.body, nowMillis()) },
+            parse = { response ->
+                SourcesJsonParsers.parseSourceDetailResponse(response.body, nowMillis())
+            },
         )
     }
 
@@ -206,7 +200,6 @@ class SourcesApiClient(
     ): Source = withContext(Dispatchers.IO) {
         val boundary = chooseMultipartBoundary(fileBytes, multipartBoundaryFactory)
         val url = FolioApiPaths.sources(baseUrl)
-        val resolvedMimeType = sanitizeMultipartMimeType(mimeType)
         val connection = FolioHttp.open(
             method = "POST",
             url = url,
@@ -216,18 +209,6 @@ class SourcesApiClient(
             readTimeoutMs = TIMEOUT_MS,
             doOutput = true,
         )
-        // Avoid buffering the full body in memory (fileBytes can be up to 50 MiB).
-        connection.setFixedLengthStreamingMode(
-            multipartBodyContentLength(
-                boundary = boundary,
-                spaceId = spaceId,
-                title = title,
-                author = author,
-                fileName = fileName,
-                mimeType = resolvedMimeType,
-                fileBytesSize = fileBytes.size,
-            ),
-        )
 
         var responseLogged = false
         try {
@@ -236,8 +217,20 @@ class SourcesApiClient(
                 url = url,
                 body = "multipart: spaceId=$spaceId, sourceType=$SOURCE_TYPE_FILE, " +
                     "title=$title, author=$author, fileName=$fileName, " +
-                    "mimeType=$resolvedMimeType, fileBytes=${fileBytes.size}",
+                    "mimeType=$mimeType, fileBytes=${fileBytes.size}",
                 contentType = "multipart/form-data",
+            )
+            val resolvedMimeType = mimeType.ifBlank { "application/octet-stream" }
+            connection.setFixedLengthStreamingMode(
+                multipartBodyContentLength(
+                    boundary = boundary,
+                    spaceId = spaceId,
+                    title = title,
+                    author = author,
+                    fileName = fileName,
+                    mimeType = resolvedMimeType,
+                    fileBytesSize = fileBytes.size,
+                ),
             )
             DataOutputStream(connection.outputStream).use { output ->
                 writeFormField(output, boundary, "spaceId", spaceId)
@@ -265,7 +258,7 @@ class SourcesApiClient(
             if (code !in 200..299) {
                 throw FolioHttp.unauthorizedOrIo(responseBody, code, "Create source")
             }
-            parseCreatedSource(responseBody)
+            SourcesJsonParsers.parseCreatedSource(responseBody, nowMillis())
         } catch (error: Throwable) {
             if (!responseLogged) {
                 HttpDebugLogger.logError(method = "POST", url = url, error = error)
@@ -290,7 +283,9 @@ class SourcesApiClient(
                 if (response.body.isBlank()) {
                     null
                 } else {
-                    runCatching { parseSourceDetailResponse(response.body, nowMillis()) }.getOrNull()
+                    runCatching {
+                        SourcesJsonParsers.parseSourceDetailResponse(response.body, nowMillis())
+                    }.getOrNull()
                 }
             },
         )
@@ -329,7 +324,9 @@ class SourcesApiClient(
             connectTimeoutMs = TIMEOUT_MS,
             readTimeoutMs = TIMEOUT_MS,
             failureLabel = "Update source",
-            parse = { response -> parseUpdatedSource(response.body) },
+            parse = { response ->
+                SourcesJsonParsers.parseUpdatedSource(response.body, nowMillis())
+            },
         )
     }
 
@@ -352,232 +349,19 @@ class SourcesApiClient(
                         response.code,
                         "Get source preview",
                     )
-                    else -> parsePreviewUrl(response.body)
+                    else -> SourcesJsonParsers.parsePreviewUrl(response.body)
                 }
             },
         )
     }
 
-    /**
-     * SSE status stream. Uses an unlimited channel so a one-shot READY/FAILED is never
-     * dropped when the collector is briefly slower than the producer ([trySend] on the
-     * default bounded [callbackFlow] buffer would discard and leave UI stuck processing).
-     */
-    override fun observeSourceStatus(accessToken: String): Flow<SourceProcessingEvent> = callbackFlow {
-        val url = FolioApiPaths.sourcesStatus(baseUrl)
-        val activeConnection = AtomicReference<HttpURLConnection?>(null)
-
-        suspend fun emitSourceStatusEvent(event: SourceProcessingEvent, lastEventId: String) {
-            HttpDebugLogger.logEvent(
-                "SSE source status: sourceId=${event.sourceId} " +
-                    "state=${event.state} progress=${event.progress}" +
-                    lastEventId.takeIf { it.isNotEmpty() }
-                        ?.let { " id=$it" }
-                        .orEmpty(),
-            )
-            // Suspending send never drops; pairs with .buffer(UNLIMITED) below.
-            send(event)
-        }
-
-        val readerJob = launch(Dispatchers.IO) {
-            var reconnectAttempt = 0
-            // EventSource "last event ID buffer" — sent as Last-Event-ID on reconnect.
-            var lastEventId = ""
-            while (isActive) {
-                var responseLogged = false
-                val connection = try {
-                    FolioHttp.open(
-                        method = "GET",
-                        url = url,
-                        headers = FolioHttp.jsonAcceptHeaders(accessToken) + buildMap {
-                            put("Accept", "text/event-stream")
-                            put("Cache-Control", "no-cache")
-                            if (lastEventId.isNotEmpty()) {
-                                put("Last-Event-ID", lastEventId)
-                            }
-                        },
-                        connectTimeoutMs = TIMEOUT_MS,
-                        readTimeoutMs = 0, // keep SSE connection open
-                    )
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (error: Throwable) {
-                    HttpDebugLogger.logError(method = "GET", url = url, error = error)
-                    if (!scheduleSseReconnect(
-                            reconnectAttempt = ++reconnectAttempt,
-                            reason = error.message ?: error.javaClass.simpleName,
-                            lastEventId = lastEventId,
-                        )
-                    ) {
-                        close(error)
-                        return@launch
-                    }
-                    continue
-                }
-                activeConnection.set(connection)
-                var streamOpenedAtMs: Long? = null
-                try {
-                    HttpDebugLogger.logRequest(
-                        method = "GET",
-                        url = url,
-                        body = lastEventId.takeIf { it.isNotEmpty() }
-                            ?.let { "Last-Event-ID=$it" },
-                        contentType = "text/event-stream",
-                    )
-                    val code = connection.responseCode
-                    if (code !in 200..299) {
-                        val responseBody = FolioHttp.readBody(connection.errorStream)
-                        HttpDebugLogger.logResponse(
-                            method = "GET",
-                            url = url,
-                            code = code,
-                            body = responseBody,
-                        )
-                        responseLogged = true
-                        val error = FolioHttp.unauthorizedOrIo(
-                            responseBody,
-                            code,
-                            "Source status stream",
-                        )
-                        // Auth failures must surface so callers can refresh; do not reconnect.
-                        if (error is UnauthorizedException) {
-                            close(error)
-                            return@launch
-                        }
-                        if (!scheduleSseReconnect(
-                                reconnectAttempt = ++reconnectAttempt,
-                                reason = "HTTP $code",
-                                lastEventId = lastEventId,
-                            )
-                        ) {
-                            close(error)
-                            return@launch
-                        }
-                        continue
-                    }
-                    HttpDebugLogger.logResponse(
-                        method = "GET",
-                        url = url,
-                        code = code,
-                        body = "SSE stream opened",
-                    )
-                    responseLogged = true
-                    // Do not reset reconnectAttempt on open alone — a flapping server
-                    // that accepts then closes immediately would never exhaust the budget.
-                    streamOpenedAtMs = nowMillis()
-                    BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { reader ->
-                        val dataLines = mutableListOf<String>()
-                        while (isActive) {
-                            val line = reader.readLine() ?: break
-                            when {
-                                line.startsWith("data:") -> {
-                                    dataLines += line.removePrefix("data:").trimStart()
-                                }
-                                line.startsWith("id:") -> {
-                                    // Update the last-event-id buffer immediately (EventSource spec).
-                                    parseSseIdFieldValue(line)?.let { lastEventId = it }
-                                }
-                                line.startsWith(":") ||
-                                    line.startsWith("event:") ||
-                                    line.startsWith("retry:") -> {
-                                    // ignore SSE comments / unused fields
-                                }
-                                line.isEmpty() -> {
-                                    val payload = dataLines.joinToString("\n").trim()
-                                    dataLines.clear()
-                                    parseSseDataPayload(payload)?.let { event ->
-                                        emitSourceStatusEvent(event, lastEventId)
-                                        // A delivered event proves the stream is healthy.
-                                        reconnectAttempt = 0
-                                    }
-                                }
-                            }
-                        }
-                        // SSE only dispatches on a blank-line terminator. Leftover
-                        // dataLines after EOF are a truncated event — discard them.
-                        if (dataLines.isNotEmpty()) {
-                            HttpDebugLogger.logEvent(
-                                "SSE discarded incomplete event at end of stream " +
-                                    "(${dataLines.size} data line(s))",
-                            )
-                            dataLines.clear()
-                        }
-                    }
-                    if (!isActive) return@launch
-                    reconnectAttempt = nextSseReconnectAttempt(
-                        currentAttempt = reconnectAttempt,
-                        openedAtMs = streamOpenedAtMs,
-                        nowMs = nowMillis(),
-                    )
-                    if (!scheduleSseReconnect(
-                            reconnectAttempt = reconnectAttempt,
-                            reason = "stream ended",
-                            lastEventId = lastEventId,
-                        )
-                    ) {
-                        close()
-                        return@launch
-                    }
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (error: Throwable) {
-                    if (!responseLogged) {
-                        HttpDebugLogger.logError(method = "GET", url = url, error = error)
-                    }
-                    if (error is UnauthorizedException) {
-                        close(error)
-                        return@launch
-                    }
-                    if (!isActive) return@launch
-                    reconnectAttempt = nextSseReconnectAttempt(
-                        currentAttempt = reconnectAttempt,
-                        openedAtMs = streamOpenedAtMs,
-                        nowMs = nowMillis(),
-                    )
-                    if (!scheduleSseReconnect(
-                            reconnectAttempt = reconnectAttempt,
-                            reason = error.message ?: error.javaClass.simpleName,
-                            lastEventId = lastEventId,
-                        )
-                    ) {
-                        close(error)
-                        return@launch
-                    }
-                } finally {
-                    connection.disconnect()
-                    activeConnection.compareAndSet(connection, null)
-                }
-            }
-        }
-
-        awaitClose {
-            readerJob.cancel()
-            activeConnection.getAndSet(null)?.disconnect()
-        }
-    }.buffer(Channel.UNLIMITED)
-
-    private suspend fun scheduleSseReconnect(
-        reconnectAttempt: Int,
-        reason: String,
-        lastEventId: String = "",
-    ): Boolean {
-        if (reconnectAttempt > MAX_SSE_RECONNECT_ATTEMPTS) {
-            HttpDebugLogger.logEvent(
-                "SSE reconnect exhausted after $MAX_SSE_RECONNECT_ATTEMPTS attempts ($reason)",
-            )
-            return false
-        }
-        val waitMs = sseBackoffMillis(reconnectAttempt)
-        val lastIdSuffix = lastEventId.takeIf { it.isNotEmpty() }
-            ?.let { " lastEventId=$it" }
-            .orEmpty()
-        HttpDebugLogger.logEvent(
-            "SSE reconnect attempt=$reconnectAttempt/$MAX_SSE_RECONNECT_ATTEMPTS " +
-                "delayMs=$waitMs ($reason)$lastIdSuffix",
+    override fun observeSourceStatus(accessToken: String): Flow<SourceProcessingEvent> =
+        SourcesSseClient.observeSourceStatus(
+            accessToken = accessToken,
+            baseUrl = baseUrl,
+            refreshAccessToken = refreshAccessToken,
+            delayMillis = delayMillis,
         )
-        delayMillis(waitMs)
-        return true
-    }
 
     private fun createSource(accessToken: String, body: JSONObject): Source =
         FolioHttp.postJson(
@@ -587,40 +371,8 @@ class SourcesApiClient(
             connectTimeoutMs = TIMEOUT_MS,
             readTimeoutMs = TIMEOUT_MS,
             failureLabel = "Create source",
-            parse = { response -> parseCreatedSource(response.body) },
+            parse = { response -> SourcesJsonParsers.parseCreatedSource(response.body, nowMillis()) },
         )
-
-    private fun parseCreatedSource(responseBody: String): Source =
-        parseSourcePayload(responseBody, failureLabel = "Create source")
-
-    private fun parseUpdatedSource(responseBody: String): Source =
-        parseSourcePayload(responseBody, failureLabel = "Update source")
-
-    private fun parseSourcePayload(responseBody: String, failureLabel: String): Source {
-        if (responseBody.isBlank()) {
-            throw IOException("$failureLabel failed: empty response")
-        }
-        val root = JSONObject(responseBody)
-        val sourceJson = root.optJSONObject("data")?.optJSONObject("source")
-            ?: root.optJSONObject("source")
-            ?: throw IOException("$failureLabel failed: missing source payload")
-        return parseSource(sourceJson, nowMillis())
-    }
-
-    private fun parseSourcesList(responseBody: String): List<Source> {
-        if (responseBody.isBlank()) return emptyList()
-        val root = JSONObject(responseBody)
-        val sourcesArray = root.optJSONObject("data")?.optJSONArray("sources")
-            ?: root.optJSONArray("sources")
-            ?: JSONArray()
-        val now = nowMillis()
-        return buildList {
-            for (index in 0 until sourcesArray.length()) {
-                val item = sourcesArray.optJSONObject(index) ?: continue
-                add(parseSource(item, now))
-            }
-        }
-    }
 
     private fun writeFormField(
         output: DataOutputStream,

@@ -37,7 +37,7 @@ internal val AskSparkleCircleShape = CircleShape
 internal val AskButtonBackground = Color(0xFF2D3E4E)
 internal val AskSourceChipBackground = Color(0xFFE8EEF2)
 internal val AskSparkleBorder = Color(0xFFD9D9D9)
-internal val AskInputMinHeight = 88.dp
+internal val AskInputMinHeight = 24.dp
 internal val AskInputMaxHeight = 176.dp
 
 internal data class SourceTypeBadgeColors(
