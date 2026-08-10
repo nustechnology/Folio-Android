@@ -21,6 +21,7 @@ import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
@@ -85,6 +86,7 @@ class HomeViewModelTest {
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
             streamAskAnswerUseCase = StreamAskAnswerUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
+            getNoteDetailUseCase = GetNoteDetailUseCase(noteRepository),
             createNoteUseCase = CreateNoteUseCase(noteRepository),
             updateNoteUseCase = UpdateNoteUseCase(noteRepository),
             deleteNoteUseCase = DeleteNoteUseCase(noteRepository),
@@ -275,11 +277,16 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onSearchQueryChange filters notes by title`() {
-        val viewModel = createViewModel()
+    fun `onSearchQueryChange filters notes by title`() = runTest {
+        val viewModel = createViewModel(searchDebounceMs = 0L)
+        viewModel.onTabSelected(HomeTab.NOTES)
+        val loadsBefore = noteRepository.getNotesCallCount
 
         viewModel.onSearchQueryChange("Literature")
+        advanceUntilIdle()
 
+        assertEquals("Literature", noteRepository.lastSearch)
+        assertEquals(loadsBefore + 1, noteRepository.getNotesCallCount)
         assertEquals(1, viewModel.uiState.value.visibleNotes.size)
         assertEquals("Literature Review Outline", viewModel.uiState.value.visibleNotes.first().title)
     }
@@ -355,6 +362,20 @@ class HomeViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
         assertFalse(viewModel.uiState.value.isRefreshingSources)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
+    }
+
+    @Test
+    fun `onRefreshNotes reloads notes without full-screen loading`() {
+        val viewModel = createViewModel()
+        assertFalse(viewModel.uiState.value.isLoading)
+        val loadsBefore = noteRepository.getNotesCallCount
+
+        viewModel.onRefreshNotes()
+
+        assertEquals(loadsBefore + 1, noteRepository.getNotesCallCount)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertFalse(viewModel.uiState.value.isRefreshingNotes)
+        assertTrue(viewModel.uiState.value.visibleNotes.isNotEmpty())
     }
 
     @Test
@@ -1233,60 +1254,75 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onNoteClick shows view note sheet`() {
+    fun `onNoteClick shows view note sheet`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
 
         viewModel.onNoteClick(note)
+        advanceUntilIdle()
 
-        assertEquals(note, viewModel.uiState.value.viewingNote)
+        assertEquals(note.id, viewModel.uiState.value.viewingNote?.id)
+        assertEquals(1, noteRepository.getNoteCallCount)
+        assertEquals(note.id, noteRepository.lastNoteId)
+        assertFalse(viewModel.uiState.value.isLoadingNoteDetail)
     }
 
     @Test
-    fun `onViewNoteClick opens view sheet from options`() {
+    fun `onViewNoteClick opens view sheet from options`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteOptionsClick(note)
 
         viewModel.onViewNoteClick()
+        advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.optionsNote)
-        assertEquals(note, viewModel.uiState.value.viewingNote)
+        assertEquals(note.id, viewModel.uiState.value.viewingNote?.id)
+        assertEquals(1, noteRepository.getNoteCallCount)
     }
 
     @Test
-    fun `onEditNoteClick opens edit sheet from viewing note`() {
+    fun `onEditNoteClick opens edit sheet from viewing note`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
+        advanceUntilIdle()
 
         viewModel.onEditNoteClick()
+        advanceUntilIdle()
 
-        assertEquals(note, viewModel.uiState.value.viewingNote)
-        assertEquals(note, viewModel.uiState.value.editingNote)
+        assertEquals(note.id, viewModel.uiState.value.viewingNote?.id)
+        assertEquals(note.id, viewModel.uiState.value.editingNote?.id)
+        assertTrue(noteRepository.getNoteCallCount >= 2)
     }
 
     @Test
-    fun `onEditNoteDismiss clears editing and viewing note`() {
+    fun `onEditNoteDismiss clears editing and viewing note`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
+        advanceUntilIdle()
         viewModel.onEditNoteClick()
+        advanceUntilIdle()
 
         viewModel.onEditNoteDismiss()
 
         assertNull(viewModel.uiState.value.editingNote)
         assertNull(viewModel.uiState.value.viewingNote)
+        assertFalse(viewModel.uiState.value.isLoadingNoteDetail)
     }
 
     @Test
-    fun `onEditNoteSave updates note title and content`() {
+    fun `onEditNoteSave updates note title and content`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
+        advanceUntilIdle()
         viewModel.onEditNoteClick()
+        advanceUntilIdle()
 
         viewModel.onEditNoteSave("Updated title", "Updated content")
+        advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.editingNote)
         val updated = viewModel.uiState.value.allNotes.first { it.id == note.id }
@@ -1300,14 +1336,17 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onEditNoteSave keeps list unchanged when update fails`() {
+    fun `onEditNoteSave keeps list unchanged when update fails`() = runTest {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
+        advanceUntilIdle()
         viewModel.onEditNoteClick()
+        advanceUntilIdle()
         noteRepository.updateNoteResult = Result.failure(IllegalStateException("offline"))
 
         viewModel.onEditNoteSave("Updated title", "Updated content")
+        advanceUntilIdle()
 
         assertEquals(HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
         val unchanged = viewModel.uiState.value.allNotes.first { it.id == note.id }
@@ -1423,6 +1462,79 @@ class HomeViewModelTest {
 
         assertNull(viewModel.uiState.value.convertingNote)
         assertNull(viewModel.uiState.value.viewingNote)
+    }
+
+    @Test
+    fun `onConvertNoteCreate posts manual source with snapshot and current user author`() {
+        authRepository.seedSession(
+            AuthSession(email = "ada@folio.app", displayName = "Ada Lovelace"),
+        )
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onConvertNoteClick()
+        val beforeCount = viewModel.uiState.value.allCount
+
+        viewModel.onConvertNoteCreate(
+            title = "Converted note title",
+            snapshot = "Snapshot body preserved from the note.",
+        )
+
+        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Manual
+        assertEquals("1", request.spaceId)
+        assertEquals("Converted note title", request.title)
+        assertEquals("Snapshot body preserved from the note.", request.content)
+        assertEquals("Ada Lovelace", request.author)
+        assertEquals(1, sourceRepository.createSourceCallCount)
+        assertNull(viewModel.uiState.value.convertingNote)
+        assertNull(viewModel.uiState.value.viewingNote)
+        assertEquals("Converted note title", viewModel.uiState.value.processingSourceTitle)
+        assertEquals(SourceProcessingState.ADDED, viewModel.uiState.value.processingState)
+        assertEquals(HomeUserMessage.SOURCE_CREATED, viewModel.uiState.value.userMessage)
+        assertFalse(viewModel.uiState.value.isCreatingSource)
+        assertEquals(beforeCount + 1, viewModel.uiState.value.allCount)
+        assertEquals(1, sourceRepository.observeSourceProcessingCallCount)
+    }
+
+    @Test
+    fun `onConvertNoteCreate uses email local part when display name blank`() {
+        authRepository.seedSession(
+            AuthSession(email = "ada@folio.app", displayName = "  "),
+        )
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onConvertNoteClick()
+
+        viewModel.onConvertNoteCreate(
+            title = "Title",
+            snapshot = "Enough snapshot content for create.",
+        )
+
+        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Manual
+        assertEquals("ada", request.author)
+    }
+
+    @Test
+    fun `onConvertNoteCreate shows action error when create fails`() {
+        sourceRepository.createSourceResult = Result.failure(IllegalStateException("boom"))
+        authRepository.seedSession(
+            AuthSession(email = "ada@folio.app", displayName = "Ada Lovelace"),
+        )
+        val viewModel = createViewModel()
+        val note = viewModel.uiState.value.visibleNotes.first()
+        viewModel.onNoteClick(note)
+        viewModel.onConvertNoteClick()
+
+        viewModel.onConvertNoteCreate(
+            title = "Title",
+            snapshot = "Enough snapshot content for create.",
+        )
+
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
+        assertNull(viewModel.uiState.value.processingSourceId)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertFalse(viewModel.uiState.value.isCreatingSource)
     }
 
     @Test

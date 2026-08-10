@@ -1,5 +1,6 @@
 package com.nus.folio.data.datasource
 
+import com.nus.folio.domain.model.CreateNoteRequest
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -53,5 +54,21 @@ class NoteDataSourceTest {
 
         assertEquals(1, library.allCount)
         assertTrue(library.notes.none { it.id == "2" })
+    }
+
+    @Test
+    fun `createNote adds note locally`() = runTest {
+        val created = dataSource.createNote(
+            CreateNoteRequest(
+                spaceId = "1",
+                title = "New note",
+                content = "Body",
+            ),
+        )
+        val library = dataSource.fetchNotes("1")
+
+        assertEquals("New note", created.title)
+        assertTrue(library.notes.any { it.id == created.id })
+        assertEquals(3, library.allCount)
     }
 }

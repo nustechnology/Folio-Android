@@ -36,6 +36,8 @@ import com.nus.folio.presentation.home.CitedAnswerContent
 import com.nus.folio.presentation.home.HomeBadgeShape
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.presentation.home.HomeUploadZoneShape
+import com.nus.folio.presentation.home.SourceTypeBadgeColors
+import com.nus.folio.presentation.home.noteOriginBadgeColors
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeReadOnlyFieldBackground
@@ -43,7 +45,6 @@ import com.nus.folio.ui.theme.HomeReadOnlyFieldBorder
 import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeTypeBadgeBackground
 
 private val ViewNoteContentHeight = 160.dp
 
@@ -144,16 +145,23 @@ private fun ViewNoteOriginBadges(note: Note) {
     ) {
         when (note.origin) {
             NoteOrigin.USER_CREATED -> {
-                ViewNoteBadge(label = stringResource(R.string.home_note_badge_user_created))
+                ViewNoteBadge(
+                    label = stringResource(R.string.home_note_badge_user_created),
+                    colors = noteOriginBadgeColors(NoteOrigin.USER_CREATED),
+                )
             }
             NoteOrigin.SAVED_ANSWER -> {
-                ViewNoteBadge(label = stringResource(R.string.home_note_badge_saved_answer))
+                ViewNoteBadge(
+                    label = stringResource(R.string.home_note_badge_saved_answer),
+                    colors = noteOriginBadgeColors(NoteOrigin.SAVED_ANSWER),
+                )
                 if (note.citationCount > 0) {
                     ViewNoteBadge(
                         label = stringResource(
                             R.string.home_note_badge_citations,
                             note.citationCount,
                         ),
+                        colors = noteOriginBadgeColors(NoteOrigin.SAVED_ANSWER),
                     )
                 }
             }
@@ -162,16 +170,19 @@ private fun ViewNoteOriginBadges(note: Note) {
 }
 
 @Composable
-private fun ViewNoteBadge(label: String) {
+private fun ViewNoteBadge(
+    label: String,
+    colors: SourceTypeBadgeColors,
+) {
     Text(
         text = label,
         modifier = Modifier
             .clip(HomeBadgeShape)
-            .background(HomeTypeBadgeBackground)
+            .background(colors.background)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        color = HomeTextSecondary,
+        color = colors.content,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )

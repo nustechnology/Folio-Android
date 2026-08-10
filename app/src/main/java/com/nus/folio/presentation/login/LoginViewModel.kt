@@ -33,8 +33,12 @@ class LoginViewModel(
 
     private var activeJob: Job? = null
 
-    fun clearFeedback() {
-        _uiState.update { it.copy(error = null) }
+    fun clearEmailError() {
+        _uiState.update { it.copy(emailError = null, formError = null) }
+    }
+
+    fun clearPasswordError() {
+        _uiState.update { it.copy(passwordError = null, formError = null) }
     }
 
     fun onToastMessageShown() {
@@ -51,39 +55,37 @@ class LoginViewModel(
 
     fun onSignInClick(email: String, password: String) {
         if (!isAuthAvailable) {
-            _uiState.update { it.copy(error = LoginError.AUTH_UNAVAILABLE) }
+            _uiState.update {
+                it.copy(
+                    formError = LoginError.AUTH_UNAVAILABLE,
+                    emailError = null,
+                    passwordError = null,
+                )
+            }
             return
         }
-        when {
-            email.isBlank() -> {
-                _uiState.update {
-                    it.copy(
-                        error = LoginError.EMAIL_REQUIRED,
-                        toastError = null,
-                        toastMessage = null,
-                    )
-                }
-            }
-            !AuthInputRules.isValidEmail(email) -> {
-                _uiState.update {
-                    it.copy(
-                        error = LoginError.EMAIL_INVALID,
-                        toastError = null,
-                        toastMessage = null,
-                    )
-                }
-            }
-            password.isBlank() -> {
-                _uiState.update {
-                    it.copy(
-                        error = LoginError.PASSWORD_REQUIRED,
-                        toastError = null,
-                        toastMessage = null,
-                    )
-                }
-            }
-            else -> performSignIn(email, password)
+
+        val emailError = when {
+            email.isBlank() -> LoginError.EMAIL_REQUIRED
+            !AuthInputRules.isValidEmail(email) -> LoginError.EMAIL_INVALID
+            else -> null
         }
+        val passwordError = if (password.isBlank()) LoginError.PASSWORD_REQUIRED else null
+
+        if (emailError != null || passwordError != null) {
+            _uiState.update {
+                it.copy(
+                    emailError = emailError,
+                    passwordError = passwordError,
+                    formError = null,
+                    toastError = null,
+                    toastMessage = null,
+                )
+            }
+            return
+        }
+
+        performSignIn(email, password)
     }
 
     private fun performSignIn(email: String, password: String) {
@@ -92,7 +94,9 @@ class LoginViewModel(
             _uiState.update {
                 it.copy(
                     isLoading = true,
-                    error = null,
+                    emailError = null,
+                    passwordError = null,
+                    formError = null,
                     toastError = null,
                     toastMessage = null,
                     shouldNavigateToHome = false,
@@ -121,8 +125,10 @@ class LoginViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = LoginError.SIGN_IN_FAILED,
-                        toastError = null,
+                        emailError = null,
+                        passwordError = null,
+                        formError = null,
+                        toastError = LoginError.SIGN_IN_FAILED,
                         toastMessage = null,
                     )
                 }
@@ -132,7 +138,9 @@ class LoginViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = null,
+                        emailError = null,
+                        passwordError = null,
+                        formError = null,
                         toastError = LoginError.INVALID_CREDENTIALS,
                         toastMessage = null,
                     )
@@ -140,20 +148,36 @@ class LoginViewModel(
             }
             error is AuthApiException -> {
                 // Rate limits, server errors, and other non-credential API failures.
+                val apiMessage = error.message?.takeIf { it.isNotBlank() }
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = LoginError.SIGN_IN_FAILED,
-                        toastError = null,
-                        toastMessage = null,
-                    )
+                    if (apiMessage != null) {
+                        it.copy(
+                            isLoading = false,
+                            emailError = null,
+                            passwordError = null,
+                            formError = null,
+                            toastError = null,
+                            toastMessage = apiMessage,
+                        )
+                    } else {
+                        it.copy(
+                            isLoading = false,
+                            emailError = null,
+                            passwordError = null,
+                            formError = null,
+                            toastError = LoginError.SIGN_IN_FAILED,
+                            toastMessage = null,
+                        )
+                    }
                 }
             }
             else -> {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = null,
+                        emailError = null,
+                        passwordError = null,
+                        formError = null,
                         toastError = LoginError.INVALID_CREDENTIALS,
                         toastMessage = null,
                     )

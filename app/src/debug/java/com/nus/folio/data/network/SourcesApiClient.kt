@@ -242,7 +242,7 @@ class SourcesApiClient(
                     boundary = boundary,
                     fieldName = "file",
                     fileName = fileName,
-                    mimeType = resolvedMimeType,
+                    mimeType = mimeType.ifBlank { "application/octet-stream" },
                     fileBytes = fileBytes,
                 )
                 output.writeUtf8("--$boundary--\r\n")

@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,8 @@ import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
+import java.text.NumberFormat
+import java.util.Locale
 
 private val AddNoteContentHeight = 160.dp
 
@@ -197,6 +200,7 @@ private fun AddNoteSheetContent(
             placeholder = stringResource(R.string.add_note_content_placeholder),
             singleLine = false,
             errorMessage = contentError,
+            characterLimit = NoteInputRules.MAX_CONTENT_LENGTH,
             fieldModifier = Modifier
                 .fillMaxWidth()
                 .height(AddNoteContentHeight),
@@ -233,8 +237,10 @@ internal fun AddNoteLabeledField(
     placeholder: String,
     singleLine: Boolean,
     errorMessage: String? = null,
+    characterLimit: Int? = null,
     fieldModifier: Modifier = Modifier.fillMaxWidth(),
 ) {
+    val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -251,8 +257,26 @@ internal fun AddNoteLabeledField(
             isError = errorMessage != null,
             modifier = fieldModifier,
         )
-        if (errorMessage != null) {
+        if (characterLimit != null) {
             Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.add_source_text_content_counter,
+                    numberFormat.format(value.length),
+                    numberFormat.format(characterLimit),
+                ),
+                fontSize = 12.sp,
+                color = if (value.length > characterLimit) {
+                    HomeStatusFailedText
+                } else {
+                    HomeTextSecondary
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.End,
+            )
+        }
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(if (characterLimit != null) 4.dp else 6.dp))
             Text(
                 text = errorMessage,
                 color = HomeStatusFailedText,

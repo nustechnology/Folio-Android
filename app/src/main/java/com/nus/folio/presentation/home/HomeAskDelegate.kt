@@ -158,14 +158,19 @@ internal class HomeAskDelegate(
                 ),
             ).onSuccess { created ->
                 state.update { current ->
-                    val notes = listOf(created) + current.allNotes
+                    val alreadyExists = current.allNotes.any { it.id == created.id }
+                    val notes = listOf(created) + current.allNotes.filterNot { it.id == created.id }
                     val next = current.copy(
                         savingAskMessageId = null,
                         askMessages = current.askMessages.map { msg ->
                             if (msg.id == messageId) msg.copy(isSavedAsNote = true) else msg
                         },
                         allNotes = notes,
-                        notesAllCount = notes.size,
+                        notesAllCount = if (alreadyExists) {
+                            current.notesAllCount
+                        } else {
+                            current.notesAllCount + 1
+                        },
                         notesPinnedCount = notes.count { note -> note.isPinned },
                         notesUnfiledCount = notes.count { note -> note.project.isNullOrBlank() },
                         userMessage = HomeUserMessage.NOTE_SAVED_FROM_ASK,

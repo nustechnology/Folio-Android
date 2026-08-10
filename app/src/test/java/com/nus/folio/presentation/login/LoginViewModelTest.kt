@@ -32,7 +32,19 @@ class LoginViewModelTest {
 
         viewModel.onSignInClick(email = " ", password = "secret")
 
-        assertEquals(LoginError.EMAIL_REQUIRED, viewModel.uiState.value.error)
+        assertEquals(LoginError.EMAIL_REQUIRED, viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
+        assertEquals(0, repository.signInCallCount)
+    }
+
+    @Test
+    fun `onSignInClick with blank email and password sets both field errors`() {
+        val viewModel = createViewModel()
+
+        viewModel.onSignInClick(email = "", password = "")
+
+        assertEquals(LoginError.EMAIL_REQUIRED, viewModel.uiState.value.emailError)
+        assertEquals(LoginError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
         assertEquals(0, repository.signInCallCount)
     }
 
@@ -42,7 +54,8 @@ class LoginViewModelTest {
 
         viewModel.onSignInClick(email = "not-an-email", password = "secret")
 
-        assertEquals(LoginError.EMAIL_INVALID, viewModel.uiState.value.error)
+        assertEquals(LoginError.EMAIL_INVALID, viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertEquals(0, repository.signInCallCount)
     }
 
@@ -52,7 +65,8 @@ class LoginViewModelTest {
 
         viewModel.onSignInClick(email = "user@folio.app", password = "")
 
-        assertEquals(LoginError.PASSWORD_REQUIRED, viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.emailError)
+        assertEquals(LoginError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
         assertEquals(0, repository.signInCallCount)
     }
 
@@ -65,7 +79,8 @@ class LoginViewModelTest {
 
         assertTrue(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.shouldNavigateToHome)
-        assertNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertEquals("user@folio.app", repository.lastSignInEmail)
     }
 
@@ -81,12 +96,13 @@ class LoginViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(LoginError.INVALID_CREDENTIALS, viewModel.uiState.value.toastError)
         assertNull(viewModel.uiState.value.toastMessage)
-        assertNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
     @Test
-    fun `onSignInClick 429 sets SIGN_IN_FAILED`() {
+    fun `onSignInClick 429 toasts API message`() {
         repository.signInResult = Result.failure(
             AuthApiException(message = "Too many requests", statusCode = 429),
         )
@@ -95,13 +111,15 @@ class LoginViewModelTest {
         viewModel.onSignInClick("user@folio.app", "secret")
 
         assertFalse(viewModel.uiState.value.isLoading)
-        assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.error)
+        assertEquals("Too many requests", viewModel.uiState.value.toastMessage)
         assertNull(viewModel.uiState.value.toastError)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
     @Test
-    fun `onSignInClick 5xx sets SIGN_IN_FAILED`() {
+    fun `onSignInClick 5xx toasts API message`() {
         repository.signInResult = Result.failure(
             AuthApiException(message = "Server error", statusCode = 503),
         )
@@ -110,8 +128,27 @@ class LoginViewModelTest {
         viewModel.onSignInClick("user@folio.app", "secret")
 
         assertFalse(viewModel.uiState.value.isLoading)
-        assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.error)
+        assertEquals("Server error", viewModel.uiState.value.toastMessage)
         assertNull(viewModel.uiState.value.toastError)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
+        assertFalse(viewModel.uiState.value.shouldNavigateToHome)
+    }
+
+    @Test
+    fun `onSignInClick AuthApiException without message sets SIGN_IN_FAILED toastError`() {
+        repository.signInResult = Result.failure(
+            AuthApiException(message = "  ", statusCode = 500),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onSignInClick("user@folio.app", "secret")
+
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.toastError)
+        assertNull(viewModel.uiState.value.toastMessage)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
@@ -124,20 +161,23 @@ class LoginViewModelTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(LoginError.INVALID_CREDENTIALS, viewModel.uiState.value.toastError)
-        assertNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
         assertNull(viewModel.uiState.value.toastMessage)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
     @Test
-    fun `onSignInClick transport failure sets SIGN_IN_FAILED`() {
+    fun `onSignInClick transport failure sets SIGN_IN_FAILED toastError`() {
         repository.signInResult = Result.failure(UnknownHostException("offline"))
         val viewModel = createViewModel()
 
         viewModel.onSignInClick("user@folio.app", "secret")
 
-        assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.error)
-        assertNull(viewModel.uiState.value.toastError)
+        assertEquals(LoginError.SIGN_IN_FAILED, viewModel.uiState.value.toastError)
+        assertNull(viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
+        assertNull(viewModel.uiState.value.toastMessage)
         assertFalse(viewModel.uiState.value.shouldNavigateToHome)
     }
 
@@ -161,7 +201,7 @@ class LoginViewModelTest {
 
         viewModel.onSignInClick("user@folio.app", "secret")
 
-        assertEquals(LoginError.AUTH_UNAVAILABLE, viewModel.uiState.value.error)
+        assertEquals(LoginError.AUTH_UNAVAILABLE, viewModel.uiState.value.formError)
         assertEquals(0, repository.signInCallCount)
     }
 
@@ -177,13 +217,25 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `clearFeedback clears error`() {
+    fun `clearEmailError clears email field error only`() {
         val viewModel = createViewModel()
-        viewModel.onSignInClick("", "secret")
+        viewModel.onSignInClick("", "")
 
-        viewModel.clearFeedback()
+        viewModel.clearEmailError()
 
-        assertNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.emailError)
+        assertEquals(LoginError.PASSWORD_REQUIRED, viewModel.uiState.value.passwordError)
+    }
+
+    @Test
+    fun `clearPasswordError clears password field error only`() {
+        val viewModel = createViewModel()
+        viewModel.onSignInClick("", "")
+
+        viewModel.clearPasswordError()
+
+        assertEquals(LoginError.EMAIL_REQUIRED, viewModel.uiState.value.emailError)
+        assertNull(viewModel.uiState.value.passwordError)
     }
 
     @Test

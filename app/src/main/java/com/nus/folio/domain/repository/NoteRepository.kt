@@ -3,9 +3,20 @@ package com.nus.folio.domain.repository
 import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
+import com.nus.folio.domain.model.NotePaging
+import com.nus.folio.domain.model.NoteSort
 
 interface NoteRepository {
-    suspend fun getNotes(spaceId: String): Result<NoteLibrary>
+    suspend fun getNotes(
+        spaceId: String,
+        search: String? = null,
+        sort: NoteSort = NoteSort.DEFAULT,
+        page: Int = NotePaging.DEFAULT_PAGE,
+        limit: Int = NotePaging.DEFAULT_LIMIT,
+    ): Result<NoteLibrary>
+
+    suspend fun getNote(spaceId: String, noteId: String): Result<Note>
+
     suspend fun createNote(request: CreateNoteRequest): Result<Note>
     suspend fun updateNote(note: Note): Result<Note>
     suspend fun deleteNote(noteId: String): Result<Unit>

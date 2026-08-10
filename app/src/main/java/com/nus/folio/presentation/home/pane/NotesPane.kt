@@ -3,7 +3,12 @@ package com.nus.folio.presentation.home.pane
 import com.nus.folio.presentation.home.HomeBadgeShape
 import com.nus.folio.presentation.home.HomeCardShape
 import com.nus.folio.presentation.home.HomeChipShape
+import com.nus.folio.presentation.home.HomeSourceFilterChipSelected
+import com.nus.folio.presentation.home.HomeSourceFilterChipSelectedBorder
 import com.nus.folio.presentation.home.HomeUiState
+import com.nus.folio.presentation.home.NoteIconBadgeColors
+import com.nus.folio.presentation.home.SourceTypeBadgeColors
+import com.nus.folio.presentation.home.noteOriginBadgeColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,16 +28,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -56,23 +68,26 @@ import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeCardBorder
-import com.nus.folio.ui.theme.HomeChipBorder
-import com.nus.folio.ui.theme.HomeChipSelected
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
-import com.nus.folio.ui.theme.HomeTypeBadgeBackground
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NotesPane(
     uiState: HomeUiState,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit = {},
     onAddClick: () -> Unit,
     onFilterSelected: (NoteFilter) -> Unit,
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
+    onLoadMore: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val pullRefreshState = rememberPullToRefreshState()
     val showFilters = !uiState.isLoading &&
         uiState.notesError == null &&
         (uiState.allNotes.isNotEmpty() || uiState.selectedNoteFilter != NoteFilter.ALL)
@@ -86,72 +101,140 @@ internal fun NotesPane(
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
-        val contentModifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()
 
-        when {
-            uiState.isLoading -> {
-                NotesSkeletonList(modifier = contentModifier)
-            }
-            uiState.notesError != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = uiState.notesError.ifBlank {
-                                stringResource(R.string.home_error_generic)
-                            },
-                            color = HomeTextSecondary,
-                            fontSize = 14.sp,
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshingNotes,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullRefreshState,
+                    isRefreshing = uiState.isRefreshingNotes,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = HomeCardBackground,
+                    color = HomeHeader,
+                )
+            },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            when {
+                uiState.isLoading -> {
+                    NotesSkeletonList()
+                }
+                uiState.notesError != null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = uiState.notesError.ifBlank {
+                                    stringResource(R.string.home_error_generic)
+                                },
+                                color = HomeTextSecondary,
+                                fontSize = 14.sp,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.home_retry),
+                                modifier = Modifier.clickable(onClick = onRetry),
+                                color = HomeHeader,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+                uiState.isSearchingNotes && uiState.visibleNotes.isEmpty() -> {
+                    NotesSkeletonList()
+                }
+                uiState.visibleNotes.isEmpty() -> {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_search,
+                            title = stringResource(R.string.search_empty_title),
+                            message = stringResource(R.string.search_empty_message),
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.home_retry),
-                            modifier = Modifier.clickable(onClick = onRetry),
-                            color = HomeHeader,
-                            fontWeight = FontWeight.SemiBold,
+                    } else {
+                        FolioEmptyState(
+                            iconRes = R.drawable.ic_note,
+                            title = stringResource(R.string.home_empty_notes),
+                            message = stringResource(R.string.home_empty_notes_subtitle),
+                            actionLabel = stringResource(R.string.home_empty_notes_action),
+                            onActionClick = onAddClick,
                         )
                     }
                 }
-            }
-            uiState.visibleNotes.isEmpty() -> {
-                if (uiState.searchQuery.isNotBlank()) {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_search,
-                        title = stringResource(R.string.search_empty_title),
-                        message = stringResource(R.string.search_empty_message),
-                        modifier = contentModifier,
-                    )
-                } else {
-                    FolioEmptyState(
-                        iconRes = R.drawable.ic_note,
-                        title = stringResource(R.string.home_empty_notes),
-                        message = stringResource(R.string.home_empty_notes_subtitle),
-                        actionLabel = stringResource(R.string.home_empty_notes_action),
-                        onActionClick = onAddClick,
-                        modifier = contentModifier,
-                    )
-                }
-            }
-            else -> {
-                LazyColumn(
-                    modifier = contentModifier,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(uiState.visibleNotes, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            onClick = { onNoteClick(note) },
-                            onMoreClick = { onNoteMoreClick(note) },
-                        )
+                else -> {
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(listState, uiState.notesHasMore, uiState.isLoadingMoreNotes) {
+                        snapshotFlow {
+                            val layoutInfo = listState.layoutInfo
+                            val totalItems = layoutInfo.totalItemsCount
+                            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                            totalItems > 0 && lastVisible >= totalItems - LOAD_MORE_THRESHOLD
+                        }
+                            .distinctUntilChanged()
+                            .filter { nearEnd -> nearEnd }
+                            .collect {
+                                if (uiState.notesHasMore && !uiState.isLoadingMoreNotes) {
+                                    onLoadMore()
+                                }
+                            }
                     }
-                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (uiState.isSearchingNotes) {
+                            item(key = "notes-search-loading") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp, bottom = 2.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = HomeHeader,
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            }
+                        }
+                        items(uiState.visibleNotes, key = { it.id }) { note ->
+                            NoteCard(
+                                note = note,
+                                onClick = { onNoteClick(note) },
+                                onMoreClick = { onNoteMoreClick(note) },
+                            )
+                        }
+                        if (uiState.isLoadingMoreNotes) {
+                            item(key = "notes-loading-more") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = HomeHeader,
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            }
+                        } else {
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+private const val LOAD_MORE_THRESHOLD = 3
 
 @Composable
 private fun NotesSkeletonList(modifier: Modifier = Modifier) {
@@ -240,8 +323,8 @@ private fun NoteFilterChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) HomeChipSelected else Color.Transparent
-    val border = if (selected) Color.Transparent else HomeChipBorder
+    val background = if (selected) HomeSourceFilterChipSelected else HomeCardBackground
+    val border = if (selected) HomeSourceFilterChipSelectedBorder else HomeCardBorder
     Text(
         text = label,
         modifier = Modifier
@@ -284,13 +367,13 @@ private fun NoteCard(
             modifier = Modifier
                 .size(40.dp)
                 .clip(HomeBadgeShape)
-                .background(HomeTypeBadgeBackground),
+                .background(NoteIconBadgeColors.background),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_note),
                 contentDescription = null,
-                tint = HomeTextSecondary,
+                tint = NoteIconBadgeColors.content,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -315,15 +398,21 @@ private fun NoteCard(
                 lineHeight = 18.sp,
             )
             Spacer(modifier = Modifier.height(8.dp))
-            NoteOriginBadges(note = note)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = note.updatedLabel,
-                fontSize = 12.sp,
-                color = HomeTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                NoteOriginBadges(note = note)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = note.updatedLabel,
+                    fontSize = 12.sp,
+                    color = HomeTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         IconButton(
             onClick = onMoreClick,
@@ -347,16 +436,23 @@ private fun NoteOriginBadges(note: Note) {
     ) {
         when (note.origin) {
             NoteOrigin.USER_CREATED -> {
-                NoteBadge(label = stringResource(R.string.home_note_badge_user_created))
+                NoteBadge(
+                    label = stringResource(R.string.home_note_badge_user_created),
+                    colors = noteOriginBadgeColors(NoteOrigin.USER_CREATED),
+                )
             }
             NoteOrigin.SAVED_ANSWER -> {
-                NoteBadge(label = stringResource(R.string.home_note_badge_saved_answer))
+                NoteBadge(
+                    label = stringResource(R.string.home_note_badge_saved_answer),
+                    colors = noteOriginBadgeColors(NoteOrigin.SAVED_ANSWER),
+                )
                 if (note.citationCount > 0) {
                     NoteBadge(
                         label = stringResource(
                             R.string.home_note_badge_citations,
                             note.citationCount,
                         ),
+                        colors = noteOriginBadgeColors(NoteOrigin.SAVED_ANSWER),
                     )
                 }
             }
@@ -365,16 +461,19 @@ private fun NoteOriginBadges(note: Note) {
 }
 
 @Composable
-private fun NoteBadge(label: String) {
+private fun NoteBadge(
+    label: String,
+    colors: SourceTypeBadgeColors,
+) {
     Text(
         text = label,
         modifier = Modifier
             .clip(HomeBadgeShape)
-            .background(HomeTypeBadgeBackground)
+            .background(colors.background)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        color = HomeTextSecondary,
+        color = colors.content,
     )
 }
 

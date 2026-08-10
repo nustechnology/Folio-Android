@@ -26,6 +26,17 @@ class AuthRepositoryImpl(
      */
     private val sessionMutex = Mutex()
 
+    /**
+     * Bumped after each completed [refreshSession] attempt so queued waiters can detect
+     * completion even when access/refresh tokens are unchanged.
+     */
+    @Volatile
+    private var refreshGeneration = 0
+
+    /** Result of the most recently completed [refreshSession] attempt. */
+    @Volatile
+    private var lastRefreshResult: Result<AuthSession>? = null
+
     override suspend fun restoreSession() {
         sessionMutex.withLock {
             if (sessionRestored) return
@@ -68,32 +79,53 @@ class AuthRepositoryImpl(
         }
     }
 
-    override suspend fun refreshSession(): Result<AuthSession> = sessionMutex.withLock {
-        runSuspendCatching {
-            val previous = currentSession
-            val refreshToken = previous?.refreshToken?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("No refresh token available")
-            val refreshed = dataSource.refresh(refreshToken)
-            val accessToken = refreshed.accessToken?.takeIf { it.isNotBlank() }
-                ?: previous.accessToken?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("Refresh response missing access token")
-            val mergedRefreshToken = refreshed.refreshToken?.takeIf { it.isNotBlank() }
-                ?: previous.refreshToken
-            val merged = AuthSession(
-                email = refreshed.email.ifBlank { previous.email },
-                displayName = refreshed.displayName.ifBlank { previous.displayName },
-                userId = refreshed.userId ?: previous.userId,
-                accessToken = accessToken,
-                refreshToken = mergedRefreshToken,
-            )
-            enrichWithCurrentUser(merged)
-        }.also { result ->
-            result.onSuccess { setSession(it) }
-            result.onFailure { error ->
-                // Server rejected refresh (expired/invalid refresh token). Drop the dead
-                // session so the UI can return to login instead of retrying forever.
-                if (error is AuthApiException) {
-                    setSession(null)
+    override suspend fun refreshSession(): Result<AuthSession> {
+        // Capture generation before waiting on the mutex. Concurrent 401 retries serialize
+        // here; once the first refresh completes, later waiters reuse that result instead of
+        // rotating the refresh token again (which can invalidate single-use refresh tokens).
+        // Track completion via generation — not token equality — so a successful refresh that
+        // returns unchanged tokens still coalesces waiters.
+        val generationBeforeWait = refreshGeneration
+        return sessionMutex.withLock {
+            if (generationBeforeWait != refreshGeneration) {
+                val completed = checkNotNull(lastRefreshResult)
+                if (completed.isFailure) return@withLock completed
+                // Prefer the live session so an intervening sign-in/out wins over a
+                // stale successful refresh result from the just-finished attempt.
+                val session = currentSession
+                    ?: return@withLock Result.failure(
+                        IllegalStateException("No refresh token available"),
+                    )
+                return@withLock Result.success(session)
+            }
+            runSuspendCatching {
+                val previous = currentSession
+                val refreshToken = previous?.refreshToken?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("No refresh token available")
+                val refreshed = dataSource.refresh(refreshToken)
+                val accessToken = refreshed.accessToken?.takeIf { it.isNotBlank() }
+                    ?: previous.accessToken?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("Refresh response missing access token")
+                val mergedRefreshToken = refreshed.refreshToken?.takeIf { it.isNotBlank() }
+                    ?: previous.refreshToken
+                val merged = AuthSession(
+                    email = refreshed.email.ifBlank { previous.email },
+                    displayName = refreshed.displayName.ifBlank { previous.displayName },
+                    userId = refreshed.userId ?: previous.userId,
+                    accessToken = accessToken,
+                    refreshToken = mergedRefreshToken,
+                )
+                enrichWithCurrentUser(merged)
+            }.also { result ->
+                lastRefreshResult = result
+                refreshGeneration++
+                result.onSuccess { setSession(it) }
+                result.onFailure { error ->
+                    // Server rejected refresh (expired/invalid refresh token). Drop the dead
+                    // session so the UI can return to login instead of retrying forever.
+                    if (error is AuthApiException) {
+                        setSession(null)
+                    }
                 }
             }
         }
