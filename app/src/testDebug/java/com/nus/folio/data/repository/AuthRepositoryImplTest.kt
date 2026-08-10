@@ -265,7 +265,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun `concurrent refreshSession calls are serialized`() = runTest {
+    fun `concurrent refreshSession calls share one network refresh`() = runTest {
         val concurrent = AtomicInteger(0)
         var maxConcurrent = 0
         val refreshCallCount = AtomicInteger(0)
@@ -302,14 +302,62 @@ class AuthRepositoryImplTest {
 
         assertTrue(results.all { it.isSuccess })
         assertEquals(1, maxConcurrent)
-        assertEquals(2, refreshCallCount.get())
-        // Second refresh sees the token written by the first (serialized, no shared stale token).
-        assertEquals(
-            listOf("refresh-login", "refresh-refreshed-1"),
-            refreshTokensSeen,
+        // Queued waiter reuses the session written by the first refresh.
+        assertEquals(1, refreshCallCount.get())
+        assertEquals(listOf("refresh-login"), refreshTokensSeen)
+        val session0 = results[0].getOrThrow()
+        val session1 = results[1].getOrThrow()
+        assertEquals(session0, session1)
+        assertEquals(session0, concurrentRepository.getCurrentSession())
+        assertEquals("access-refreshed-1", session0.accessToken)
+        assertEquals("refresh-refreshed-1", session0.refreshToken)
+    }
+
+    @Test
+    fun `concurrent refreshSession calls share one network refresh when tokens unchanged`() = runTest {
+        val concurrent = AtomicInteger(0)
+        var maxConcurrent = 0
+        val refreshCallCount = AtomicInteger(0)
+
+        val delayingApi = object : AuthApi by fakeApi {
+            override suspend fun refresh(refreshToken: String): AuthSession {
+                refreshCallCount.incrementAndGet()
+                val inFlight = concurrent.incrementAndGet()
+                maxConcurrent = maxOf(maxConcurrent, inFlight)
+                delay(50)
+                concurrent.decrementAndGet()
+                // Server acknowledges refresh but rotates neither token.
+                return AuthSession(
+                    email = "",
+                    displayName = "",
+                    accessToken = "access-login",
+                    refreshToken = "refresh-login",
+                )
+            }
+        }
+        val concurrentRepository = AuthRepositoryImpl(
+            dataSource = AuthDataSource(authApi = delayingApi),
+            sessionStore = InMemoryAuthSessionStore(),
         )
-        assertEquals("access-refreshed-2", concurrentRepository.getCurrentSession()?.accessToken)
-        assertEquals("refresh-refreshed-2", concurrentRepository.getCurrentSession()?.refreshToken)
+        concurrentRepository.signIn("jordan@folio.app", "secret")
+
+        val results = coroutineScope {
+            listOf(
+                async { concurrentRepository.refreshSession() },
+                async { concurrentRepository.refreshSession() },
+            ).map { it.await() }
+        }
+
+        assertTrue(results.all { it.isSuccess })
+        assertEquals(1, maxConcurrent)
+        // Completion is tracked by generation, not token equality.
+        assertEquals(1, refreshCallCount.get())
+        val session0 = results[0].getOrThrow()
+        val session1 = results[1].getOrThrow()
+        assertEquals(session0, session1)
+        assertEquals(session0, concurrentRepository.getCurrentSession())
+        assertEquals("access-login", session0.accessToken)
+        assertEquals("refresh-login", session0.refreshToken)
     }
 
     @Test

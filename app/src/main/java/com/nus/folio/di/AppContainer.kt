@@ -32,6 +32,7 @@ import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourceOriginalFileUseCase
@@ -148,7 +149,14 @@ class AppContainer(
         StreamAskAnswerUseCase(askRepository)
     }
 
-    private val noteDataSource: NoteDataSource by lazy { NoteDataSource() }
+    private val noteDataSource: NoteDataSource by lazy {
+        NoteDataSource(
+            accessTokenProvider = { authRepository.getCurrentSession()?.accessToken },
+            refreshAccessToken = {
+                authRepository.refreshSession().getOrNull()?.accessToken
+            },
+        )
+    }
 
     private val noteRepository: NoteRepository by lazy {
         NoteRepositoryImpl(noteDataSource)
@@ -156,6 +164,10 @@ class AppContainer(
 
     val getNotesUseCase: GetNotesUseCase by lazy {
         GetNotesUseCase(noteRepository)
+    }
+
+    val getNoteDetailUseCase: GetNoteDetailUseCase by lazy {
+        GetNoteDetailUseCase(noteRepository)
     }
 
     val createNoteUseCase: CreateNoteUseCase by lazy {

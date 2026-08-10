@@ -188,20 +188,8 @@ internal class HomeSourcesDelegate(
 
             result
                 .onSuccess { created ->
-                    val displayTitle = created.title.ifBlank { title }
-                    state.update {
-                        it.copy(
-                            isCreatingSource = false,
-                            showAddSourceSheet = false,
-                            processingSourceId = created.id,
-                            processingSourceTitle = displayTitle,
-                            processingProgress = 0,
-                            processingState = SourceProcessingState.ADDED,
-                            userMessage = HomeUserMessage.SOURCE_CREATED,
-                        )
-                    }
-                    refreshSourcesAfterCreate()
-                    startObservingProcessing(created.id)
+                    state.update { it.copy(showAddSourceSheet = false) }
+                    onSourceCreated(created, fallbackTitle = title)
                 }
                 .onFailure { throwable ->
                     state.update {
@@ -212,6 +200,26 @@ internal class HomeSourcesDelegate(
                     }
                 }
         }
+    }
+
+    /**
+     * Shared post-create path for Add Source and Convert Note → Manual source.
+     * Opens the processing sheet, toasts success, refreshes the list, and observes SSE.
+     */
+    fun onSourceCreated(created: Source, fallbackTitle: String) {
+        val displayTitle = created.title.ifBlank { fallbackTitle }
+        state.update {
+            it.copy(
+                isCreatingSource = false,
+                processingSourceId = created.id,
+                processingSourceTitle = displayTitle,
+                processingProgress = 0,
+                processingState = SourceProcessingState.ADDED,
+                userMessage = HomeUserMessage.SOURCE_CREATED,
+            )
+        }
+        queueRefreshSourcesAfterCreate()
+        startObservingProcessing(created.id)
     }
 
     private fun startObservingProcessing(sourceId: String) {
@@ -232,7 +240,7 @@ internal class HomeSourcesDelegate(
                             )
                         }
                         if (event.isTerminal) {
-                            refreshSourcesAfterCreate()
+                            queueRefreshSourcesAfterCreate()
                         }
                     }
             } catch (_: Exception) {
@@ -312,8 +320,11 @@ internal class HomeSourcesDelegate(
             }
         }
 
-    private suspend fun refreshSourcesAfterCreate() {
-        reloadSources()
+    private fun queueRefreshSourcesAfterCreate() {
+        sourcesLoadJob?.cancel()
+        sourcesLoadJob = scope.launch {
+            reloadSources()
+        }
     }
 
     fun onSourceProcessingDismiss() {

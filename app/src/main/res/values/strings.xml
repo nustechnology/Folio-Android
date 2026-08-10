@@ -94,6 +94,9 @@
     <string name="home_sort_recently_added">Recently added</string>
     <string name="home_sort_alphabetical_az">Alphabetical A–Z</string>
     <string name="home_sort_alphabetical_za">Alphabetical Z–A</string>
+    <string name="home_sort_notes_title">Sort notes</string>
+    <string name="home_sort_notes_recently_updated">Recently updated</string>
+    <string name="home_sort_notes_recently_created">Recently created</string>
     <string name="home_source_meta">%1$s · %2$s</string>
     <string name="home_status_ready">Ready</string>
     <string name="home_status_processing">Processing</string>

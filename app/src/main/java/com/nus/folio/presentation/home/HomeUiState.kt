@@ -4,6 +4,7 @@ import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
+import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceProcessingState
@@ -15,6 +16,7 @@ data class HomeUiState(
     val spaceTitle: String = "",
     val isLoading: Boolean = false,
     val isRefreshingSources: Boolean = false,
+    val isRefreshingNotes: Boolean = false,
     val sourcesError: String? = null,
     val askError: String? = null,
     val notesError: String? = null,
@@ -22,6 +24,7 @@ data class HomeUiState(
     val selectedFilter: SourceFilter = SourceFilter.ALL,
     val selectedSort: SourceSort = SourceSort.DEFAULT,
     val selectedNoteFilter: NoteFilter = NoteFilter.ALL,
+    val selectedNoteSort: NoteSort = NoteSort.DEFAULT,
     val selectedTab: HomeTab = HomeTab.SOURCES,
     val allSources: List<Source> = emptyList(),
     val visibleSources: List<Source> = emptyList(),
@@ -33,8 +36,13 @@ data class HomeUiState(
     val notesAllCount: Int = 0,
     val notesPinnedCount: Int = 0,
     val notesUnfiledCount: Int = 0,
+    val notesCurrentPage: Int = 1,
+    val notesHasMore: Boolean = false,
+    val isLoadingMoreNotes: Boolean = false,
+    val isSearchingNotes: Boolean = false,
     val optionsNote: Note? = null,
     val viewingNote: Note? = null,
+    val isLoadingNoteDetail: Boolean = false,
     val editingNote: Note? = null,
     val convertingNote: Note? = null,
     val deletingNote: Note? = null,
@@ -46,6 +54,7 @@ data class HomeUiState(
     val showNotebookActions: Boolean = false,
     val showNotebookExport: Boolean = false,
     val showSortSheet: Boolean = false,
+    val showNoteSortSheet: Boolean = false,
     val showAddSourceSheet: Boolean = false,
     val isCreatingSource: Boolean = false,
     val processingSourceId: String? = null,

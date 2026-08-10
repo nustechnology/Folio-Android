@@ -42,17 +42,22 @@ internal fun filterAskTopics(state: HomeUiState): List<AskTopic> {
     return state.allAskTopics.filter { it.title.contains(query, ignoreCase = true) }
 }
 
-internal fun filterNotes(state: HomeUiState): List<Note> {
-    val byFilter = when (state.selectedNoteFilter) {
+internal fun filterNotes(state: HomeUiState): List<Note> =
+    baseFilteredNotes(state).filterBySearchQuery(state.searchQuery)
+
+private fun baseFilteredNotes(state: HomeUiState): List<Note> =
+    when (state.selectedNoteFilter) {
         NoteFilter.ALL -> state.allNotes
         NoteFilter.PINNED -> state.allNotes.filter { it.isPinned }
         NoteFilter.UNFILED -> state.allNotes.filter { it.project.isNullOrBlank() }
     }
-    val query = state.searchQuery.trim()
-    if (query.isEmpty()) return byFilter
-    return byFilter.filter { note ->
+
+private fun List<Note>.filterBySearchQuery(searchQuery: String): List<Note> {
+    val query = searchQuery.trim()
+    if (query.isEmpty()) return this
+    return filter { note ->
         note.title.contains(query, ignoreCase = true) ||
             note.content.contains(query, ignoreCase = true) ||
-            note.project.orEmpty().contains(query, ignoreCase = true)
+            note.project?.contains(query, ignoreCase = true) == true
     }
 }

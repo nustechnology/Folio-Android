@@ -4,8 +4,9 @@ data class LoginUiState(
     val passwordVisible: Boolean = false,
     val isLoading: Boolean = false,
     val authUnavailable: Boolean = false,
-    val error: LoginError? = null,
-    /** Fixed client toast (invalid credentials); mapped to strings in the screen. */
+    val emailError: LoginError? = null,
+    val passwordError: LoginError? = null,
+    val formError: LoginError? = null,
     val toastError: LoginError? = null,
     val toastMessage: String? = null,
     val shouldNavigateToHome: Boolean = false,

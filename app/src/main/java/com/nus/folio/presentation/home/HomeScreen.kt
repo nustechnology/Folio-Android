@@ -44,6 +44,7 @@ import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceSort
@@ -84,6 +85,7 @@ fun HomeScreen(
             getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
             streamAskAnswerUseCase = LocalAppContainer.current.streamAskAnswerUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
+            getNoteDetailUseCase = LocalAppContainer.current.getNoteDetailUseCase,
             createNoteUseCase = LocalAppContainer.current.createNoteUseCase,
             updateNoteUseCase = LocalAppContainer.current.updateNoteUseCase,
             deleteNoteUseCase = LocalAppContainer.current.deleteNoteUseCase,
@@ -159,6 +161,7 @@ fun HomeScreen(
             uiState = uiState,
             onRetry = viewModel::onRetry,
             onRefreshSources = viewModel::onRefreshSources,
+            onRefreshNotes = viewModel::onRefreshNotes,
             onSearchQueryChange = viewModel::onSearchQueryChange,
             onFilterSelected = viewModel::onFilterSelected,
             onFilterSortClick = viewModel::onFilterSortClick,
@@ -185,6 +188,7 @@ fun HomeScreen(
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
+            onLoadMoreNotes = viewModel::onLoadMoreNotes,
             onSignOut = { showSignOutConfirm = true },
             modifier = Modifier.fillMaxSize(),
         )
@@ -206,6 +210,7 @@ fun HomeScreen(
             onAddSourceSheetDismiss = viewModel::onAddSourceSheetDismiss,
             onAddSourceSubmit = viewModel::onAddSourceSubmit,
             onSortSelected = viewModel::onSortSelected,
+            onNoteSortSelected = viewModel::onNoteSortSelected,
             onSortSheetDismiss = viewModel::onSortSheetDismiss,
             onSourceProcessingDismiss = viewModel::onSourceProcessingDismiss,
             onSourceProcessingOpenSource = viewModel::onSourceProcessingOpenSource,
@@ -264,6 +269,7 @@ internal fun HomeContent(
     uiState: HomeUiState,
     onRetry: () -> Unit,
     onRefreshSources: () -> Unit = {},
+    onRefreshNotes: () -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onFilterSelected: (SourceFilter) -> Unit,
     onFilterSortClick: () -> Unit = {},
@@ -283,6 +289,7 @@ internal fun HomeContent(
     onSourceClick: (Source) -> Unit,
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
+    onLoadMoreNotes: () -> Unit = {},
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -336,6 +343,11 @@ internal fun HomeContent(
                                 onClick = onFilterSortClick,
                                 showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
                             )
+                        } else if (uiState.selectedTab == HomeTab.NOTES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
+                            )
                         }
                     }
                 }
@@ -378,10 +390,12 @@ internal fun HomeContent(
                 HomeTab.NOTES -> NotesPane(
                     uiState = uiState,
                     onRetry = onRetry,
+                    onRefresh = onRefreshNotes,
                     onAddClick = onAddClick,
                     onFilterSelected = onNoteFilterSelected,
                     onNoteClick = onNoteClick,
                     onNoteMoreClick = onNoteMoreClick,
+                    onLoadMore = onLoadMoreNotes,
                     modifier = Modifier
                         .weight(1f)
                         .padding(bottom = HomeBottomNavClearance),

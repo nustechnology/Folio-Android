@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
+import com.nus.folio.domain.model.NotePaging
+import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceSort
@@ -18,6 +20,7 @@ import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
@@ -54,6 +57,7 @@ class HomeViewModel(
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
     private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
     private val getNotesUseCase: GetNotesUseCase,
+    private val getNoteDetailUseCase: GetNoteDetailUseCase,
     private val createNoteUseCase: CreateNoteUseCase,
     private val updateNoteUseCase: UpdateNoteUseCase,
     private val deleteNoteUseCase: DeleteNoteUseCase,
@@ -108,9 +112,15 @@ class HomeViewModel(
         spaceId = spaceId,
         state = _uiState,
         scope = viewModelScope,
+        getNotesUseCase = getNotesUseCase,
+        getNoteDetailUseCase = getNoteDetailUseCase,
         createNoteUseCase = createNoteUseCase,
         updateNoteUseCase = updateNoteUseCase,
         deleteNoteUseCase = deleteNoteUseCase,
+        createSourceUseCase = createSourceUseCase,
+        getCurrentSessionUseCase = getCurrentSessionUseCase,
+        onSourceCreated = sources::onSourceCreated,
+        searchDebounceMs = searchDebounceMs,
     )
 
     init {
@@ -160,7 +170,15 @@ class HomeViewModel(
                 )
             }
             val askDeferred = async { getAskTopicsUseCase(spaceId) }
-            val notesDeferred = async { getNotesUseCase(spaceId) }
+            val notesDeferred = async {
+                getNotesUseCase(
+                    spaceId = spaceId,
+                    search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
+                    sort = state.selectedNoteSort,
+                    page = NotePaging.DEFAULT_PAGE,
+                    limit = NotePaging.DEFAULT_LIMIT,
+                )
+            }
 
             val sourcesResult = sourcesDeferred.await()
             val askResult = askDeferred.await()
@@ -200,6 +218,9 @@ class HomeViewModel(
                             notesAllCount = library.allCount,
                             notesPinnedCount = library.pinnedCount,
                             notesUnfiledCount = library.unfiledCount,
+                            notesCurrentPage = library.page,
+                            notesHasMore = library.hasMore,
+                            isLoadingMoreNotes = false,
                         )
                     },
                     onFailure = { throwable ->
@@ -218,30 +239,53 @@ class HomeViewModel(
 
     fun onSearchQueryChange(query: String) {
         _uiState.update { state ->
-            val next = state.copy(searchQuery = query)
+            val next = state.copy(
+                searchQuery = query,
+                isSearchingNotes = state.selectedTab == HomeTab.NOTES,
+            )
             next.copy(
                 visibleAskTopics = filterAskTopics(next),
                 visibleNotes = filterNotes(next),
                 visibleSources = next.allSources,
             )
         }
-        if (_uiState.value.selectedTab != HomeTab.SOURCES) return
-        sources.scheduleSearchReload()
+        when (_uiState.value.selectedTab) {
+            HomeTab.SOURCES -> sources.scheduleSearchReload()
+            HomeTab.NOTES -> notes.scheduleSearchReload()
+            HomeTab.ASK, HomeTab.NOTEBOOK -> Unit
+        }
     }
 
     fun onFilterSelected(filter: SourceFilter) = sources.onFilterSelected(filter)
 
-    fun onFilterSortClick() = sources.onFilterSortClick()
+    fun onFilterSortClick() {
+        when (_uiState.value.selectedTab) {
+            HomeTab.SOURCES -> sources.onFilterSortClick()
+            HomeTab.NOTES -> notes.onFilterSortClick()
+            HomeTab.ASK, HomeTab.NOTEBOOK -> Unit
+        }
+    }
 
-    fun onSortSheetDismiss() = sources.onSortSheetDismiss()
+    fun onSortSheetDismiss() {
+        sources.onSortSheetDismiss()
+        notes.onSortSheetDismiss()
+    }
 
     fun onSortSelected(sort: SourceSort) = sources.onSortSelected(sort)
 
+    fun onNoteSortSelected(sort: NoteSort) = notes.onSortSelected(sort)
+
     fun onNoteFilterSelected(filter: NoteFilter) = notes.onNoteFilterSelected(filter)
+
+    fun onLoadMoreNotes() = notes.onLoadMore()
+
+    fun onRefreshNotes() = notes.onRefreshNotes()
 
     fun onTabSelected(tab: HomeTab) {
         sources.cancelSearchJob()
+        notes.cancelSearchJob()
         val previousQuery = _uiState.value.searchQuery
+        val previousTab = _uiState.value.selectedTab
         _uiState.update { state ->
             val next = state.copy(
                 selectedTab = tab,
@@ -254,8 +298,13 @@ class HomeViewModel(
             )
         }
         if (previousQuery.isNotBlank()) {
-            // Search was cleared — reload sources without the query.
-            sources.loadSourcesOnly()
+            // Search was cleared — reload the tab that owned the query.
+            if (previousTab == HomeTab.SOURCES) {
+                sources.loadSourcesOnly()
+            }
+            if (previousTab == HomeTab.NOTES) {
+                notes.loadNotesOnly()
+            }
         }
     }
 
@@ -396,6 +445,7 @@ class HomeViewModel(
         private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
         private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
         private val getNotesUseCase: GetNotesUseCase,
+        private val getNoteDetailUseCase: GetNoteDetailUseCase,
         private val createNoteUseCase: CreateNoteUseCase,
         private val updateNoteUseCase: UpdateNoteUseCase,
         private val deleteNoteUseCase: DeleteNoteUseCase,
@@ -419,6 +469,7 @@ class HomeViewModel(
                 getAskSuggestionsUseCase = getAskSuggestionsUseCase,
                 streamAskAnswerUseCase = streamAskAnswerUseCase,
                 getNotesUseCase = getNotesUseCase,
+                getNoteDetailUseCase = getNoteDetailUseCase,
                 createNoteUseCase = createNoteUseCase,
                 updateNoteUseCase = updateNoteUseCase,
                 deleteNoteUseCase = deleteNoteUseCase,

@@ -101,9 +101,11 @@ fun LoginScreen(
     }
 
     val invalidCredentialsToast = stringResource(R.string.login_error_invalid_credentials)
+    val signInFailedToast = stringResource(R.string.login_error_sign_in_failed)
     LaunchedEffect(uiState.toastError, uiState.toastMessage) {
         val message = when (uiState.toastError) {
             LoginError.INVALID_CREDENTIALS -> invalidCredentialsToast
+            LoginError.SIGN_IN_FAILED -> signInFailedToast
             else -> uiState.toastMessage
         } ?: return@LaunchedEffect
         toastHostState.showToast(title = message, style = FolioToastStyle.Error)
@@ -113,7 +115,8 @@ fun LoginScreen(
     Box(modifier = modifier.fillMaxSize()) {
         LoginContent(
             uiState = uiState,
-            onClearFeedback = viewModel::clearFeedback,
+            onClearEmailError = viewModel::clearEmailError,
+            onClearPasswordError = viewModel::clearPasswordError,
             onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
             onSignInClick = viewModel::onSignInClick,
             onForgotPasswordClick = onNavigateToResetPassword,
@@ -136,7 +139,8 @@ fun LoginScreen(
 @Composable
 private fun LoginContent(
     uiState: LoginUiState,
-    onClearFeedback: () -> Unit,
+    onClearEmailError: () -> Unit,
+    onClearPasswordError: () -> Unit,
     onTogglePasswordVisibility: () -> Unit,
     onSignInClick: (email: String, password: String) -> Unit,
     onForgotPasswordClick: () -> Unit,
@@ -170,14 +174,10 @@ private fun LoginContent(
                 value = email,
                 onValueChange = {
                     email = it
-                    onClearFeedback()
+                    onClearEmailError()
                 },
                 enabled = inputsEnabled,
-                errorMessage = when (uiState.error) {
-                    LoginError.EMAIL_REQUIRED, LoginError.EMAIL_INVALID ->
-                        loginErrorMessage(uiState.error)
-                    else -> null
-                },
+                errorMessage = uiState.emailError?.let { loginErrorMessage(it) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -186,11 +186,12 @@ private fun LoginContent(
                 value = password,
                 onValueChange = {
                     password = it
-                    onClearFeedback()
+                    onClearPasswordError()
                 },
                 passwordVisible = uiState.passwordVisible,
                 onToggleVisibility = onTogglePasswordVisibility,
                 enabled = inputsEnabled,
+                errorMessage = uiState.passwordError?.let { loginErrorMessage(it) },
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -274,15 +275,9 @@ private fun loginErrorMessage(error: LoginError): String = when (error) {
 
 @Composable
 private fun LoginFeedback(uiState: LoginUiState) {
-    val errorText = when (uiState.error) {
-        LoginError.PASSWORD_REQUIRED -> stringResource(R.string.login_error_password_required)
-        LoginError.SIGN_IN_FAILED -> stringResource(R.string.login_error_sign_in_failed)
+    val errorText = when (uiState.formError) {
         LoginError.AUTH_UNAVAILABLE -> stringResource(R.string.login_error_auth_unavailable)
-        LoginError.EMAIL_REQUIRED,
-        LoginError.EMAIL_INVALID,
-        LoginError.INVALID_CREDENTIALS,
-        null,
-        -> if (uiState.authUnavailable) {
+        else -> if (uiState.authUnavailable) {
             stringResource(R.string.login_error_auth_unavailable)
         } else {
             null
@@ -406,18 +401,30 @@ private fun LoginPasswordField(
     passwordVisible: Boolean,
     onToggleVisibility: () -> Unit,
     enabled: Boolean,
+    errorMessage: String? = null,
 ) {
+    val isError = errorMessage != null
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         enabled = enabled,
+        isError = isError,
         placeholder = {
             Text(
                 text = stringResource(R.string.login_password_hint),
                 color = LoginPlaceholder,
                 fontSize = 15.sp,
             )
+        },
+        supportingText = errorMessage?.let { message ->
+            {
+                Text(
+                    text = message,
+                    color = HomeStatusFailedText,
+                    fontSize = 12.sp,
+                )
+            }
         },
         singleLine = true,
         shape = FieldShape,
@@ -542,7 +549,8 @@ private fun LoginContentPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         LoginContent(
             uiState = LoginUiState(),
-            onClearFeedback = {},
+            onClearEmailError = {},
+            onClearPasswordError = {},
             onTogglePasswordVisibility = {},
             onSignInClick = { _, _ -> },
             onForgotPasswordClick = {},
@@ -558,7 +566,8 @@ private fun LoginLoadingScreenPreview() {
         Box(modifier = Modifier.fillMaxSize()) {
             LoginContent(
                 uiState = LoginUiState(isLoading = true),
-                onClearFeedback = {},
+                onClearEmailError = {},
+                onClearPasswordError = {},
                 onTogglePasswordVisibility = {},
                 onSignInClick = { _, _ -> },
                 onForgotPasswordClick = {},

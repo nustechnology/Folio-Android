@@ -24,9 +24,21 @@ enum class NoteFilter {
     UNFILED,
 }
 
+/**
+ * Note counts are aggregate only when the backend returns category totals.
+ * Otherwise, all count fields are page-local for the currently loaded response page.
+ */
 data class NoteLibrary(
     val notes: List<Note>,
     val allCount: Int,
     val pinnedCount: Int,
     val unfiledCount: Int,
+    val page: Int = NotePaging.DEFAULT_PAGE,
+    val limit: Int = NotePaging.DEFAULT_LIMIT,
+    val hasMore: Boolean = false,
 )
+
+object NotePaging {
+    const val DEFAULT_LIMIT = 10
+    const val DEFAULT_PAGE = 1
+}

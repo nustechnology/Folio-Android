@@ -7,6 +7,7 @@ import com.nus.folio.components.ItemOptionAction
 import com.nus.folio.components.ItemOptionStyle
 import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.presentation.home.bottomsheet.AddNoteBottomSheet
@@ -21,6 +22,7 @@ import com.nus.folio.presentation.home.bottomsheet.EditNoteBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ExportNotebookBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SaveAskNoteBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.SortNotesBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SortSourcesBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SourceProcessingBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ViewNoteBottomSheet
@@ -35,6 +37,7 @@ internal fun HomeOverlaySheets(
     onAddSourceSheetDismiss: () -> Unit,
     onAddSourceSubmit: (AddSourceDraft) -> Unit,
     onSortSelected: (SourceSort) -> Unit,
+    onNoteSortSelected: (NoteSort) -> Unit,
     onSortSheetDismiss: () -> Unit,
     onSourceProcessingDismiss: () -> Unit,
     onSourceProcessingOpenSource: () -> Unit,
@@ -94,6 +97,14 @@ internal fun HomeOverlaySheets(
         SortSourcesBottomSheet(
             selectedSort = uiState.selectedSort,
             onSortSelected = onSortSelected,
+            onDismiss = onSortSheetDismiss,
+        )
+    }
+
+    if (uiState.showNoteSortSheet) {
+        SortNotesBottomSheet(
+            selectedSort = uiState.selectedNoteSort,
+            onSortSelected = onNoteSortSelected,
             onDismiss = onSortSheetDismiss,
         )
     }
