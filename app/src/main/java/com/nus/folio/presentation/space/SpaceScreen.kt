@@ -132,14 +132,6 @@ fun SpaceScreen(
                 .padding(end = 20.dp, bottom = 24.dp),
         )
 
-        FolioToastHost(
-            hostState = toastHostState,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 12.dp),
-        )
-
         if (uiState.showAddSheet) {
             AddSpaceBottomSheet(
                 isSubmitting = uiState.isCreatingSpace,
@@ -205,6 +197,14 @@ fun SpaceScreen(
                 onDismiss = viewModel::onSortSheetDismiss,
             )
         }
+
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 

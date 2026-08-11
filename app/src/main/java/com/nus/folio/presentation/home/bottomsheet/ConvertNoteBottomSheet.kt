@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.presentation.home.HomeSheetShape
@@ -63,6 +65,7 @@ internal fun ConvertNoteBottomSheet(
     onCreateSource: (title: String, snapshot: String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -76,17 +79,27 @@ internal fun ConvertNoteBottomSheet(
 
     AnimatedModalSheet(
         onDismiss = onDismiss,
+        confirmDismiss = { discardProtection.confirmDismiss() },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         ConvertNoteSheetContent(
             note = note,
+            onDirtyChange = { discardProtection.hasUnsavedContent = it },
             onCancelClick = { requestDismiss() },
             onCreateSource = { title, snapshot ->
+                discardProtection.bypassDiscardConfirm = true
                 requestDismiss { onCreateSource(title, snapshot) }
             },
         )
     }
+
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+    )
 }
 
 @Composable
@@ -94,10 +107,15 @@ private fun ConvertNoteSheetContent(
     note: Note,
     onCancelClick: () -> Unit,
     onCreateSource: (title: String, snapshot: String) -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
 ) {
     var sourceTitle by rememberSaveable(note.id) { mutableStateOf(note.title) }
     var snapshot by rememberSaveable(note.id) { mutableStateOf(note.content) }
     val canCreate = sourceTitle.isNotBlank() && snapshot.isNotBlank()
+
+    SideEffect {
+        onDirtyChange(sourceTitle != note.title || snapshot != note.content)
+    }
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))

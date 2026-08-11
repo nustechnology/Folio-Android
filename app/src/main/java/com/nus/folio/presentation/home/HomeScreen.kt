@@ -1,5 +1,7 @@
 package com.nus.folio.presentation.home
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,17 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +40,6 @@ import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
-import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
@@ -50,6 +49,10 @@ import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.presentation.home.bottomsheet.findActivityOrNull
+import com.nus.folio.presentation.home.notebook.NotebookClipboardHelper
+import com.nus.folio.presentation.home.notebook.NotebookExportHelper
+import com.nus.folio.presentation.home.notebook.NotebookPrintHelper
 import com.nus.folio.presentation.home.pane.AskPane
 import com.nus.folio.presentation.home.pane.NotebookPane
 import com.nus.folio.presentation.home.pane.NotesPane
@@ -57,6 +60,7 @@ import com.nus.folio.presentation.home.pane.SourcesPane
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
 @Composable
@@ -70,6 +74,8 @@ fun HomeScreen(
     onInitialTabHandled: () -> Unit = {},
     initialAskSourceId: String? = null,
     onInitialAskSourceHandled: () -> Unit = {},
+    initialRefreshSources: Boolean = false,
+    onInitialRefreshSourcesHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(
@@ -81,7 +87,6 @@ fun HomeScreen(
             updateSourceUseCase = LocalAppContainer.current.updateSourceUseCase,
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
             getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
-            getAskTopicsUseCase = LocalAppContainer.current.getAskTopicsUseCase,
             getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
             streamAskAnswerUseCase = LocalAppContainer.current.streamAskAnswerUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
@@ -89,6 +94,9 @@ fun HomeScreen(
             createNoteUseCase = LocalAppContainer.current.createNoteUseCase,
             updateNoteUseCase = LocalAppContainer.current.updateNoteUseCase,
             deleteNoteUseCase = LocalAppContainer.current.deleteNoteUseCase,
+            convertNoteToSourceUseCase = LocalAppContainer.current.convertNoteToSourceUseCase,
+            getNotebookUseCase = LocalAppContainer.current.getNotebookUseCase,
+            saveNotebookUseCase = LocalAppContainer.current.saveNotebookUseCase,
             sourceFileBytesReader = LocalAppContainer.current.sourceFileBytesReader,
             refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
@@ -100,11 +108,72 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showAddNoteSheet by remember { mutableStateOf(false) }
     var showConversationSheet by remember { mutableStateOf(false) }
     var showAnswerScopeSheet by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
     val toastHostState = rememberFolioToastHostState()
+
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        val request = viewModel.uiState.value.pendingNotebookExport
+        when {
+            uri == null || request == null -> {
+                viewModel.onPendingNotebookExportHandled()
+            }
+            else -> {
+                NotebookExportHelper.writeMarkdown(context, uri, request.markdown)
+                    .onSuccess { viewModel.onNotebookExportSucceeded() }
+                    .onFailure { viewModel.onNotebookExportFailed() }
+            }
+        }
+    }
+
+    LaunchedEffect(uiState.pendingNotebookCopy) {
+        val content = uiState.pendingNotebookCopy ?: return@LaunchedEffect
+        NotebookClipboardHelper.copy(
+            context = context,
+            label = context.getString(R.string.home_notebook_title),
+            content = content,
+        )
+        viewModel.onPendingNotebookCopyHandled()
+    }
+
+    LaunchedEffect(uiState.pendingNotebookExport, uiState.notebookExportPickerLaunched) {
+        val request = uiState.pendingNotebookExport ?: return@LaunchedEffect
+        if (uiState.notebookExportPickerLaunched) return@LaunchedEffect
+        viewModel.onNotebookExportPickerLaunched()
+        exportDocumentLauncher.launch(request.filename)
+    }
+
+    // Keep pendingNotebookPrint across async WebView load and activity recreation. Bump request id
+    // on configuration change so print relaunches with a new adapter; clear when leaving Home.
+    DisposableEffect(Unit) {
+        val activity = context.findActivityOrNull()
+        onDispose {
+            if (activity?.isChangingConfigurations == true) {
+                viewModel.onNotebookPrintAdapterInvalidated()
+            } else {
+                viewModel.onPendingNotebookPrintHandled()
+            }
+        }
+    }
+
+    LaunchedEffect(uiState.pendingNotebookPrint?.id) {
+        val request = uiState.pendingNotebookPrint ?: return@LaunchedEffect
+        val session = NotebookPrintHelper.print(
+            context = context,
+            jobName = uiState.spaceTitle.ifBlank { context.getString(R.string.home_notebook_title) },
+            markdown = request.markdown,
+            loadId = request.id,
+            onSubmitted = { viewModel.onNotebookPrintSubmitted() },
+        )
+        try {
+            awaitCancellation()
+        } finally {
+            session.cancel()
+        }
+    }
 
     LaunchedEffect(uiState.requiresReauth) {
         if (uiState.requiresReauth) onSignOut()
@@ -150,6 +219,12 @@ fun HomeScreen(
         onInitialAskSourceHandled()
     }
 
+    LaunchedEffect(initialRefreshSources) {
+        if (!initialRefreshSources) return@LaunchedEffect
+        viewModel.loadSources()
+        onInitialRefreshSourcesHandled()
+    }
+
     LaunchedEffect(uiState.openSourceDetailId) {
         val sourceId = uiState.openSourceDetailId ?: return@LaunchedEffect
         onNavigateToSourceDetail(sourceId, uiState.openSourceDetailHighlight)
@@ -169,7 +244,7 @@ fun HomeScreen(
             onTabSelected = viewModel::onTabSelected,
             onAddClick = {
                 when (uiState.selectedTab) {
-                    HomeTab.NOTES -> showAddNoteSheet = true
+                    HomeTab.NOTES -> viewModel.onAddNoteClick()
                     HomeTab.ASK -> showConversationSheet = true
                     HomeTab.SOURCES -> viewModel.onAddSourceClick()
                     HomeTab.NOTEBOOK -> viewModel.onNotebookAddClick()
@@ -189,26 +264,21 @@ fun HomeScreen(
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
             onLoadMoreNotes = viewModel::onLoadMoreNotes,
+            onNotebookContentChange = viewModel::onNotebookContentChange,
+            onRetryNotebookSave = viewModel::onRetryNotebookSave,
             onSignOut = { showSignOutConfirm = true },
             modifier = Modifier.fillMaxSize(),
         )
 
-        FolioToastHost(
-            hostState = toastHostState,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 12.dp),
-        )
-
         HomeOverlaySheets(
             uiState = uiState,
-            showAddNoteSheet = showAddNoteSheet,
             showConversationSheet = showConversationSheet,
             showAnswerScopeSheet = showAnswerScopeSheet,
             showSignOutConfirm = showSignOutConfirm,
             onAddSourceSheetDismiss = viewModel::onAddSourceSheetDismiss,
             onAddSourceSubmit = viewModel::onAddSourceSubmit,
+            onAddSourceFileSelected = viewModel::onAddSourceFileSelected,
+            onAddSourceFileSelectionFailed = viewModel::onAddSourceFileSelectionFailed,
             onSortSelected = viewModel::onSortSelected,
             onNoteSortSelected = viewModel::onNoteSortSelected,
             onSortSheetDismiss = viewModel::onSortSheetDismiss,
@@ -216,10 +286,8 @@ fun HomeScreen(
             onSourceProcessingOpenSource = viewModel::onSourceProcessingOpenSource,
             onSourceProcessingAsk = viewModel::onSourceProcessingAsk,
             onSourceProcessingRetry = viewModel::onSourceProcessingRetry,
-            onAddNoteSheetDismiss = { showAddNoteSheet = false },
-            onAddNoteSubmit = { title, content ->
-                viewModel.onAddNoteSubmit(title, content)
-            },
+            onAddNoteSheetDismiss = viewModel::onAddNoteSheetDismiss,
+            onAddNoteSubmit = viewModel::onAddNoteSubmit,
             onAskSaveAsNoteDismiss = viewModel::onAskSaveAsNoteDismiss,
             onAskSaveAsNoteConfirm = viewModel::onAskSaveAsNoteConfirm,
             onAskCitationClick = viewModel::onAskCitationClick,
@@ -261,6 +329,15 @@ fun HomeScreen(
             onNotebookExportDismiss = viewModel::onNotebookExportDismiss,
             onNotebookExportConfirm = viewModel::onNotebookExportConfirm,
         )
+
+        // Drawn last (+ high zIndex) so toasts stay above bottom sheets / scrims.
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 
@@ -290,6 +367,8 @@ internal fun HomeContent(
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
     onLoadMoreNotes: () -> Unit = {},
+    onNotebookContentChange: (String) -> Unit = {},
+    onRetryNotebookSave: () -> Unit = {},
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -368,7 +447,6 @@ internal fun HomeContent(
                 )
                 HomeTab.ASK -> AskPane(
                     uiState = uiState,
-                    onRetry = onRetry,
                     onAskSubmit = onAskSubmit,
                     onAskStop = onAskStop,
                     onScopeChipClick = onScopeChipClick,
@@ -401,7 +479,13 @@ internal fun HomeContent(
                         .padding(bottom = HomeBottomNavClearance),
                 )
                 HomeTab.NOTEBOOK -> NotebookPane(
-                    onSignOut = onSignOut,
+                    content = uiState.notebookContent,
+                    spaceTitle = uiState.spaceTitle,
+                    saveStatus = uiState.notebookSaveStatus,
+                    isLoadingNotebook = uiState.isLoadingNotebook,
+                    isLoadingNotes = uiState.isLoading,
+                    onContentChange = onNotebookContentChange,
+                    onRetrySave = onRetryNotebookSave,
                     modifier = Modifier
                         .weight(1f)
                         .padding(bottom = HomeBottomNavClearance),
@@ -490,10 +574,6 @@ private fun HomeAskPreview() {
         HomeContent(
             uiState = HomeUiState(
                 selectedTab = HomeTab.ASK,
-                visibleAskTopics = listOf(
-                    AskTopic("1a", "Core dissertation arguments", 4, 2, "1"),
-                    AskTopic("1b", "Turing and modern AI", 3, 1, "1"),
-                ),
                 spaceTitle = "Dissertation Research",
             ),
             onRetry = {},
@@ -577,8 +657,8 @@ private fun HomeNotesPreview() {
                 ),
                 spaceTitle = "Dissertation Research",
                 notesAllCount = 32,
-                notesPinnedCount = 8,
-                notesUnfiledCount = 4,
+                notesUserCreatedCount = 8,
+                notesSavedAnswerCount = 4,
             ),
             onRetry = {},
             onSearchQueryChange = {},
@@ -608,8 +688,8 @@ private fun HomeNotesEmptyPreview() {
                 visibleNotes = emptyList(),
                 spaceTitle = "Dissertation Research",
                 notesAllCount = 0,
-                notesPinnedCount = 0,
-                notesUnfiledCount = 0,
+                notesUserCreatedCount = 0,
+                notesSavedAnswerCount = 0,
             ),
             onRetry = {},
             onSearchQueryChange = {},
@@ -640,8 +720,8 @@ private fun HomeNotesSearchEmptyPreview() {
                 visibleNotes = emptyList(),
                 spaceTitle = "Dissertation Research",
                 notesAllCount = 32,
-                notesPinnedCount = 8,
-                notesUnfiledCount = 4,
+                notesUserCreatedCount = 8,
+                notesSavedAnswerCount = 4,
             ),
             onRetry = {},
             onSearchQueryChange = {},
@@ -667,4 +747,5 @@ private fun HomeActionError.toStringRes(): Int = when (this) {
     HomeActionError.FILE_REQUIRED -> R.string.add_source_file_required
     HomeActionError.FILE_UNSUPPORTED -> R.string.add_source_file_unsupported_format
     HomeActionError.FILE_TOO_LARGE -> R.string.add_source_file_size_exceeded
+    HomeActionError.EXPORT_FAILED -> R.string.notebook_export_failed
 }

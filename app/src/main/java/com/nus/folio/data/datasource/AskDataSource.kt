@@ -2,18 +2,12 @@ package com.nus.folio.data.datasource
 
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskStreamEvent
-import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.SourceType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 class AskDataSource {
-
-    suspend fun fetchAskTopics(spaceId: String): List<AskTopic> {
-        delay(200)
-        return sampleTopics.filter { it.spaceId == spaceId }
-    }
 
     /**
      * Returns up to 3 context-aware questions for a source that has summary/metadata.
@@ -105,44 +99,6 @@ class AskDataSource {
         private const val THINKING_DELAY_MS = 400L
         private const val CHUNK_DELAY_MS = 45L
         private const val CHUNK_SIZE = 28
-
-        private val sampleTopics = listOf(
-            AskTopic(
-                id = "1a",
-                title = "Core dissertation arguments",
-                sourceCount = 4,
-                noteCount = 2,
-                spaceId = "1",
-            ),
-            AskTopic(
-                id = "1b",
-                title = "Turing and modern AI",
-                sourceCount = 3,
-                noteCount = 1,
-                spaceId = "1",
-            ),
-            AskTopic(
-                id = "2a",
-                title = "Policy brief themes",
-                sourceCount = 2,
-                noteCount = 2,
-                spaceId = "2",
-            ),
-            AskTopic(
-                id = "3a",
-                title = "Scientific manuscripts timeline",
-                sourceCount = 1,
-                noteCount = 1,
-                spaceId = "3",
-            ),
-            AskTopic(
-                id = "4a",
-                title = "Week 7 lecture prep",
-                sourceCount = 2,
-                noteCount = 1,
-                spaceId = "4",
-            ),
-        )
 
         private val sourceSuggestions = mapOf(
             "1" to listOf(

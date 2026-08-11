@@ -1,7 +1,6 @@
 package com.nus.folio.data.datasource
 
 import com.nus.folio.domain.model.Note
-import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
 
 /**
@@ -10,14 +9,6 @@ import com.nus.folio.domain.model.NoteOrigin
 internal object NoteSampleData {
 
     fun mutableDefaultNotes(): MutableList<Note> = samples.toMutableList()
-
-    fun libraryFrom(notes: List<Note>): NoteLibrary =
-        NoteLibrary(
-            notes = notes,
-            allCount = notes.size,
-            pinnedCount = notes.count { it.isPinned },
-            unfiledCount = notes.count { it.project.isNullOrBlank() },
-        )
 
     private val samples = listOf(
         Note(

@@ -22,9 +22,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -47,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
-import com.nus.folio.components.ModalSheetDismiss
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.util.NoteInputRules
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeSheetShape
@@ -69,12 +67,10 @@ private val AddNoteContentHeight = 160.dp
 internal fun AddNoteBottomSheet(
     onDismiss: () -> Unit,
     onSubmit: (String, String) -> Unit = { _, _ -> },
+    isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
-    var hasUnsavedContent by remember { mutableStateOf(false) }
-    var bypassDiscardConfirm by remember { mutableStateOf(false) }
-    var showDiscardConfirm by remember { mutableStateOf(false) }
-    val dismissHolder = remember { DiscardDismissHolder() }
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -87,56 +83,36 @@ internal fun AddNoteBottomSheet(
     }
 
     AnimatedModalSheet(
-        onDismiss = onDismiss,
-        dismissOnScrimClick = true,
+        onDismiss = {
+            if (!isSubmitting) onDismiss()
+        },
+        dismissOnScrimClick = !isSubmitting,
         confirmDismiss = {
-            if (bypassDiscardConfirm || !hasUnsavedContent) {
-                true
-            } else {
-                showDiscardConfirm = true
-                false
-            }
+            discardProtection.confirmDismiss(blockWhileBusy = isSubmitting)
         },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
-        dismissHolder.requestDismiss = requestDismiss
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         AddNoteSheetContent(
-            onDirtyChange = { hasUnsavedContent = it },
-            onCancelClick = { requestDismiss() },
+            isSubmitting = isSubmitting,
+            onDirtyChange = { discardProtection.hasUnsavedContent = it },
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
+            },
             onSubmit = { title, content ->
-                bypassDiscardConfirm = true
-                requestDismiss { onSubmit(title, content) }
+                onSubmit(title, content)
             },
         )
     }
 
-    if (showDiscardConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDiscardConfirm = false },
-            title = { Text(text = stringResource(R.string.add_note_discard_title)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardConfirm = false
-                        bypassDiscardConfirm = true
-                        dismissHolder.requestDismiss?.invoke()
-                    },
-                ) {
-                    Text(text = stringResource(R.string.add_note_discard_yes))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDiscardConfirm = false }) {
-                    Text(text = stringResource(R.string.add_note_discard_no))
-                }
-            },
-        )
-    }
-}
-
-private class DiscardDismissHolder {
-    var requestDismiss: ModalSheetDismiss? = null
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+        titleRes = R.string.add_note_discard_title,
+        messageRes = R.string.add_note_discard_message,
+    )
 }
 
 @Composable
@@ -144,6 +120,7 @@ private fun AddNoteSheetContent(
     onCancelClick: () -> Unit,
     onSubmit: (String, String) -> Unit,
     onDirtyChange: (Boolean) -> Unit = {},
+    isSubmitting: Boolean = false,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
@@ -187,7 +164,7 @@ private fun AddNoteSheetContent(
         AddNoteLabeledField(
             label = stringResource(R.string.add_note_title_hint),
             value = title,
-            onValueChange = { title = it },
+            onValueChange = { if (!isSubmitting) title = it },
             placeholder = stringResource(R.string.add_note_title_placeholder),
             singleLine = true,
             errorMessage = titleError,
@@ -196,7 +173,7 @@ private fun AddNoteSheetContent(
         AddNoteLabeledField(
             label = stringResource(R.string.add_note_content_hint),
             value = content,
-            onValueChange = { content = it },
+            onValueChange = { if (!isSubmitting) content = it },
             placeholder = stringResource(R.string.add_note_content_placeholder),
             singleLine = false,
             errorMessage = contentError,
@@ -215,14 +192,16 @@ private fun AddNoteSheetContent(
                 modifier = Modifier.weight(1f),
             )
             AddSourceSubmitButton(
-                enabled = true,
+                enabled = !isSubmitting && NoteInputRules.canSave(title, content),
                 onClick = {
-                    submitAttempted = true
-                    if (NoteInputRules.canSave(title, content)) {
-                        onSubmit(title.trim(), content.trim())
+                    if (isSubmitting || !NoteInputRules.canSave(title, content)) {
+                        return@AddSourceSubmitButton
                     }
+                    submitAttempted = true
+                    onSubmit(title.trim(), content.trim())
                 },
                 labelRes = R.string.add_note_submit,
+                isLoading = isSubmitting,
                 modifier = Modifier.weight(1f),
             )
         }

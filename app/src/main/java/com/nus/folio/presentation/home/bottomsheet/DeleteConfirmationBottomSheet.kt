@@ -161,3 +161,22 @@ private fun DeleteNoteConfirmationPreview() {
         }
     }
 }
+
+@Composable
+internal fun SheetDiscardConfirmBottomSheet(
+    visible: Boolean,
+    onKeepEditing: () -> Unit,
+    onDiscard: () -> Unit,
+    @StringRes titleRes: Int = R.string.sheet_discard_unsaved_title,
+    @StringRes messageRes: Int = R.string.sheet_discard_unsaved_message,
+    @StringRes confirmLabelRes: Int = R.string.sheet_discard_confirm,
+) {
+    if (!visible) return
+    DeleteConfirmationBottomSheet(
+        onDismiss = onKeepEditing,
+        onConfirm = onDiscard,
+        titleRes = titleRes,
+        messageRes = messageRes,
+        confirmLabelRes = confirmLabelRes,
+    )
+}

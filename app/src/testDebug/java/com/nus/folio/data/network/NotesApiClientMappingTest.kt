@@ -14,6 +14,7 @@ class NotesApiClientMappingTest {
     fun `mapOriginType maps API values`() {
         assertEquals(NoteOrigin.USER_CREATED, NotesApiClient.mapOriginType("UserCreated"))
         assertEquals(NoteOrigin.SAVED_ANSWER, NotesApiClient.mapOriginType("SavedAnswer"))
+        assertEquals(NoteOrigin.SAVED_ANSWER, NotesApiClient.mapOriginType("SavedAssistantAnswer"))
         assertEquals(NoteOrigin.SAVED_ANSWER, NotesApiClient.mapOriginType("saved_answer"))
         assertEquals(NoteOrigin.USER_CREATED, NotesApiClient.mapOriginType("unknown"))
         assertEquals(NoteOrigin.USER_CREATED, NotesApiClient.mapOriginType(null))
@@ -69,6 +70,18 @@ class NotesApiClientMappingTest {
         assertEquals(
             "https://example.test/api/v1/spaces/space%2F1/notes/note%2F2",
             FolioApiPaths.spaceNote(
+                spaceId = "space/1",
+                noteId = "note/2",
+                baseUrl = "https://example.test",
+            ),
+        )
+    }
+
+    @Test
+    fun `spaceNoteConvertToSource path encodes ids`() {
+        assertEquals(
+            "https://example.test/api/v1/spaces/space%2F1/notes/note%2F2/convert-to-source",
+            FolioApiPaths.spaceNoteConvertToSource(
                 spaceId = "space/1",
                 noteId = "note/2",
                 baseUrl = "https://example.test",

@@ -4,6 +4,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceType
@@ -81,6 +82,12 @@ internal fun noteOriginBadgeColors(origin: NoteOrigin): SourceTypeBadgeColors = 
         background = HomeTypeNoteSavedBackground,
         content = HomeTypeNoteSavedText,
     )
+}
+
+internal fun noteFilterBadgeColors(filter: NoteFilter): SourceTypeBadgeColors? = when (filter) {
+    NoteFilter.ALL -> null
+    NoteFilter.USER_CREATED -> noteOriginBadgeColors(NoteOrigin.USER_CREATED)
+    NoteFilter.SAVED_ANSWER -> noteOriginBadgeColors(NoteOrigin.SAVED_ANSWER)
 }
 
 internal val NoteIconBadgeColors = SourceTypeBadgeColors(

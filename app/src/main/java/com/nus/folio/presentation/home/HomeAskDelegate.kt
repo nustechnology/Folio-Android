@@ -171,8 +171,12 @@ internal class HomeAskDelegate(
                         } else {
                             current.notesAllCount + 1
                         },
-                        notesPinnedCount = notes.count { note -> note.isPinned },
-                        notesUnfiledCount = notes.count { note -> note.project.isNullOrBlank() },
+                        notesUserCreatedCount = notes.count { note ->
+                            note.origin == NoteOrigin.USER_CREATED
+                        },
+                        notesSavedAnswerCount = notes.count { note ->
+                            note.origin == NoteOrigin.SAVED_ANSWER
+                        },
                         userMessage = HomeUserMessage.NOTE_SAVED_FROM_ASK,
                     )
                     next.copy(visibleNotes = filterNotes(next))

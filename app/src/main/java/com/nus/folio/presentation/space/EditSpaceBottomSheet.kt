@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.rememberSheetDiscardProtectionState
+import com.nus.folio.presentation.home.bottomsheet.SheetDiscardConfirmBottomSheet
 import com.nus.folio.domain.model.Space
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeSheetShape
@@ -67,6 +70,7 @@ internal fun EditSpaceBottomSheet(
     isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -82,12 +86,18 @@ internal fun EditSpaceBottomSheet(
         onDismiss = {
             if (!isSubmitting) onDismiss()
         },
+        dismissOnScrimClick = !isSubmitting,
+        confirmDismiss = {
+            discardProtection.confirmDismiss(blockWhileBusy = isSubmitting)
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         EditSpaceSheetContent(
             space = space,
             isSubmitting = isSubmitting,
+            onDirtyChange = { discardProtection.hasUnsavedContent = it },
             onCancelClick = {
                 if (!isSubmitting) requestDismiss()
             },
@@ -96,6 +106,12 @@ internal fun EditSpaceBottomSheet(
             },
         )
     }
+
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+    )
 }
 
 @Composable
@@ -103,6 +119,7 @@ private fun EditSpaceSheetContent(
     space: Space,
     onCancelClick: () -> Unit,
     onSave: (name: String, researchObjective: String) -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
     isSubmitting: Boolean = false,
 ) {
     var name by rememberSaveable(space.id) { mutableStateOf(space.title) }
@@ -112,6 +129,10 @@ private fun EditSpaceSheetContent(
     val canSave = trimmedName.isNotEmpty() &&
         !isSubmitting &&
         (trimmedName != space.title || trimmedObjective != space.description)
+
+    SideEffect {
+        onDirtyChange(name != space.title || objective != space.description)
+    }
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.presentation.home.HomeSheetShape
@@ -51,6 +53,7 @@ internal fun EditNoteBottomSheet(
     onDelete: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -64,18 +67,31 @@ internal fun EditNoteBottomSheet(
 
     AnimatedModalSheet(
         onDismiss = onDismiss,
+        confirmDismiss = { discardProtection.confirmDismiss() },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         EditNoteSheetContent(
             note = note,
-            onDeleteClick = { requestDismiss { onDelete() } },
+            onDirtyChange = { discardProtection.hasUnsavedContent = it },
+            onDeleteClick = {
+                discardProtection.bypassDiscardConfirm = true
+                requestDismiss { onDelete() }
+            },
             onCloseClick = { requestDismiss() },
             onSave = { title, content ->
+                discardProtection.bypassDiscardConfirm = true
                 requestDismiss { onSave(title, content) }
             },
         )
     }
+
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+    )
 }
 
 @Composable
@@ -84,10 +100,15 @@ private fun EditNoteSheetContent(
     onDeleteClick: () -> Unit,
     onCloseClick: () -> Unit,
     onSave: (title: String, content: String) -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
 ) {
     var title by rememberSaveable(note.id) { mutableStateOf(note.title) }
     var content by rememberSaveable(note.id) { mutableStateOf(note.content) }
     val canSave = title.isNotBlank() && content.isNotBlank()
+
+    SideEffect {
+        onDirtyChange(title != note.title || content != note.content)
+    }
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))

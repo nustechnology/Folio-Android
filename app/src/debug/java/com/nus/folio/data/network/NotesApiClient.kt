@@ -4,6 +4,7 @@ import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.NotePaging
+import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.util.NoteUpdatedLabelFormatter
 import java.io.IOException
 import java.net.URLEncoder
@@ -19,6 +20,7 @@ interface NotesApi {
         spaceId: String,
         sort: String = DEFAULT_SORT,
         search: String? = null,
+        origin: String? = null,
         page: Int = NotePaging.DEFAULT_PAGE,
         limit: Int = NotePaging.DEFAULT_LIMIT,
     ): NoteLibrary
@@ -50,6 +52,13 @@ interface NotesApi {
         noteId: String,
     )
 
+    suspend fun convertNoteToSource(
+        accessToken: String,
+        spaceId: String,
+        noteId: String,
+        title: String,
+    ): Source
+
     companion object {
         const val DEFAULT_SORT = "recently-updated"
     }
@@ -61,6 +70,7 @@ interface NotesApi {
 class NotesApiClient(
     private val baseUrl: String = FolioApiPaths.BASE_URL,
     private val nowInstant: () -> Instant = { Instant.now() },
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
 ) : NotesApi {
 
     override suspend fun listNotes(
@@ -68,6 +78,7 @@ class NotesApiClient(
         spaceId: String,
         sort: String,
         search: String?,
+        origin: String?,
         page: Int,
         limit: Int,
     ): NoteLibrary = withContext(Dispatchers.IO) {
@@ -84,6 +95,11 @@ class NotesApiClient(
             if (trimmedSearch.isNotEmpty()) {
                 append("&search=")
                 append(URLEncoder.encode(trimmedSearch, Charsets.UTF_8.name()))
+            }
+            val trimmedOrigin = origin?.trim().orEmpty()
+            if (trimmedOrigin.isNotEmpty()) {
+                append("&origin=")
+                append(URLEncoder.encode(trimmedOrigin, Charsets.UTF_8.name()))
             }
         }
         FolioHttp.get(
@@ -176,6 +192,24 @@ class NotesApiClient(
         )
     }
 
+    override suspend fun convertNoteToSource(
+        accessToken: String,
+        spaceId: String,
+        noteId: String,
+        title: String,
+    ): Source = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("title", title)
+        FolioHttp.postJson(
+            url = FolioApiPaths.spaceNoteConvertToSource(spaceId, noteId, baseUrl),
+            jsonBody = body.toString(),
+            accessToken = accessToken,
+            failureLabel = "Convert note to source",
+            parse = { response ->
+                SourcesJsonParsers.parseCreatedSource(response.body, nowMillis())
+            },
+        )
+    }
+
     private fun parseNotePayload(responseBody: String, failureLabel: String): Note {
         if (responseBody.isBlank()) {
             throw IOException("$failureLabel failed: empty response")
@@ -196,8 +230,8 @@ class NotesApiClient(
             return NoteLibrary(
                 notes = emptyList(),
                 allCount = 0,
-                pinnedCount = 0,
-                unfiledCount = 0,
+                userCreatedCount = 0,
+                savedAnswerCount = 0,
                 page = page,
                 limit = limit,
                 hasMore = false,
@@ -229,22 +263,19 @@ class NotesApiClient(
             containers = aggregateCounts,
             keys = listOf("allCount", "totalCount", "noteCount"),
         )
-        val aggregatePinnedCount = firstAvailableCount(
+        val aggregateUserCreatedCount = firstAvailableCount(
             containers = aggregateCounts,
-            keys = listOf("pinnedCount", "totalPinnedCount"),
+            keys = listOf("userCreatedCount", "totalUserCreatedCount"),
         )
-        val aggregateUnfiledCount = firstAvailableCount(
+        val aggregateSavedAnswerCount = firstAvailableCount(
             containers = aggregateCounts,
-            keys = listOf("unfiledCount", "totalUnfiledCount"),
+            keys = listOf("savedAnswerCount", "totalSavedAnswerCount"),
         )
-        val hasAggregateCategoryCounts = aggregatePinnedCount != null && aggregateUnfiledCount != null
-        val pageAllCount = notes.size
-        val allCount = when {
-            hasAggregateCategoryCounts -> aggregateAllCount
-            else -> null
-        } ?: pageAllCount
-        val pinnedCount = aggregatePinnedCount ?: notes.count { it.isPinned }
-        val unfiledCount = aggregateUnfiledCount ?: notes.count { it.project.isNullOrBlank() }
+        val allCount = aggregateAllCount ?: notes.size
+        val userCreatedCount = aggregateUserCreatedCount
+            ?: notes.count { it.origin == NoteOrigin.USER_CREATED }
+        val savedAnswerCount = aggregateSavedAnswerCount
+            ?: notes.count { it.origin == NoteOrigin.SAVED_ANSWER }
         val totalPages = pagination?.takeIf { it.has("totalPages") }?.optInt("totalPages")
         val responsePage = pagination?.optInt("page", page) ?: page
         val responseLimit = pagination?.optInt("limit", limit) ?: limit
@@ -258,8 +289,8 @@ class NotesApiClient(
         return NoteLibrary(
             notes = notes,
             allCount = allCount.coerceAtLeast(0),
-            pinnedCount = pinnedCount.coerceAtLeast(0),
-            unfiledCount = unfiledCount.coerceAtLeast(0),
+            userCreatedCount = userCreatedCount.coerceAtLeast(0),
+            savedAnswerCount = savedAnswerCount.coerceAtLeast(0),
             page = responsePage,
             limit = responseLimit,
             hasMore = hasMore,
@@ -303,7 +334,7 @@ class NotesApiClient(
 
         internal fun mapOriginType(raw: String?): NoteOrigin =
             when (raw?.trim()?.lowercase()) {
-                "savedanswer", "saved_answer" -> NoteOrigin.SAVED_ANSWER
+                "savedassistantanswer", "savedanswer", "saved_answer" -> NoteOrigin.SAVED_ANSWER
                 else -> NoteOrigin.USER_CREATED
             }
 

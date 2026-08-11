@@ -6,10 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcePreviewUrlUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
+import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +30,8 @@ class SourceDetailViewModel(
     private val getSourcePreviewUrlUseCase: GetSourcePreviewUrlUseCase,
     private val retrySourceUseCase: RetrySourceUseCase,
     private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
+    private val updateSourceUseCase: UpdateSourceUseCase,
+    private val deleteSourceUseCase: DeleteSourceUseCase,
     private val contentRevealDelayMs: Long = CONTENT_REVEAL_DELAY_MS,
 ) : ViewModel() {
 
@@ -180,6 +185,111 @@ class SourceDetailViewModel(
         _uiState.update { it.copy(openOriginalRequest = null) }
     }
 
+    fun onEditSourceClick() {
+        val detail = _uiState.value.detail ?: return
+        _uiState.update {
+            it.copy(
+                editingSource = detail.toSource(),
+                editingSourceContent = detail.plainContent.orEmpty(),
+            )
+        }
+    }
+
+    fun onEditSourceDismiss() {
+        if (_uiState.value.isUpdatingSource) return
+        _uiState.update { it.copy(editingSource = null, editingSourceContent = "") }
+    }
+
+    fun onEditSourceSave(title: String, author: String, content: String) {
+        if (_uiState.value.isUpdatingSource) return
+        val editing = _uiState.value.editingSource ?: return
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isBlank()) return
+        val trimmedAuthor = author.trim()
+        val contentToSend = if (editing.type == SourceType.TEXT) content.trim() else null
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingSource = true, actionError = null) }
+            updateSourceUseCase(
+                source = editing.copy(
+                    title = trimmedTitle,
+                    author = trimmedAuthor,
+                ),
+                content = contentToSend,
+            ).onSuccess { updated ->
+                _uiState.update { current ->
+                    val detail = current.detail
+                    current.copy(
+                        isUpdatingSource = false,
+                        detail = detail?.copy(
+                            title = updated.title,
+                            author = updated.author,
+                            status = updated.status,
+                            fileExtension = updated.fileExtension,
+                            plainContent = if (updated.type == SourceType.TEXT) {
+                                contentToSend ?: detail.plainContent
+                            } else {
+                                detail.plainContent
+                            },
+                        ),
+                        editingSource = null,
+                        editingSourceContent = "",
+                        userMessage = SourceDetailUserMessage.SOURCE_UPDATED,
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isUpdatingSource = false,
+                        actionError = throwable.toActionErrorMessage(),
+                    )
+                }
+            }
+        }
+    }
+
+    fun onDeleteSourceClick() {
+        val detail = _uiState.value.detail ?: return
+        _uiState.update { it.copy(deletingSource = detail.toSource()) }
+    }
+
+    fun onDeleteSourceDismiss() {
+        if (_uiState.value.isDeletingSource) return
+        _uiState.update { it.copy(deletingSource = null) }
+    }
+
+    fun onDeleteSourceConfirm() {
+        if (_uiState.value.isDeletingSource) return
+        val deleting = _uiState.value.deletingSource ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingSource = true, actionError = null) }
+            deleteSourceUseCase(deleting.id)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            deletingSource = null,
+                            isDeletingSource = false,
+                            userMessage = SourceDetailUserMessage.SOURCE_DELETED,
+                            sourceDeleted = true,
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            deletingSource = null,
+                            isDeletingSource = false,
+                            actionError = throwable.toActionErrorMessage(),
+                        )
+                    }
+                }
+        }
+    }
+
+    fun onSourceDeletedHandled() {
+        _uiState.update { it.copy(sourceDeleted = false) }
+    }
+
     fun onUserMessageShown() {
         _uiState.update { it.copy(userMessage = null) }
     }
@@ -195,6 +305,8 @@ class SourceDetailViewModel(
         private val getSourcePreviewUrlUseCase: GetSourcePreviewUrlUseCase,
         private val retrySourceUseCase: RetrySourceUseCase,
         private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
+        private val updateSourceUseCase: UpdateSourceUseCase,
+        private val deleteSourceUseCase: DeleteSourceUseCase,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -206,6 +318,8 @@ class SourceDetailViewModel(
                     getSourcePreviewUrlUseCase,
                     retrySourceUseCase,
                     observeSourceProcessingUseCase,
+                    updateSourceUseCase,
+                    deleteSourceUseCase,
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
@@ -216,6 +330,18 @@ class SourceDetailViewModel(
         private const val CONTENT_REVEAL_DELAY_MS = 1_000L
     }
 }
+
+private fun com.nus.folio.domain.model.SourceDetail.toSource(): com.nus.folio.domain.model.Source =
+    com.nus.folio.domain.model.Source(
+        id = id,
+        title = title,
+        type = type,
+        author = author,
+        addedLabel = addedLabel,
+        status = status,
+        spaceId = spaceId,
+        fileExtension = fileExtension,
+    )
 
 private fun Throwable.toActionErrorMessage(): String =
     message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Please try again."

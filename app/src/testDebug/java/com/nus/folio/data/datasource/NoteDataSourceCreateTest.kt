@@ -6,6 +6,9 @@ import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.SourceType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,8 +31,8 @@ class NoteDataSourceCreateTest {
         var getCallCount = 0
         var updateCallCount = 0
         var deleteCallCount = 0
+        var convertCallCount = 0
         var failUnauthorizedOnce = false
-        var onUnauthorized: (() -> Unit)? = null
         var remoteNote: Note = Note(
             id = "note-remote-1",
             title = "Remote title",
@@ -44,8 +47,8 @@ class NoteDataSourceCreateTest {
         var listLibrary: NoteLibrary = NoteLibrary(
             notes = listOf(remoteNote),
             allCount = 1,
-            pinnedCount = 0,
-            unfiledCount = 1,
+            userCreatedCount = 1,
+            savedAnswerCount = 0,
             page = 1,
             limit = 10,
             hasMore = false,
@@ -56,6 +59,7 @@ class NoteDataSourceCreateTest {
             spaceId: String,
             sort: String,
             search: String?,
+            origin: String?,
             page: Int,
             limit: Int,
         ): NoteLibrary {
@@ -68,7 +72,6 @@ class NoteDataSourceCreateTest {
             lastLimit = limit
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
-                onUnauthorized?.invoke()
                 throw UnauthorizedException("Get notes failed (HTTP 401)")
             }
             return listLibrary.copy(
@@ -89,7 +92,6 @@ class NoteDataSourceCreateTest {
             getCallCount++
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
-                onUnauthorized?.invoke()
                 throw UnauthorizedException("Get note failed (HTTP 401)")
             }
             return remoteNote.copy(id = noteId, spaceId = spaceId)
@@ -108,7 +110,6 @@ class NoteDataSourceCreateTest {
             lastContent = content
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
-                onUnauthorized?.invoke()
                 throw UnauthorizedException("Create note failed (HTTP 401)")
             }
             return remoteNote.copy(
@@ -133,7 +134,6 @@ class NoteDataSourceCreateTest {
             lastContent = content
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
-                onUnauthorized?.invoke()
                 throw UnauthorizedException("Update note failed (HTTP 401)")
             }
             return remoteNote.copy(
@@ -141,7 +141,9 @@ class NoteDataSourceCreateTest {
                 title = title,
                 content = content,
                 spaceId = spaceId,
-                updatedLabel = "Aug 7, 13:00",
+                // Simulate API omitting client-only origin/citation fields.
+                origin = NoteOrigin.USER_CREATED,
+                citationCount = 0,
             )
         }
 
@@ -156,9 +158,34 @@ class NoteDataSourceCreateTest {
             lastNoteId = noteId
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
-                onUnauthorized?.invoke()
                 throw UnauthorizedException("Delete note failed (HTTP 401)")
             }
+        }
+
+        override suspend fun convertNoteToSource(
+            accessToken: String,
+            spaceId: String,
+            noteId: String,
+            title: String,
+        ): Source {
+            convertCallCount++
+            lastAccessToken = accessToken
+            lastSpaceId = spaceId
+            lastNoteId = noteId
+            lastTitle = title
+            if (failUnauthorizedOnce && accessToken == "expired-token") {
+                failUnauthorizedOnce = false
+                throw UnauthorizedException("Convert note to source failed (HTTP 401)")
+            }
+            return Source(
+                id = "source-from-note",
+                title = title,
+                type = SourceType.TEXT,
+                author = "API Author",
+                addedLabel = "Added just now",
+                status = SourceStatus.PROCESSING,
+                spaceId = spaceId,
+            )
         }
     }
 
@@ -205,34 +232,6 @@ class NoteDataSourceCreateTest {
         assertEquals("note-remote-1", api.lastNoteId)
         assertEquals("note-remote-1", detail.id)
         assertEquals("<p>Remote content</p>", detail.content)
-    }
-
-    @Test
-    fun `fetchNote preserves cached saved-answer origin and citationCount`() = runTest {
-        val api = FakeNotesApi()
-        val dataSource = NoteDataSource(
-            notesApi = api,
-            accessTokenProvider = { "access-token" },
-        )
-        dataSource.createNote(
-            CreateNoteRequest(
-                spaceId = "space-1",
-                title = "Saved answer",
-                content = "Body",
-                origin = NoteOrigin.SAVED_ANSWER,
-                citationCount = 4,
-            ),
-        )
-        // Detail payload defaults to USER_CREATED / 0 when originType is omitted.
-        api.remoteNote = api.remoteNote.copy(
-            origin = NoteOrigin.USER_CREATED,
-            citationCount = 0,
-        )
-
-        val detail = dataSource.fetchNote(spaceId = "space-1", noteId = "note-remote-1")
-
-        assertEquals(NoteOrigin.SAVED_ANSWER, detail.origin)
-        assertEquals(4, detail.citationCount)
     }
 
     @Test
@@ -314,39 +313,6 @@ class NoteDataSourceCreateTest {
         assertEquals("note-remote-1", created.id)
     }
 
-    @Test
-    fun `createNote reuses already refreshed token without calling refresh`() = runTest {
-        var token = "expired-token"
-        var refreshCallCount = 0
-        val api = FakeNotesApi().apply {
-            failUnauthorizedOnce = true
-            // Concurrent refresh lands a new access token before this caller retries.
-            onUnauthorized = { token = "fresh-token" }
-        }
-        val dataSource = NoteDataSource(
-            notesApi = api,
-            accessTokenProvider = { token },
-            refreshAccessToken = {
-                refreshCallCount++
-                token = "from-refresh"
-                token
-            },
-        )
-
-        val created = dataSource.createNote(
-            CreateNoteRequest(
-                spaceId = "space-1",
-                title = "Reuse token",
-                content = "Body",
-            ),
-        )
-
-        assertEquals(0, refreshCallCount)
-        assertEquals(2, api.createCallCount)
-        assertEquals("fresh-token", api.lastAccessToken)
-        assertEquals("note-remote-1", created.id)
-    }
-
     @Test(expected = UnauthorizedException::class)
     fun `createNote rethrows when refresh unavailable`() = runTest {
         val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
@@ -388,14 +354,24 @@ class NoteDataSourceCreateTest {
             notesApi = api,
             accessTokenProvider = { "access-token" },
         )
+        dataSource.createNote(
+            CreateNoteRequest(
+                spaceId = "space-1",
+                title = "Original",
+                content = "<p>Original</p>",
+                project = "Dissertation Research",
+                origin = NoteOrigin.SAVED_ANSWER,
+                citationCount = 2,
+            ),
+        )
 
         val updated = dataSource.updateNote(
             Note(
                 id = "note-remote-1",
-                title = "Edited title",
-                content = "Edited body",
+                title = "Updated title",
+                content = "<p>Updated content</p>",
                 project = "Dissertation Research",
-                updatedLabel = "old",
+                updatedLabel = "Aug 6, 06:17",
                 isPinned = true,
                 spaceId = "space-1",
                 origin = NoteOrigin.SAVED_ANSWER,
@@ -407,10 +383,10 @@ class NoteDataSourceCreateTest {
         assertEquals("access-token", api.lastAccessToken)
         assertEquals("space-1", api.lastSpaceId)
         assertEquals("note-remote-1", api.lastNoteId)
-        assertEquals("Edited title", api.lastTitle)
-        assertEquals("Edited body", api.lastContent)
-        assertEquals("Edited title", updated.title)
-        assertEquals("Edited body", updated.content)
+        assertEquals("Updated title", api.lastTitle)
+        assertEquals("<p>Updated content</p>", api.lastContent)
+        assertEquals("Updated title", updated.title)
+        assertEquals("<p>Updated content</p>", updated.content)
         assertEquals("Dissertation Research", updated.project)
         assertEquals(NoteOrigin.SAVED_ANSWER, updated.origin)
         assertEquals(2, updated.citationCount)
@@ -436,7 +412,7 @@ class NoteDataSourceCreateTest {
                 title = "Retry title",
                 content = "Retry body",
                 project = null,
-                updatedLabel = "old",
+                updatedLabel = "Aug 6, 06:17",
                 isPinned = false,
                 spaceId = "space-1",
             ),
@@ -447,27 +423,87 @@ class NoteDataSourceCreateTest {
         assertEquals("Retry title", updated.title)
     }
 
+    @Test(expected = UnauthorizedException::class)
+    fun `updateNote rethrows when refresh unavailable`() = runTest {
+        val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
+        val dataSource = NoteDataSource(
+            notesApi = api,
+            accessTokenProvider = { "expired-token" },
+            refreshAccessToken = { null },
+        )
+
+        dataSource.updateNote(
+            Note(
+                id = "note-remote-1",
+                title = "Title",
+                content = "Body",
+                project = null,
+                updatedLabel = "Aug 6, 06:17",
+                isPinned = false,
+                spaceId = "space-1",
+            ),
+        )
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `updateNote requires authentication`() = runTest {
+        val dataSource = NoteDataSource(
+            notesApi = FakeNotesApi(),
+            accessTokenProvider = { null },
+        )
+
+        dataSource.updateNote(
+            Note(
+                id = "note-remote-1",
+                title = "Title",
+                content = "Body",
+                project = null,
+                updatedLabel = "Aug 6, 06:17",
+                isPinned = false,
+                spaceId = "space-1",
+            ),
+        )
+    }
+
     @Test
-    fun `deleteNote calls API and removes local cache`() = runTest {
+    fun `deleteNote calls API and removes locally`() = runTest {
         val api = FakeNotesApi()
         val dataSource = NoteDataSource(
             notesApi = api,
             accessTokenProvider = { "access-token" },
         )
-        // Seed cache via fetch so delete can resolve spaceId.
-        dataSource.fetchNotes("space-1")
+        dataSource.createNote(
+            CreateNoteRequest(
+                spaceId = "space-1",
+                title = "To delete",
+                content = "Body",
+            ),
+        )
 
-        dataSource.deleteNote("note-remote-1")
+        dataSource.deleteNote(spaceId = "space-1", noteId = "note-remote-1")
 
         assertEquals(1, api.deleteCallCount)
         assertEquals("access-token", api.lastAccessToken)
         assertEquals("space-1", api.lastSpaceId)
         assertEquals("note-remote-1", api.lastNoteId)
+
+        // Clear remote list so a refresh cannot resurrect the deleted note.
+        api.listLibrary = NoteLibrary(
+            notes = emptyList(),
+            allCount = 0,
+            userCreatedCount = 0,
+            savedAnswerCount = 0,
+            page = 1,
+            limit = 10,
+            hasMore = false,
+        )
+        val library = dataSource.fetchNotes("space-1")
+        assertTrue(library.notes.none { it.id == "note-remote-1" })
     }
 
     @Test
     fun `deleteNote retries after unauthorized`() = runTest {
-        val api = FakeNotesApi()
+        val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
         var token = "expired-token"
         val dataSource = NoteDataSource(
             notesApi = api,
@@ -477,24 +513,112 @@ class NoteDataSourceCreateTest {
                 token
             },
         )
-        token = "access-token"
-        dataSource.fetchNotes("space-1")
-        token = "expired-token"
-        api.failUnauthorizedOnce = true
 
-        dataSource.deleteNote("note-remote-1")
+        dataSource.deleteNote(spaceId = "space-1", noteId = "note-remote-1")
 
         assertEquals(2, api.deleteCallCount)
         assertEquals("fresh-token", api.lastAccessToken)
     }
 
-    @Test(expected = NoSuchElementException::class)
-    fun `deleteNote throws when note is not cached`() = runTest {
+    @Test(expected = UnauthorizedException::class)
+    fun `deleteNote rethrows when refresh unavailable`() = runTest {
+        val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
+        val dataSource = NoteDataSource(
+            notesApi = api,
+            accessTokenProvider = { "expired-token" },
+            refreshAccessToken = { null },
+        )
+
+        dataSource.deleteNote(spaceId = "space-1", noteId = "note-remote-1")
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `deleteNote requires authentication`() = runTest {
         val dataSource = NoteDataSource(
             notesApi = FakeNotesApi(),
+            accessTokenProvider = { null },
+        )
+
+        dataSource.deleteNote(spaceId = "space-1", noteId = "note-remote-1")
+    }
+
+    @Test
+    fun `convertNoteToSource calls API with title`() = runTest {
+        val api = FakeNotesApi()
+        val dataSource = NoteDataSource(
+            notesApi = api,
             accessTokenProvider = { "access-token" },
         )
 
-        dataSource.deleteNote("missing-note")
+        val source = dataSource.convertNoteToSource(
+            spaceId = "space-1",
+            noteId = "note-remote-1",
+            title = "Transformer scaling — field notes",
+        )
+
+        assertEquals(1, api.convertCallCount)
+        assertEquals("access-token", api.lastAccessToken)
+        assertEquals("space-1", api.lastSpaceId)
+        assertEquals("note-remote-1", api.lastNoteId)
+        assertEquals("Transformer scaling — field notes", api.lastTitle)
+        assertEquals("source-from-note", source.id)
+        assertEquals("Transformer scaling — field notes", source.title)
+        assertEquals(SourceType.TEXT, source.type)
+        assertEquals(SourceStatus.PROCESSING, source.status)
+        assertEquals("space-1", source.spaceId)
+    }
+
+    @Test
+    fun `convertNoteToSource retries after unauthorized`() = runTest {
+        val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
+        var token = "expired-token"
+        val dataSource = NoteDataSource(
+            notesApi = api,
+            accessTokenProvider = { token },
+            refreshAccessToken = {
+                token = "fresh-token"
+                token
+            },
+        )
+
+        val source = dataSource.convertNoteToSource(
+            spaceId = "space-1",
+            noteId = "note-remote-1",
+            title = "Retry title",
+        )
+
+        assertEquals(2, api.convertCallCount)
+        assertEquals("fresh-token", api.lastAccessToken)
+        assertEquals("Retry title", source.title)
+    }
+
+    @Test(expected = UnauthorizedException::class)
+    fun `convertNoteToSource rethrows when refresh unavailable`() = runTest {
+        val api = FakeNotesApi().apply { failUnauthorizedOnce = true }
+        val dataSource = NoteDataSource(
+            notesApi = api,
+            accessTokenProvider = { "expired-token" },
+            refreshAccessToken = { null },
+        )
+
+        dataSource.convertNoteToSource(
+            spaceId = "space-1",
+            noteId = "note-remote-1",
+            title = "Title",
+        )
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `convertNoteToSource requires authentication`() = runTest {
+        val dataSource = NoteDataSource(
+            notesApi = FakeNotesApi(),
+            accessTokenProvider = { null },
+        )
+
+        dataSource.convertNoteToSource(
+            spaceId = "space-1",
+            noteId = "note-remote-1",
+            title = "Title",
+        )
     }
 }

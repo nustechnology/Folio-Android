@@ -5,6 +5,7 @@ import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteSort
+import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.repository.NoteRepository
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -16,6 +17,7 @@ class NoteRepositoryImpl(
         spaceId: String,
         search: String?,
         sort: NoteSort,
+        origin: String?,
         page: Int,
         limit: Int,
     ): Result<NoteLibrary> =
@@ -25,6 +27,7 @@ class NoteRepositoryImpl(
                     spaceId = spaceId,
                     search = search,
                     sort = sort,
+                    origin = origin,
                     page = page,
                     limit = limit,
                 ),
@@ -62,10 +65,23 @@ class NoteRepositoryImpl(
             Result.failure(e)
         }
 
-    override suspend fun deleteNote(noteId: String): Result<Unit> =
+    override suspend fun deleteNote(spaceId: String, noteId: String): Result<Unit> =
         try {
-            dataSource.deleteNote(noteId)
+            dataSource.deleteNote(spaceId, noteId)
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    override suspend fun convertNoteToSource(
+        spaceId: String,
+        noteId: String,
+        title: String,
+    ): Result<Source> =
+        try {
+            Result.success(dataSource.convertNoteToSource(spaceId, noteId, title))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.presentation.home.HomeSheetTabShape
@@ -95,13 +97,17 @@ private val AddSourceTabOrder = listOf(
 internal fun AddSourceBottomSheet(
     onDismiss: () -> Unit,
     onSubmit: (AddSourceDraft) -> Unit = {},
+    onFileSelected: () -> Unit = {},
+    onFileSelectionFailed: (AddSourceInputRules.FileValidationError) -> Unit = {},
     isSubmitting: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val discardProtection = rememberSheetDiscardProtectionState()
     var selectedFileUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedFile by remember { mutableStateOf<SelectedSourceFile?>(null) }
     var isResolvingFile by remember { mutableStateOf(false) }
+    var formHasUnsavedContent by remember { mutableStateOf(false) }
 
     fun applySelectedUri(uri: Uri) {
         selectedFileUriString = uri.toString()
@@ -129,6 +135,12 @@ internal fun AddSourceBottomSheet(
         if (selectedFileUriString == uriString) {
             selectedFile = resolved
             isResolvingFile = false
+            val error = resolved.validationError
+            if (error == null) {
+                onFileSelected()
+            } else {
+                onFileSelectionFailed(error)
+            }
         }
     }
 
@@ -149,17 +161,28 @@ internal fun AddSourceBottomSheet(
         }
     }
 
+    SideEffect {
+        discardProtection.hasUnsavedContent =
+            formHasUnsavedContent || selectedFileUriString != null
+    }
+
     AnimatedModalSheet(
         onDismiss = {
             if (!isSubmitting) onDismiss()
         },
+        dismissOnScrimClick = !isSubmitting,
+        confirmDismiss = {
+            discardProtection.confirmDismiss(blockWhileBusy = isSubmitting)
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         AddSourceSheetContent(
             selectedFile = selectedFile,
             isResolvingFile = isResolvingFile,
             isSubmitting = isSubmitting,
+            onDirtyChange = { formHasUnsavedContent = it },
             onCancelClick = {
                 if (!isSubmitting) requestDismiss()
             },
@@ -172,6 +195,12 @@ internal fun AddSourceBottomSheet(
             onSubmit = onSubmit,
         )
     }
+
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+    )
 }
 
 @Composable
@@ -180,6 +209,7 @@ internal fun AddSourceSheetContent(
     onSubmit: (AddSourceDraft) -> Unit,
     onCancelClick: () -> Unit = {},
     onFileDropped: (Uri) -> Unit = {},
+    onDirtyChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     initialTab: AddSourceTab = AddSourceTab.FILE,
     selectedFile: SelectedSourceFile? = null,
@@ -195,6 +225,17 @@ internal fun AddSourceSheetContent(
     var textContent by rememberSaveable { mutableStateOf("") }
     var webUrlTouched by rememberSaveable { mutableStateOf(false) }
     var textContentTouched by rememberSaveable { mutableStateOf(false) }
+
+    SideEffect {
+        onDirtyChange(
+            webUrl.isNotEmpty() ||
+                webTitle.isNotEmpty() ||
+                webAuthor.isNotEmpty() ||
+                textTitle.isNotEmpty() ||
+                textAuthor.isNotEmpty() ||
+                textContent.isNotEmpty(),
+        )
+    }
 
     val webUrlValid = AddSourceInputRules.isValidHttpUrl(webUrl)
     val showWebError = selectedTab == AddSourceTab.WEB && webUrlTouched && !webUrlValid

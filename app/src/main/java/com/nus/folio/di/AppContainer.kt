@@ -6,23 +6,28 @@ import com.nus.folio.data.auth.AuthSessionStore
 import com.nus.folio.data.auth.EncryptedAuthSessionStore
 import com.nus.folio.data.datasource.AskDataSource
 import com.nus.folio.data.datasource.AuthDataSource
+import com.nus.folio.data.datasource.NotebookDataSource
 import com.nus.folio.data.datasource.NoteDataSource
 import com.nus.folio.data.datasource.SourceDataSource
+import com.nus.folio.data.notebook.NotebookStore
 import com.nus.folio.data.datasource.SourceOriginalFileDataSource
 import com.nus.folio.data.datasource.SpaceDataSource
 import com.nus.folio.data.repository.AskRepositoryImpl
 import com.nus.folio.data.repository.AuthRepositoryImpl
+import com.nus.folio.data.repository.NotebookRepositoryImpl
 import com.nus.folio.data.repository.NoteRepositoryImpl
 import com.nus.folio.data.repository.SourceRepositoryImpl
 import com.nus.folio.data.repository.SpaceRepositoryImpl
 import com.nus.folio.data.util.ContentResolverSourceFileBytesReader
 import com.nus.folio.domain.repository.AskRepository
 import com.nus.folio.domain.repository.AuthRepository
+import com.nus.folio.domain.repository.NotebookRepository
 import com.nus.folio.domain.repository.NoteRepository
 import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.repository.SourceRepository
 import com.nus.folio.domain.repository.SpaceRepository
 import com.nus.folio.domain.usecase.ClearAuthSessionUseCase
+import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.CreateSpaceUseCase
@@ -30,10 +35,11 @@ import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSpaceUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
-import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.SaveNotebookUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourceOriginalFileUseCase
 import com.nus.folio.domain.usecase.GetSourcePreviewUrlUseCase
@@ -137,10 +143,6 @@ class AppContainer(
         AskRepositoryImpl(askDataSource)
     }
 
-    val getAskTopicsUseCase: GetAskTopicsUseCase by lazy {
-        GetAskTopicsUseCase(askRepository)
-    }
-
     val getAskSuggestionsUseCase: GetAskSuggestionsUseCase by lazy {
         GetAskSuggestionsUseCase(askRepository)
     }
@@ -180,6 +182,30 @@ class AppContainer(
 
     val deleteNoteUseCase: DeleteNoteUseCase by lazy {
         DeleteNoteUseCase(noteRepository)
+    }
+
+    val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase by lazy {
+        ConvertNoteToSourceUseCase(noteRepository)
+    }
+
+    private val notebookStore: NotebookStore by lazy {
+        NotebookStore(applicationContext)
+    }
+
+    private val notebookDataSource: NotebookDataSource by lazy {
+        NotebookDataSource(notebookStore)
+    }
+
+    private val notebookRepository: NotebookRepository by lazy {
+        NotebookRepositoryImpl(notebookDataSource)
+    }
+
+    val getNotebookUseCase: GetNotebookUseCase by lazy {
+        GetNotebookUseCase(notebookRepository)
+    }
+
+    val saveNotebookUseCase: SaveNotebookUseCase by lazy {
+        SaveNotebookUseCase(notebookRepository)
     }
 
     private val authDataSource: AuthDataSource by lazy { AuthDataSource() }

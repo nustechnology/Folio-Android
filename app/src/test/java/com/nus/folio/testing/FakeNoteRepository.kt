@@ -6,6 +6,9 @@ import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.NotePaging
 import com.nus.folio.domain.model.NoteSort
+import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.repository.NoteRepository
 import com.nus.folio.domain.util.NoteUpdatedLabelFormatter
 
@@ -19,20 +22,27 @@ class FakeNoteRepository : NoteRepository {
     var createNoteResult: Result<Note>? = null
     var updateNoteResult: Result<Note>? = null
     var deleteNoteResult: Result<Unit>? = null
+    var convertNoteToSourceResult: Result<Source>? = null
     var getNotesCallCount = 0
     var getNoteCallCount = 0
     var createNoteCallCount = 0
     var updateNoteCallCount = 0
     var deleteNoteCallCount = 0
+    var convertNoteToSourceCallCount = 0
     var lastSpaceId: String? = null
     var lastNoteId: String? = null
     var lastSearch: String? = null
     var lastSort: NoteSort? = null
     var lastPage: Int? = null
     var lastLimit: Int? = null
+    var lastOrigin: String? = null
     var lastCreatedRequest: CreateNoteRequest? = null
     var lastUpdatedNote: Note? = null
     var lastDeletedNoteId: String? = null
+    var lastDeletedSpaceId: String? = null
+    var lastConvertTitle: String? = null
+    var lastConvertSpaceId: String? = null
+    var lastConvertNoteId: String? = null
     var getNoteResult: Result<Note>? = null
 
     private val notes: MutableList<Note> = sampleNotes.toMutableList()
@@ -51,6 +61,7 @@ class FakeNoteRepository : NoteRepository {
         spaceId: String,
         search: String?,
         sort: NoteSort,
+        origin: String?,
         page: Int,
         limit: Int,
     ): Result<NoteLibrary> {
@@ -58,10 +69,11 @@ class FakeNoteRepository : NoteRepository {
         lastSpaceId = spaceId
         lastSearch = search
         lastSort = sort
+        lastOrigin = origin
         lastPage = page
         lastLimit = limit
         getNotesResult?.let { return it }
-        return Result.success(libraryFor(spaceId, search, sort, page, limit))
+        return Result.success(libraryFor(spaceId, search, sort, origin, page, limit))
     }
 
     override suspend fun getNote(spaceId: String, noteId: String): Result<Note> {
@@ -114,11 +126,12 @@ class FakeNoteRepository : NoteRepository {
         return Result.success(updated)
     }
 
-    override suspend fun deleteNote(noteId: String): Result<Unit> {
+    override suspend fun deleteNote(spaceId: String, noteId: String): Result<Unit> {
         deleteNoteCallCount++
+        lastDeletedSpaceId = spaceId
         lastDeletedNoteId = noteId
         deleteNoteResult?.let { return it }
-        val removed = notes.removeAll { it.id == noteId }
+        val removed = notes.removeAll { it.id == noteId && it.spaceId == spaceId }
         if (!removed) {
             return Result.failure(NoSuchElementException("Note not found: $noteId"))
         }
@@ -126,10 +139,36 @@ class FakeNoteRepository : NoteRepository {
         return Result.success(Unit)
     }
 
+    override suspend fun convertNoteToSource(
+        spaceId: String,
+        noteId: String,
+        title: String,
+    ): Result<Source> {
+        convertNoteToSourceCallCount++
+        lastConvertSpaceId = spaceId
+        lastConvertNoteId = noteId
+        lastConvertTitle = title
+        convertNoteToSourceResult?.let { return it }
+        val note = notes.firstOrNull { it.id == noteId && it.spaceId == spaceId }
+            ?: return Result.failure(NoSuchElementException("Note not found: $noteId"))
+        return Result.success(
+            Source(
+                id = "converted-${convertNoteToSourceCallCount}",
+                title = title,
+                type = SourceType.TEXT,
+                author = "",
+                addedLabel = "Added just now",
+                status = SourceStatus.PROCESSING,
+                spaceId = note.spaceId,
+            ),
+        )
+    }
+
     private fun libraryFor(
         spaceId: String,
         search: String?,
         sort: NoteSort,
+        origin: String?,
         page: Int,
         limit: Int,
     ): NoteLibrary {
@@ -141,6 +180,11 @@ class FakeNoteRepository : NoteRepository {
                     note.content.contains(query, ignoreCase = true) ||
                     note.project.orEmpty().contains(query, ignoreCase = true)
             }
+        }
+        scoped = when (origin?.trim()) {
+            "UserCreated" -> scoped.filter { it.origin == NoteOrigin.USER_CREATED }
+            "SavedAssistantAnswer" -> scoped.filter { it.origin == NoteOrigin.SAVED_ANSWER }
+            else -> scoped
         }
         scoped = when (sort) {
             NoteSort.ALPHABETICAL_AZ -> scoped.sortedBy { it.title.lowercase() }
@@ -155,8 +199,8 @@ class FakeNoteRepository : NoteRepository {
         return NoteLibrary(
             notes = pageItems,
             allCount = scoped.size,
-            pinnedCount = scoped.count { it.isPinned },
-            unfiledCount = scoped.count { it.project.isNullOrBlank() },
+            userCreatedCount = scoped.count { it.origin == NoteOrigin.USER_CREATED },
+            savedAnswerCount = scoped.count { it.origin == NoteOrigin.SAVED_ANSWER },
             page = safePage,
             limit = safeLimit,
             hasMore = offset + pageItems.size < scoped.size,
@@ -233,8 +277,8 @@ class FakeNoteRepository : NoteRepository {
         val sampleLibrary = NoteLibrary(
             notes = sampleNotes,
             allCount = sampleNotes.size,
-            pinnedCount = sampleNotes.count { it.isPinned },
-            unfiledCount = sampleNotes.count { it.project.isNullOrBlank() },
+            userCreatedCount = sampleNotes.count { it.origin == NoteOrigin.USER_CREATED },
+            savedAnswerCount = sampleNotes.count { it.origin == NoteOrigin.SAVED_ANSWER },
         )
     }
 

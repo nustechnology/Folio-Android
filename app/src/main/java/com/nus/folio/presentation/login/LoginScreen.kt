@@ -83,6 +83,8 @@ fun LoginScreen(
     onNavigateToSignUp: () -> Unit,
     onNavigateToResetPassword: () -> Unit,
     modifier: Modifier = Modifier,
+    showSignedOutToast: Boolean = false,
+    onSignedOutToastShown: () -> Unit = {},
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(
             signInUseCase = LocalAppContainer.current.signInUseCase,
@@ -98,6 +100,13 @@ fun LoginScreen(
             onNavigateToSpaces()
             viewModel.onNavigationHandled()
         }
+    }
+
+    val signedOutToast = stringResource(R.string.account_signed_out)
+    LaunchedEffect(showSignedOutToast) {
+        if (!showSignedOutToast) return@LaunchedEffect
+        toastHostState.showToast(title = signedOutToast, style = FolioToastStyle.Success)
+        onSignedOutToastShown()
     }
 
     val invalidCredentialsToast = stringResource(R.string.login_error_invalid_credentials)

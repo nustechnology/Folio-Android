@@ -96,14 +96,6 @@ fun AccountSettingsScreen(
             onExportDataClick = viewModel::onExportDataClick,
         )
 
-        FolioToastHost(
-            hostState = toastHostState,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 12.dp),
-        )
-
         if (showSignOutConfirm) {
             DeleteConfirmationBottomSheet(
                 titleRes = R.string.account_sign_out_title,
@@ -113,6 +105,14 @@ fun AccountSettingsScreen(
                 onConfirm = onSignOut,
             )
         }
+
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 

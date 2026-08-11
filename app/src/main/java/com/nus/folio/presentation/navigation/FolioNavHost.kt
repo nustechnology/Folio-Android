@@ -36,6 +36,8 @@ object FolioDestination {
     const val SOURCE_DETAIL = "source_detail"
     const val HOME_TAB_RESULT = "home_tab_result"
     const val HOME_ASK_SOURCE_RESULT = "home_ask_source_result"
+    const val HOME_REFRESH_SOURCES_RESULT = "home_refresh_sources_result"
+    const val LOGIN_SIGNED_OUT_RESULT = "login_signed_out_result"
 
     fun resetPassword(): String = RESET_PASSWORD
 
@@ -60,6 +62,16 @@ object FolioDestination {
 private fun NavHostController.popBackStackOrIgnore(): Boolean =
     previousBackStackEntry != null && popBackStack()
 
+private fun NavHostController.navigateToLoginAfterSignOut() {
+    navigate(FolioDestination.LOGIN) {
+        popUpTo(FolioDestination.SPACES) { inclusive = true }
+    }
+    currentBackStackEntry?.savedStateHandle?.set(
+        FolioDestination.LOGIN_SIGNED_OUT_RESULT,
+        true,
+    )
+}
+
 @Composable
 fun FolioNavHost(modifier: Modifier = Modifier) {
     val container = LocalAppContainer.current
@@ -81,8 +93,16 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         startDestination = startDestination,
         modifier = modifier.fillMaxSize(),
     ) {
-        composable(FolioDestination.LOGIN) {
+        composable(FolioDestination.LOGIN) { entry ->
+            val showSignedOutToast by entry.savedStateHandle
+                .getStateFlow(FolioDestination.LOGIN_SIGNED_OUT_RESULT, false)
+                .collectAsStateWithLifecycle()
+
             LoginScreen(
+                showSignedOutToast = showSignedOutToast,
+                onSignedOutToastShown = {
+                    entry.savedStateHandle[FolioDestination.LOGIN_SIGNED_OUT_RESULT] = false
+                },
                 onNavigateToSpaces = {
                     navController.navigate(FolioDestination.SPACES) {
                         popUpTo(FolioDestination.LOGIN) { inclusive = true }
@@ -147,9 +167,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onSignOut = {
                     scope.launch {
                         container.clearAuthSessionUseCase()
-                        navController.navigate(FolioDestination.LOGIN) {
-                            popUpTo(FolioDestination.SPACES) { inclusive = true }
-                        }
+                        navController.navigateToLoginAfterSignOut()
                     }
                 },
             )
@@ -169,6 +187,9 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 .collectAsStateWithLifecycle()
             val pendingAskSourceId by entry.savedStateHandle
                 .getStateFlow<String?>(FolioDestination.HOME_ASK_SOURCE_RESULT, null)
+                .collectAsStateWithLifecycle()
+            val pendingRefreshSources by entry.savedStateHandle
+                .getStateFlow(FolioDestination.HOME_REFRESH_SOURCES_RESULT, false)
                 .collectAsStateWithLifecycle()
 
             HomeScreen(
@@ -197,10 +218,12 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onInitialAskSourceHandled = {
                     entry.savedStateHandle.remove<String>(FolioDestination.HOME_ASK_SOURCE_RESULT)
                 },
+                initialRefreshSources = pendingRefreshSources,
+                onInitialRefreshSourcesHandled = {
+                    entry.savedStateHandle[FolioDestination.HOME_REFRESH_SOURCES_RESULT] = false
+                },
                 onSignOut = {
-                    navController.navigate(FolioDestination.LOGIN) {
-                        popUpTo(FolioDestination.SPACES) { inclusive = true }
-                    }
+                    navController.navigateToLoginAfterSignOut()
                 },
             )
         }
@@ -222,6 +245,12 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 highlightText = entry.arguments?.getString("highlight").orEmpty()
                     .takeIf { it.isNotBlank() },
                 onBackClick = { navController.popBackStackOrIgnore() },
+                onSourceDeleted = {
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(FolioDestination.HOME_REFRESH_SOURCES_RESULT, true)
+                    navController.popBackStackOrIgnore()
+                },
                 onAskSourceClick = {
                     val sourceId = entry.arguments?.getString("sourceId").orEmpty()
                     navController.previousBackStackEntry

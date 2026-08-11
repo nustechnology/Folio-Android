@@ -21,9 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -43,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
-import com.nus.folio.components.ModalSheetDismiss
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.util.NoteInputRules
@@ -69,10 +67,7 @@ internal fun SaveAskNoteBottomSheet(
     onCitationClick: (AskCitation) -> Unit = {},
 ) {
     val context = LocalContext.current
-    var titleModified by remember { mutableStateOf(false) }
-    var bypassDiscardConfirm by remember { mutableStateOf(false) }
-    var showDiscardConfirm by remember { mutableStateOf(false) }
-    val dismissHolder = remember { SaveAskNoteDismissHolder() }
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -87,56 +82,30 @@ internal fun SaveAskNoteBottomSheet(
     AnimatedModalSheet(
         onDismiss = onDismiss,
         dismissOnScrimClick = true,
-        confirmDismiss = {
-            if (bypassDiscardConfirm || !titleModified) {
-                true
-            } else {
-                showDiscardConfirm = true
-                false
-            }
-        },
+        confirmDismiss = { discardProtection.confirmDismiss() },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
-        dismissHolder.requestDismiss = requestDismiss
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         SaveAskNoteSheetContent(
             draft = draft,
-            onTitleModifiedChange = { titleModified = it },
+            onTitleModifiedChange = { discardProtection.hasUnsavedContent = it },
             onCancelClick = { requestDismiss() },
             onSubmit = { title ->
-                bypassDiscardConfirm = true
+                discardProtection.bypassDiscardConfirm = true
                 requestDismiss { onSubmit(title) }
             },
             onCitationClick = onCitationClick,
         )
     }
 
-    if (showDiscardConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDiscardConfirm = false },
-            title = { Text(text = stringResource(R.string.add_note_discard_title)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardConfirm = false
-                        bypassDiscardConfirm = true
-                        dismissHolder.requestDismiss?.invoke()
-                    },
-                ) {
-                    Text(text = stringResource(R.string.add_note_discard_yes))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDiscardConfirm = false }) {
-                    Text(text = stringResource(R.string.add_note_discard_no))
-                }
-            },
-        )
-    }
-}
-
-private class SaveAskNoteDismissHolder {
-    var requestDismiss: ModalSheetDismiss? = null
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+        titleRes = R.string.add_note_discard_title,
+        messageRes = R.string.add_note_discard_message,
+    )
 }
 
 @Composable

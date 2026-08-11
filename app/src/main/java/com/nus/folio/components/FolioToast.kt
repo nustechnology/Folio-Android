@@ -48,6 +48,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.nus.folio.R
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeCardBackground
@@ -70,6 +71,8 @@ private val FolioToastShape = RoundedCornerShape(12.dp)
 private const val DefaultToastDurationMillis = 3_000L
 private val ToastDismissDragThreshold = 56.dp
 private const val ToastDismissFlingVelocity = 800f
+/** Above modal bottom sheets / scrims in the same parent Box. */
+private const val FolioToastZIndex = 100f
 
 enum class FolioToastStyle {
     Info,
@@ -172,7 +175,9 @@ fun FolioToastHost(
 
     AnimatedVisibility(
         visible = currentToast != null,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .zIndex(FolioToastZIndex)
+            .fillMaxWidth(),
         enter = fadeIn(animationSpec = tween(220)) +
             slideInVertically(animationSpec = tween(280)) { -it },
         exit = fadeOut(animationSpec = tween(180)) +

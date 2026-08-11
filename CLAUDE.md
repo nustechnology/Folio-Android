@@ -12,7 +12,7 @@ Native Android client for Folio — private research, grounded answers. Sources,
 - **DI:** Manual `AppContainer` + `CompositionLocal` (no Hilt/Koin yet)
 - **Navigation:** Navigation Compose
 - **Async:** Kotlin Coroutines + `StateFlow`
-- **Persistence:** Encrypted DataStore session (`EncryptedAuthSessionStore`)
+- **Persistence:** Encrypted DataStore session (`EncryptedAuthSessionStore`); local notebook content via `NotebookStore` (DataStore)
 - **Min SDK:** 24 | **Target/Compile SDK:** 35 | **Java:** 17
 - **Dependencies:** `gradle/libs.versions.toml`
 
@@ -24,8 +24,9 @@ app/src/
 │   ├── components/       # Shared UI: sheets, toast, skeleton, search, empty state, bouncing dots
 │   ├── data/
 │   │   ├── auth/         # AuthSessionStore (+ cipher); AuthCapabilities is variant-only
-│   │   ├── datasource/   # Ask/Note (+ shared sample data); Auth/Space/Source are variant-only
+│   │   ├── datasource/   # Ask + Notebook (+ shared sample data); Auth/Space/Source/Note are variant-only
 │   │   ├── network/      # UnauthorizedException (shared); API clients live in debug/
+│   │   ├── notebook/     # NotebookStore (local DataStore persistence)
 │   │   ├── repository/   # *RepositoryImpl
 │   │   └── util/         # MIME types, file bytes reader, original-file writer, path helpers
 │   ├── domain/           # Models, Repository interfaces, UseCases, input-rule utils
@@ -34,16 +35,17 @@ app/src/
 │   │   ├── login/
 │   │   ├── signup/
 │   │   ├── resetpassword/
-│   │   ├── space/        # SpaceScreen, SpaceViewModel, AddSpaceBottomSheet, AccountListBottomSheet
-│   │   ├── home/         # HomeScreen, HomeViewModel, HomeTokens, CitedAnswerContent
+│   │   ├── space/        # SpaceScreen, SpaceViewModel, Add/EditSpaceBottomSheet, AccountListBottomSheet
+│   │   ├── home/         # HomeScreen, HomeViewModel, Home*Delegate, HomeTokens, CitedAnswerContent
 │   │   │   ├── pane/     # SourcesPane, AskPane, NotesPane, NotebookPane
-│   │   │   └── bottomsheet/  # Add/Edit/Sort/Processing/Ask/Note sheets, etc.
+│   │   │   ├── notebook/ # Editor, toolbar, print/export/clipboard side effects
+│   │   │   └── bottomsheet/  # Add/Edit/Sort/Processing/Ask/Note/Export sheets, etc.
 │   │   ├── sourcedetail/ # SourceDetailScreen + WebView HTML preview / original file
 │   │   ├── account/      # AccountSettingsScreen (nav route from Spaces)
 │   │   └── navigation/   # FolioNavHost, FolioDestination
 │   └── ui/theme/         # Color, Type, Theme
-├── debug/                # AuthCapabilities + Auth/Space/Source DataSources + HTTP API clients
-├── release/              # AuthCapabilities + Auth/Space/Source DataSources (stubs / local mocks)
+├── debug/                # AuthCapabilities + Auth/Space/Source/Note DataSources + HTTP API clients
+├── release/              # AuthCapabilities + Auth/Space/Source/Note DataSources (stubs / local mocks)
 ├── test/                 # Shared unit tests + testing/ fakes
 ├── testDebug/            # Variant tests against debug DataSources / network clients
 ├── testRelease/          # Variant tests against release DataSources
@@ -69,7 +71,7 @@ Repository **interfaces** live in `domain`; **implementations** live in `data`.
 - ViewModels receive use cases through `ViewModel.Factory`
 - `AppContainer.isAuthAvailable` mirrors `AuthCapabilities.isBackendAvailable` (true in debug, false in release until a real backend is wired)
 - On init, `AppContainer` restores the encrypted session off the main thread, refreshes the access token if present, then sets `isSessionRestored`
-- Token-aware data sources (Space / Source) receive `accessTokenProvider` + `refreshAccessToken` from `AppContainer`
+- Token-aware data sources (Space / Source / Note) receive `accessTokenProvider` + `refreshAccessToken` from `AppContainer`
 
 ### Build variants (debug vs release)
 
@@ -81,11 +83,14 @@ These types are **not** in `main` — they live in `debug/` and `release/`:
 | `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple + password-reset stay local mocks | Throws / unavailable |
 | `SpaceDataSource` | Real spaces API via `SpacesApiClient` (401 → refresh once + retry) | Local stub / mock |
 | `SourceDataSource` | Real sources API via `SourcesApiClient` for list/create/detail/retry/delete; update + some processing still local | Local sample / mock |
+| `NoteDataSource` | Real notes API via `NotesApiClient` (list/create/detail/update/delete/convert; 401 → refresh once + retry) | Local sample / mock |
 | Network stack | `FolioHttp`, `FolioApiPaths`, `*ApiClient`, `HttpDebugLogger` | Absent — release data sources do not call HTTP |
 
-- Ask / Notes data sources remain in **main** (local / in-memory for now)
+- Ask data source remains in **main** (local / in-memory for now)
+- Notebook data source + `NotebookStore` remain in **main** (local DataStore per space)
 - Put variant implementation + network tests in `testDebug` / `testRelease`; keep use-case and ViewModel tests in shared `test/` with fakes
 - Keep backend-specific HTTP clients in `debug/` (and eventually `release/` when shipping) — not in `main`
+- Launcher label: debug overrides `app_name` to **Folio Debug**; release/main uses **Folio** (`debug/res/values/strings.xml`)
 
 ### ViewModel pattern
 
@@ -94,6 +99,7 @@ These types are **not** in `main` — they live in `debug/` and `release/`:
 - Screens use `collectAsStateWithLifecycle()`
 - Access dependencies from `LocalAppContainer.current`
 - Factory constructors take the use cases / helpers the screen needs (Home wires many; Login/Space are smaller)
+- Home splits feature logic into `HomeSourcesDelegate`, `HomeAskDelegate`, `HomeNotesDelegate`, `HomeNotebookDelegate`
 
 ```kotlin
 @Composable
@@ -105,6 +111,8 @@ fun SpaceScreen(
         factory = SpaceViewModel.Factory(
             getSpacesUseCase = LocalAppContainer.current.getSpacesUseCase,
             createSpaceUseCase = LocalAppContainer.current.createSpaceUseCase,
+            updateSpaceUseCase = LocalAppContainer.current.updateSpaceUseCase,
+            deleteSpaceUseCase = LocalAppContainer.current.deleteSpaceUseCase,
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
             syncCurrentUserUseCase = LocalAppContainer.current.syncCurrentUserUseCase,
             refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
@@ -118,7 +126,7 @@ fun SpaceScreen(
 - Single responsibility; typically `operator fun invoke(...): Result<T>` or `suspend operator fun invoke(...): Result<T>`
 - Sync session helpers may return a plain value (e.g. `GetCurrentSessionUseCase` → `AuthSession?`, `ClearAuthSessionUseCase` → `Unit`)
 - Streaming / Flow use cases exist where needed (e.g. `StreamAskAnswerUseCase`, `ObserveSourceProcessingUseCase`)
-- Home data use cases are **space-scoped**: `getSourcesUseCase(spaceId)`, `getAskTopicsUseCase(spaceId)`, `getNotesUseCase(spaceId)`
+- Home data use cases are **space-scoped**: `getSourcesUseCase(spaceId)`, `getAskSuggestionsUseCase(spaceId, …)`, `getNotesUseCase(spaceId)`, `getNotebookUseCase(spaceId)`
 - Registered in `AppContainer` as lazy properties
 
 ### Screens
@@ -131,12 +139,12 @@ fun SpaceScreen(
 - Home is tabbed (`HomeTab`: Sources, Ask, Notes, Notebook); Account is a separate nav route from Spaces, not a Home tab
 - Source Detail is a separate nav route from Home (optional citation highlight + “ask about this source” result back to Home Ask)
 - Shared UI components live in `components/` (modal sheets, toasts, skeletons, search field, empty state, loading indicators, item options)
-- Domain input / formatting helpers live in `domain/util/` (e.g. `AuthInputRules`, `AddSourceInputRules`, `NoteInputRules`)
+- Domain input / formatting helpers live in `domain/util/` (e.g. `AuthInputRules`, `AddSourceInputRules`, `NoteInputRules`, `NotebookInputRules`)
 
 ### Navigation
 
 - Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `RESET_PASSWORD`, `SPACES`, `ACCOUNT`, `HOME`, `SOURCE_DETAIL`
-- Saved-state keys for Home ↔ Source Detail: `HOME_TAB_RESULT`, `HOME_ASK_SOURCE_RESULT`
+- Saved-state keys for Home ↔ Source Detail: `HOME_TAB_RESULT`, `HOME_ASK_SOURCE_RESULT`, `HOME_REFRESH_SOURCES_RESULT`
 - Start destination: waits for `isSessionRestored`, then `SPACES` if signed in else `LOGIN`
 - Post-auth flow: Login / Sign Up → `SPACES` → `HOME/{spaceId}?title={title}` → optional `SOURCE_DETAIL/{sourceId}?spaceId=&highlight=`
 - `FolioDestination.home(...)`, `sourceDetail(...)`, `resetPassword(email)` build typed routes
@@ -165,7 +173,7 @@ fun SpaceScreen(
 
 CI (GitHub Actions on `main`): unit tests + lint only.
 
-Unit tests use fakes under `app/src/test/java/com/nus/folio/testing/` (e.g. `FakeAuthRepository`, `FakeSourceRepository`, `FakeSpaceRepository`, `FakeAskRepository`, `FakeNoteRepository`, `MainDispatcherRule`).
+Unit tests use fakes under `app/src/test/java/com/nus/folio/testing/` (e.g. `FakeAuthRepository`, `FakeSourceRepository`, `FakeSpaceRepository`, `FakeAskRepository`, `FakeNoteRepository`, `FakeNotebookRepository`, `MainDispatcherRule`).
 
 ## Guidelines
 
@@ -194,22 +202,25 @@ Follow dependency direction: define contracts in `domain` first, implement in `d
 | Purpose | File |
 |---------|------|
 | Screen + ViewModel | `presentation/home/HomeScreen.kt`, `HomeViewModel.kt` |
+| Home delegates | `HomeSourcesDelegate.kt`, `HomeAskDelegate.kt`, `HomeNotesDelegate.kt`, `HomeNotebookDelegate.kt` |
 | Space screen | `presentation/space/SpaceScreen.kt`, `SpaceViewModel.kt` |
 | Home panes | `presentation/home/pane/SourcesPane.kt`, `AskPane.kt`, `NotesPane.kt`, `NotebookPane.kt` |
+| Notebook editor | `presentation/home/notebook/` (editor, toolbar, `NotebookSideEffects`) |
 | Home sheets | `presentation/home/bottomsheet/` (e.g. `AddSourceBottomSheet.kt`) |
 | Source detail | `presentation/sourcedetail/SourceDetailScreen.kt`, `SourceDetailViewModel.kt` |
 | Account (nav route) | `presentation/account/AccountSettingsScreen.kt` |
 | Shared components | `components/` (`FolioToast`, `AnimatedModalSheet`, `FolioSkeleton`, `FolioSearchField`, …) |
 | Auth use cases | `domain/usecase/SignInUseCase.kt`, `SignUpUseCase.kt`, `RefreshAuthSessionUseCase.kt`, `GetCurrentSessionUseCase.kt` |
-| Home data use cases | `GetSourcesUseCase`, `CreateSourceUseCase`, `GetAskTopicsUseCase`, `StreamAskAnswerUseCase`, `GetNotesUseCase`, … |
-| Space use cases | `domain/usecase/GetSpacesUseCase.kt`, `CreateSpaceUseCase.kt` |
-| Domain utils | `domain/util/AuthInputRules.kt`, `AddSourceInputRules.kt`, `NoteInputRules.kt` |
+| Home data use cases | `GetSourcesUseCase`, `CreateSourceUseCase`, `GetAskSuggestionsUseCase`, `StreamAskAnswerUseCase`, `GetNotesUseCase`, `GetNotebookUseCase`, `SaveNotebookUseCase`, … |
+| Space use cases | `domain/usecase/GetSpacesUseCase.kt`, `CreateSpaceUseCase.kt`, `UpdateSpaceUseCase.kt`, `DeleteSpaceUseCase.kt` |
+| Domain utils | `domain/util/AuthInputRules.kt`, `AddSourceInputRules.kt`, `NoteInputRules.kt`, `NotebookInputRules.kt` |
 | Repository | `domain/repository/`, `data/repository/` |
 | Session store | `data/auth/AuthSessionStore.kt` |
-| Debug HTTP | `debug/.../network/FolioHttp.kt`, `FolioApiPaths.kt`, `AuthApiClient.kt`, `SpacesApiClient.kt`, `SourcesApiClient.kt` |
-| Auth / Space / Source variants | `debug\|release/.../AuthDataSource.kt`, `SpaceDataSource.kt`, `SourceDataSource.kt`, `AuthCapabilities.kt` |
+| Notebook store | `data/notebook/NotebookStore.kt` |
+| Debug HTTP | `debug/.../network/FolioHttp.kt`, `FolioApiPaths.kt`, `AuthApiClient.kt`, `SpacesApiClient.kt`, `SourcesApiClient.kt`, `NotesApiClient.kt` |
+| Auth / Space / Source / Note variants | `debug\|release/.../AuthDataSource.kt`, `SpaceDataSource.kt`, `SourceDataSource.kt`, `NoteDataSource.kt`, `AuthCapabilities.kt` |
 | DI wiring | `di/AppContainer.kt` |
 | Navigation | `presentation/navigation/FolioNavHost.kt` |
-| Test fakes | `test/.../testing/FakeAuthRepository.kt`, `FakeSpaceRepository.kt`, `FakeSourceRepository.kt`, … |
+| Test fakes | `test/.../testing/FakeAuthRepository.kt`, `FakeSpaceRepository.kt`, `FakeSourceRepository.kt`, `FakeNotebookRepository.kt`, … |
 | Design tokens | `ui/theme/Color.kt`, `Type.kt`, `presentation/home/HomeTokens.kt`, `presentation/space/SpaceTokens.kt` |
 | Polished UI | `presentation/login/LoginScreen.kt` |

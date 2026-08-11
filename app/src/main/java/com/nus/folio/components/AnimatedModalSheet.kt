@@ -79,7 +79,7 @@ fun interface ModalSheetDismiss {
 @Composable
 internal fun AnimatedModalSheet(
     onDismiss: () -> Unit,
-    dismissOnScrimClick: Boolean = false,
+    dismissOnScrimClick: Boolean = true,
     /**
      * Called before a user-initiated dismiss (back, scrim, drag, cancel).
      * Return false to keep the sheet open (e.g. show a discard confirmation).

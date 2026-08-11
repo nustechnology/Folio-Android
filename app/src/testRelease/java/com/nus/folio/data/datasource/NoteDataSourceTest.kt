@@ -16,8 +16,8 @@ class NoteDataSourceTest {
 
         assertEquals(2, library.allCount)
         assertEquals(2, library.notes.size)
-        assertEquals(1, library.pinnedCount)
-        assertEquals(0, library.unfiledCount)
+        assertEquals(1, library.userCreatedCount)
+        assertEquals(1, library.savedAnswerCount)
         assertTrue(library.notes.all { it.spaceId == "1" })
         assertTrue(library.notes.any { it.title.contains("Literature") })
     }
@@ -27,7 +27,8 @@ class NoteDataSourceTest {
         val library = dataSource.fetchNotes("4")
 
         assertEquals(1, library.notes.size)
-        assertEquals(1, library.unfiledCount)
+        assertEquals(1, library.userCreatedCount)
+        assertEquals(0, library.savedAnswerCount)
         assertTrue(library.notes.all { it.spaceId == "4" })
     }
 
@@ -49,7 +50,7 @@ class NoteDataSourceTest {
 
     @Test
     fun `deleteNote removes note from later fetch`() = runTest {
-        dataSource.deleteNote("2")
+        dataSource.deleteNote(spaceId = "1", noteId = "2")
         val library = dataSource.fetchNotes("1")
 
         assertEquals(1, library.allCount)
@@ -70,5 +71,19 @@ class NoteDataSourceTest {
         assertEquals("New note", created.title)
         assertTrue(library.notes.any { it.id == created.id })
         assertEquals(3, library.allCount)
+    }
+
+    @Test
+    fun `convertNoteToSource returns text source from note title`() = runTest {
+        val source = dataSource.convertNoteToSource(
+            spaceId = "1",
+            noteId = "2",
+            title = "Transformer scaling — field notes",
+        )
+
+        assertEquals("Transformer scaling — field notes", source.title)
+        assertEquals(com.nus.folio.domain.model.SourceType.TEXT, source.type)
+        assertEquals("1", source.spaceId)
+        assertEquals(com.nus.folio.domain.model.SourceStatus.PROCESSING, source.status)
     }
 }

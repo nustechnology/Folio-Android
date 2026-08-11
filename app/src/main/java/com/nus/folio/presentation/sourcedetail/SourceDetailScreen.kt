@@ -24,12 +24,18 @@ import com.nus.folio.R
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
+import com.nus.folio.components.ItemOptionAction
+import com.nus.folio.components.ItemOptionStyle
+import com.nus.folio.components.ItemOptionsBottomSheet
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 
@@ -38,6 +44,7 @@ fun SourceDetailScreen(
     spaceId: String,
     sourceId: String,
     onBackClick: () -> Unit,
+    onSourceDeleted: () -> Unit = onBackClick,
     onAskSourceClick: () -> Unit,
     modifier: Modifier = Modifier,
     highlightText: String? = null,
@@ -49,6 +56,8 @@ fun SourceDetailScreen(
             getSourcePreviewUrlUseCase = LocalAppContainer.current.getSourcePreviewUrlUseCase,
             retrySourceUseCase = LocalAppContainer.current.retrySourceUseCase,
             observeSourceProcessingUseCase = LocalAppContainer.current.observeSourceProcessingUseCase,
+            updateSourceUseCase = LocalAppContainer.current.updateSourceUseCase,
+            deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
         ),
     ),
 ) {
@@ -56,6 +65,7 @@ fun SourceDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
     var showOpenOriginalSheet by remember { mutableStateOf(false) }
+    var showSourceOptionsSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.openOriginalRequest) {
         val request = uiState.openOriginalRequest ?: return@LaunchedEffect
@@ -67,6 +77,13 @@ fun SourceDetailScreen(
         val message = uiState.userMessage ?: return@LaunchedEffect
         toastHostState.showToast(message.toToastVisuals(context))
         viewModel.onUserMessageShown()
+    }
+
+    LaunchedEffect(uiState.sourceDeleted) {
+        if (!uiState.sourceDeleted) return@LaunchedEffect
+        kotlinx.coroutines.delay(350)
+        viewModel.onSourceDeletedHandled()
+        onSourceDeleted()
     }
 
     LaunchedEffect(uiState.actionError) {
@@ -85,19 +102,12 @@ fun SourceDetailScreen(
             uiState = uiState,
             highlightText = highlightText,
             onBackClick = onBackClick,
+            onMoreClick = { showSourceOptionsSheet = true },
             onAskSourceClick = onAskSourceClick,
             onOpenOriginalClick = { showOpenOriginalSheet = true },
             onRetryLoad = viewModel::loadDetail,
             onRetryProcessing = viewModel::onRetryProcessing,
             onSheetSelected = viewModel::onSheetSelected,
-        )
-
-        FolioToastHost(
-            hostState = toastHostState,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 12.dp),
         )
 
         if (showOpenOriginalSheet) {
@@ -111,6 +121,63 @@ fun SourceDetailScreen(
                 onConfirm = viewModel::onOpenOriginalClick,
             )
         }
+
+        if (showSourceOptionsSheet) {
+            val source = uiState.detail?.toSource()
+            if (source != null) {
+                ItemOptionsBottomSheet(
+                    title = source.title,
+                    actions = listOf(
+                        ItemOptionAction(
+                            label = stringResource(R.string.source_options_edit),
+                            onClick = {
+                                showSourceOptionsSheet = false
+                                viewModel.onEditSourceClick()
+                            },
+                        ),
+                        ItemOptionAction(
+                            label = stringResource(R.string.source_options_delete),
+                            style = ItemOptionStyle.Destructive,
+                            onClick = {
+                                showSourceOptionsSheet = false
+                                viewModel.onDeleteSourceClick()
+                            },
+                        ),
+                    ),
+                    onDismiss = { showSourceOptionsSheet = false },
+                )
+            } else {
+                showSourceOptionsSheet = false
+            }
+        }
+
+        uiState.editingSource?.let { source ->
+            EditSourceBottomSheet(
+                source = source,
+                initialContent = uiState.editingSourceContent,
+                onDismiss = viewModel::onEditSourceDismiss,
+                onSave = viewModel::onEditSourceSave,
+                isSubmitting = uiState.isUpdatingSource,
+                closeOnSave = false,
+            )
+        }
+
+        uiState.deletingSource?.let {
+            DeleteConfirmationBottomSheet(
+                onDismiss = viewModel::onDeleteSourceDismiss,
+                onConfirm = viewModel::onDeleteSourceConfirm,
+                isSubmitting = uiState.isDeletingSource,
+                closeOnConfirm = false,
+            )
+        }
+
+        FolioToastHost(
+            hostState = toastHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 12.dp),
+        )
     }
 }
 
@@ -119,6 +186,7 @@ private fun SourceDetailContent(
     uiState: SourceDetailUiState,
     highlightText: String?,
     onBackClick: () -> Unit,
+    onMoreClick: () -> Unit,
     onAskSourceClick: () -> Unit,
     onOpenOriginalClick: () -> Unit,
     onRetryLoad: () -> Unit,
@@ -137,6 +205,7 @@ private fun SourceDetailContent(
             showOpenOriginal = uiState.detail?.status == SourceStatus.READY &&
                 !uiState.previewUrl.isNullOrBlank(),
             onBackClick = onBackClick,
+            onMoreClick = onMoreClick,
             onAskSourceClick = onAskSourceClick,
             onOpenOriginalClick = onOpenOriginalClick,
         )
@@ -172,16 +241,32 @@ private fun SourceDetailUserMessage.toToastVisuals(context: android.content.Cont
     val messageRes = when (this) {
         SourceDetailUserMessage.OPEN_ORIGINAL_NO_APP -> R.string.source_detail_open_original_no_app
         SourceDetailUserMessage.OPEN_ORIGINAL_FAILED -> R.string.source_detail_open_original_failed
+        SourceDetailUserMessage.SOURCE_UPDATED -> R.string.toast_source_updated
+        SourceDetailUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
     }
     val style = when (this) {
         SourceDetailUserMessage.OPEN_ORIGINAL_NO_APP -> FolioToastStyle.Warning
         SourceDetailUserMessage.OPEN_ORIGINAL_FAILED -> FolioToastStyle.Error
+        SourceDetailUserMessage.SOURCE_UPDATED -> FolioToastStyle.Success
+        SourceDetailUserMessage.SOURCE_DELETED -> FolioToastStyle.Success
     }
     return FolioToastVisuals(
         title = context.getString(messageRes),
         style = style,
     )
 }
+
+private fun SourceDetail.toSource(): Source =
+    Source(
+        id = id,
+        title = title,
+        type = type,
+        author = author,
+        addedLabel = addedLabel,
+        status = status,
+        spaceId = spaceId,
+        fileExtension = fileExtension,
+    )
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
@@ -206,6 +291,7 @@ private fun SourceDetailDocumentPreview() {
                 previewUrl = "https://example.org/preview/paper.pdf",
             ),
             onBackClick = {},
+            onMoreClick = {},
             onAskSourceClick = {},
             onOpenOriginalClick = {},
             onRetryLoad = {},
@@ -237,6 +323,7 @@ private fun SourceDetailProcessingPreview() {
                 previewUrl = "https://example.org/preview/book.epub",
             ),
             onBackClick = {},
+            onMoreClick = {},
             onAskSourceClick = {},
             onOpenOriginalClick = {},
             onRetryLoad = {},
@@ -267,6 +354,7 @@ private fun SourceDetailFailedPreview() {
                 ),
             ),
             onBackClick = {},
+            onMoreClick = {},
             onAskSourceClick = {},
             onOpenOriginalClick = {},
             onRetryLoad = {},

@@ -19,11 +19,6 @@ internal object SourceSampleData {
 
     fun mutableDefaultSources(): MutableList<Source> = samples.toMutableList()
 
-    fun libraryFor(sources: List<Source>, spaceId: String): SourceLibrary {
-        val scoped = sources.filter { it.spaceId == spaceId }
-        return libraryFrom(scoped)
-    }
-
     fun libraryFrom(sources: List<Source>): SourceLibrary =
         SourceLibrary(
             sources = sources,
