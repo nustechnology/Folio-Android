@@ -13,10 +13,11 @@ class DeleteNoteUseCaseTest {
 
     @Test
     fun `invoke deletes note on success`() = runTest {
-        val result = useCase("2")
+        val result = useCase(spaceId = "1", noteId = "2")
 
         assertTrue(result.isSuccess)
         assertEquals(1, repository.deleteNoteCallCount)
+        assertEquals("1", repository.lastDeletedSpaceId)
         assertEquals("2", repository.lastDeletedNoteId)
     }
 
@@ -24,7 +25,7 @@ class DeleteNoteUseCaseTest {
     fun `invoke returns failure when repository fails`() = runTest {
         repository.deleteNoteResult = Result.failure(IllegalStateException("offline"))
 
-        val result = useCase("2")
+        val result = useCase(spaceId = "1", noteId = "2")
 
         assertTrue(result.isFailure)
         assertEquals("offline", result.exceptionOrNull()?.message)

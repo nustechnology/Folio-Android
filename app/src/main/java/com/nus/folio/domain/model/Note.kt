@@ -20,19 +20,26 @@ enum class NoteOrigin {
 
 enum class NoteFilter {
     ALL,
-    PINNED,
-    UNFILED,
+    USER_CREATED,
+    SAVED_ANSWER,
+}
+
+/** API `origin` query value for list notes; null means omit (All). */
+fun NoteFilter.toApiOrigin(): String? = when (this) {
+    NoteFilter.ALL -> null
+    NoteFilter.USER_CREATED -> "UserCreated"
+    NoteFilter.SAVED_ANSWER -> "SavedAssistantAnswer"
 }
 
 /**
- * Note counts are aggregate only when the backend returns category totals.
- * Otherwise, all count fields are page-local for the currently loaded response page.
+ * Note counts are aggregate when the backend returns totals.
+ * Category fields fall back to page-local counts when aggregates are omitted.
  */
 data class NoteLibrary(
     val notes: List<Note>,
     val allCount: Int,
-    val pinnedCount: Int,
-    val unfiledCount: Int,
+    val userCreatedCount: Int,
+    val savedAnswerCount: Int,
     val page: Int = NotePaging.DEFAULT_PAGE,
     val limit: Int = NotePaging.DEFAULT_LIMIT,
     val hasMore: Boolean = false,

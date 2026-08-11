@@ -14,15 +14,17 @@ import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.repository.SourceFileBytes
 import com.nus.folio.domain.repository.SourceFileBytesReader
+import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
-import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.SaveNotebookUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
@@ -32,9 +34,13 @@ import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.model.CreateSourceRequest
+import com.nus.folio.domain.util.AddSourceInputRules
+import com.nus.folio.domain.util.NotebookInputRules
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
+import com.nus.folio.presentation.home.notebook.NotebookExportHelper
 import com.nus.folio.testing.FakeAskRepository
 import com.nus.folio.testing.FakeAuthRepository
+import com.nus.folio.testing.FakeNotebookRepository
 import com.nus.folio.testing.FakeNoteRepository
 import com.nus.folio.testing.FakeSourceRepository
 import com.nus.folio.testing.MainDispatcherRule
@@ -44,10 +50,12 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
@@ -58,6 +66,7 @@ class HomeViewModelTest {
     private val sourceRepository = FakeSourceRepository()
     private val askRepository = FakeAskRepository()
     private val noteRepository = FakeNoteRepository()
+    private val notebookRepository = FakeNotebookRepository()
     private val authRepository = FakeAuthRepository()
     private val sourceFileBytesReader = SourceFileBytesReader { uriString ->
         SourceFileBytes(
@@ -72,6 +81,7 @@ class HomeViewModelTest {
         spaceTitle: String = "Dissertation Research",
         openSourceDelayMs: Long = 0L,
         searchDebounceMs: Long = 0L,
+        notebookSaveDebounceMs: Long = 0L,
     ): HomeViewModel =
         HomeViewModel(
             spaceId = spaceId,
@@ -82,7 +92,6 @@ class HomeViewModelTest {
             updateSourceUseCase = UpdateSourceUseCase(sourceRepository),
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
             getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
-            getAskTopicsUseCase = GetAskTopicsUseCase(askRepository),
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
             streamAskAnswerUseCase = StreamAskAnswerUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
@@ -90,13 +99,18 @@ class HomeViewModelTest {
             createNoteUseCase = CreateNoteUseCase(noteRepository),
             updateNoteUseCase = UpdateNoteUseCase(noteRepository),
             deleteNoteUseCase = DeleteNoteUseCase(noteRepository),
+            convertNoteToSourceUseCase = ConvertNoteToSourceUseCase(noteRepository),
+            getNotebookUseCase = GetNotebookUseCase(notebookRepository),
+            saveNotebookUseCase = SaveNotebookUseCase(notebookRepository),
             sourceFileBytesReader = sourceFileBytesReader,
             refreshAuthSessionUseCase = RefreshAuthSessionUseCase(authRepository),
             getCurrentSessionUseCase = GetCurrentSessionUseCase(authRepository),
             retrySourceUseCase = RetrySourceUseCase(sourceRepository),
             openSourceDelayMs = openSourceDelayMs,
             searchDebounceMs = searchDebounceMs,
+            notebookSaveDebounceMs = notebookSaveDebounceMs,
             createMinDelayMs = 0L,
+            createNoteMinDelayMs = 0L,
             loadMinDelayMs = 0L,
         )
 
@@ -108,15 +122,11 @@ class HomeViewModelTest {
         assertEquals("1", viewModel.uiState.value.spaceId)
         assertEquals("Dissertation Research", viewModel.uiState.value.spaceTitle)
         assertNull(viewModel.uiState.value.sourcesError)
-        assertNull(viewModel.uiState.value.askError)
         assertNull(viewModel.uiState.value.notesError)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
         assertEquals(5, viewModel.uiState.value.allCount)
         assertEquals(1, sourceRepository.getSourcesCallCount)
         assertEquals("1", sourceRepository.lastSpaceId)
-        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
-        assertEquals(1, askRepository.getAskTopicsCallCount)
-        assertEquals("1", askRepository.lastSpaceId)
         assertEquals(2, viewModel.uiState.value.visibleNotes.size)
         assertEquals(2, viewModel.uiState.value.notesAllCount)
         assertEquals(1, noteRepository.getNotesCallCount)
@@ -130,8 +140,6 @@ class HomeViewModelTest {
 
         assertEquals(5, dissertation.uiState.value.visibleSources.size)
         assertEquals(2, teaching.uiState.value.visibleSources.size)
-        assertEquals(2, dissertation.uiState.value.visibleAskTopics.size)
-        assertEquals(1, teaching.uiState.value.visibleAskTopics.size)
         assertEquals(2, dissertation.uiState.value.visibleNotes.size)
         assertEquals(1, teaching.uiState.value.visibleNotes.size)
     }
@@ -144,9 +152,7 @@ class HomeViewModelTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("offline", viewModel.uiState.value.sourcesError)
-        assertNull(viewModel.uiState.value.askError)
         assertNull(viewModel.uiState.value.notesError)
-        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
         assertEquals(2, viewModel.uiState.value.visibleNotes.size)
     }
 
@@ -245,14 +251,29 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onNoteFilterSelected PINNED shows only pinned notes`() {
+    fun `onNoteFilterSelected USER_CREATED reloads via API origin`() {
+        val viewModel = createViewModel()
+        val callsBefore = noteRepository.getNotesCallCount
+
+        viewModel.onNoteFilterSelected(NoteFilter.USER_CREATED)
+
+        assertEquals(NoteFilter.USER_CREATED, viewModel.uiState.value.selectedNoteFilter)
+        assertEquals("UserCreated", noteRepository.lastOrigin)
+        assertEquals(callsBefore + 1, noteRepository.getNotesCallCount)
+        assertEquals(1, viewModel.uiState.value.visibleNotes.size)
+        assertTrue(viewModel.uiState.value.visibleNotes.all { it.origin == NoteOrigin.USER_CREATED })
+    }
+
+    @Test
+    fun `onNoteFilterSelected SAVED_ANSWER reloads via API origin`() {
         val viewModel = createViewModel()
 
-        viewModel.onNoteFilterSelected(NoteFilter.PINNED)
+        viewModel.onNoteFilterSelected(NoteFilter.SAVED_ANSWER)
 
-        assertEquals(NoteFilter.PINNED, viewModel.uiState.value.selectedNoteFilter)
+        assertEquals(NoteFilter.SAVED_ANSWER, viewModel.uiState.value.selectedNoteFilter)
+        assertEquals("SavedAssistantAnswer", noteRepository.lastOrigin)
         assertEquals(1, viewModel.uiState.value.visibleNotes.size)
-        assertTrue(viewModel.uiState.value.visibleNotes.all { it.isPinned })
+        assertTrue(viewModel.uiState.value.visibleNotes.all { it.origin == NoteOrigin.SAVED_ANSWER })
     }
 
     @Test
@@ -264,16 +285,6 @@ class HomeViewModelTest {
         assertEquals("Turing", sourceRepository.lastSearch)
         assertEquals(1, viewModel.uiState.value.visibleSources.size)
         assertTrue(viewModel.uiState.value.visibleSources.first().title.contains("Turing"))
-    }
-
-    @Test
-    fun `onSearchQueryChange filters ask topics by title`() {
-        val viewModel = createViewModel()
-
-        viewModel.onSearchQueryChange("Turing")
-
-        assertEquals(1, viewModel.uiState.value.visibleAskTopics.size)
-        assertEquals("Turing and modern AI", viewModel.uiState.value.visibleAskTopics.first().title)
     }
 
     @Test
@@ -335,7 +346,6 @@ class HomeViewModelTest {
 
         assertEquals("", viewModel.uiState.value.searchQuery)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
-        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
     }
 
     @Test
@@ -346,7 +356,6 @@ class HomeViewModelTest {
 
         assertTrue(sourceRepository.getSourcesCallCount >= 2)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
-        assertEquals(2, viewModel.uiState.value.visibleAskTopics.size)
         assertEquals(2, viewModel.uiState.value.visibleNotes.size)
     }
 
@@ -489,6 +498,37 @@ class HomeViewModelTest {
         viewModel.onAddSourceClick()
 
         assertTrue(viewModel.uiState.value.showAddSourceSheet)
+    }
+
+    @Test
+    fun `onAddSourceFileSelected shows success toast`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceFileSelected()
+
+        assertEquals(HomeUserMessage.SOURCE_FILE_SELECTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onAddSourceFileSelectionFailed reports unsupported format`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceFileSelectionFailed(
+            AddSourceInputRules.FileValidationError.UNSUPPORTED_FORMAT,
+        )
+
+        assertEquals(HomeActionError.FILE_UNSUPPORTED, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onAddSourceFileSelectionFailed reports file too large`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddSourceFileSelectionFailed(
+            AddSourceInputRules.FileValidationError.SIZE_EXCEEDED,
+        )
+
+        assertEquals(HomeActionError.FILE_TOO_LARGE, viewModel.uiState.value.actionError)
     }
 
     @Test
@@ -842,9 +882,20 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onAddNoteClick opens add note sheet`() {
+        val viewModel = createViewModel()
+
+        viewModel.onAddNoteClick()
+
+        assertTrue(viewModel.uiState.value.showAddNoteSheet)
+        assertFalse(viewModel.uiState.value.isCreatingNote)
+    }
+
+    @Test
     fun `onAddNoteSubmit creates user note with default title when blank`() = runTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
+        viewModel.onAddNoteClick()
 
         viewModel.onAddNoteSubmit(title = "  ", content = "Insight from fieldwork")
         advanceUntilIdle()
@@ -855,6 +906,8 @@ class HomeViewModelTest {
         assertEquals(NoteOrigin.USER_CREATED, noteRepository.lastCreatedRequest?.origin)
         assertEquals(HomeUserMessage.NOTE_SAVED, viewModel.uiState.value.userMessage)
         assertTrue(viewModel.uiState.value.allNotes.any { it.title == "Untitled Note" })
+        assertFalse(viewModel.uiState.value.showAddNoteSheet)
+        assertFalse(viewModel.uiState.value.isCreatingNote)
     }
 
     @Test
@@ -1348,7 +1401,8 @@ class HomeViewModelTest {
         viewModel.onEditNoteSave("Updated title", "Updated content")
         advanceUntilIdle()
 
-        assertEquals(HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
         val unchanged = viewModel.uiState.value.allNotes.first { it.id == note.id }
         assertEquals(note.title, unchanged.title)
         assertEquals(note.content, unchanged.content)
@@ -1419,6 +1473,7 @@ class HomeViewModelTest {
         assertEquals(HomeUserMessage.NOTE_DELETED, viewModel.uiState.value.userMessage)
         assertEquals(1, noteRepository.deleteNoteCallCount)
         assertEquals(note.id, noteRepository.lastDeletedNoteId)
+        assertEquals(note.spaceId, noteRepository.lastDeletedSpaceId)
     }
 
     @Test
@@ -1433,7 +1488,8 @@ class HomeViewModelTest {
 
         viewModel.onDeleteNoteConfirm()
 
-        assertEquals(HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
         assertTrue(viewModel.uiState.value.allNotes.any { it.id == note.id })
         assertEquals(beforeCount, viewModel.uiState.value.notesAllCount)
         assertEquals(note, viewModel.uiState.value.deletingNote)
@@ -1465,62 +1521,34 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onConvertNoteCreate posts manual source with snapshot and current user author`() {
-        authRepository.seedSession(
-            AuthSession(email = "ada@folio.app", displayName = "Ada Lovelace"),
-        )
+    fun `onConvertNoteCreate posts convert API with title`() {
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
         viewModel.onConvertNoteClick()
-        val beforeCount = viewModel.uiState.value.allCount
 
         viewModel.onConvertNoteCreate(
             title = "Converted note title",
             snapshot = "Snapshot body preserved from the note.",
         )
 
-        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Manual
-        assertEquals("1", request.spaceId)
-        assertEquals("Converted note title", request.title)
-        assertEquals("Snapshot body preserved from the note.", request.content)
-        assertEquals("Ada Lovelace", request.author)
-        assertEquals(1, sourceRepository.createSourceCallCount)
+        assertEquals(1, noteRepository.convertNoteToSourceCallCount)
+        assertEquals(0, sourceRepository.createSourceCallCount)
+        assertEquals(note.spaceId, noteRepository.lastConvertSpaceId)
+        assertEquals(note.id, noteRepository.lastConvertNoteId)
+        assertEquals("Converted note title", noteRepository.lastConvertTitle)
         assertNull(viewModel.uiState.value.convertingNote)
         assertNull(viewModel.uiState.value.viewingNote)
         assertEquals("Converted note title", viewModel.uiState.value.processingSourceTitle)
         assertEquals(SourceProcessingState.ADDED, viewModel.uiState.value.processingState)
         assertEquals(HomeUserMessage.SOURCE_CREATED, viewModel.uiState.value.userMessage)
         assertFalse(viewModel.uiState.value.isCreatingSource)
-        assertEquals(beforeCount + 1, viewModel.uiState.value.allCount)
         assertEquals(1, sourceRepository.observeSourceProcessingCallCount)
     }
 
     @Test
-    fun `onConvertNoteCreate uses email local part when display name blank`() {
-        authRepository.seedSession(
-            AuthSession(email = "ada@folio.app", displayName = "  "),
-        )
-        val viewModel = createViewModel()
-        val note = viewModel.uiState.value.visibleNotes.first()
-        viewModel.onNoteClick(note)
-        viewModel.onConvertNoteClick()
-
-        viewModel.onConvertNoteCreate(
-            title = "Title",
-            snapshot = "Enough snapshot content for create.",
-        )
-
-        val request = sourceRepository.lastCreateRequest as CreateSourceRequest.Manual
-        assertEquals("ada", request.author)
-    }
-
-    @Test
-    fun `onConvertNoteCreate shows action error when create fails`() {
-        sourceRepository.createSourceResult = Result.failure(IllegalStateException("boom"))
-        authRepository.seedSession(
-            AuthSession(email = "ada@folio.app", displayName = "Ada Lovelace"),
-        )
+    fun `onConvertNoteCreate shows action error when convert fails`() {
+        noteRepository.convertNoteToSourceResult = Result.failure(IllegalStateException("boom"))
         val viewModel = createViewModel()
         val note = viewModel.uiState.value.visibleNotes.first()
         viewModel.onNoteClick(note)
@@ -1547,14 +1575,26 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onCopyNotebookClick dismisses actions and sets message`() {
+    fun `onCopyNotebookClick dismisses actions and sets pending copy`() {
         val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("Draft report")
         viewModel.onNotebookAddClick()
 
         viewModel.onCopyNotebookClick()
 
         assertFalse(viewModel.uiState.value.showNotebookActions)
-        assertEquals(HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertEquals("Draft report", viewModel.uiState.value.pendingNotebookCopy)
+    }
+
+    @Test
+    fun `onPendingNotebookCopyHandled sets copied toast message`() {
+        val viewModel = createViewModel()
+        viewModel.onCopyNotebookClick()
+
+        viewModel.onPendingNotebookCopyHandled()
+
+        assertNull(viewModel.uiState.value.pendingNotebookCopy)
+        assertEquals(HomeUserMessage.NOTEBOOK_COPIED, viewModel.uiState.value.userMessage)
     }
 
     @Test
@@ -1569,21 +1609,242 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onNotebookExportConfirm dismisses export and sets message`() {
+    fun `onNotebookExportConfirm markdown sets pending export request`() {
         val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("# Report")
         viewModel.onNotebookAddClick()
         viewModel.onExportNotebookClick()
 
         viewModel.onNotebookExportConfirm(NotebookExportFormat.MARKDOWN)
 
         assertFalse(viewModel.uiState.value.showNotebookExport)
-        assertEquals(HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED, viewModel.uiState.value.userMessage)
+        assertFalse(viewModel.uiState.value.notebookExportPickerLaunched)
+        assertEquals(
+            NotebookExportRequest(
+                filename = "dissertation-research-notebook.md",
+                markdown = "# Report\n",
+            ),
+            viewModel.uiState.value.pendingNotebookExport,
+        )
+    }
+
+    @Test
+    fun `markdown export request survives recreation until CreateDocument result is processed`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("# Report")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.MARKDOWN)
+
+        // Picker is open; Compose clears remember-state on recreation, ViewModel must retain.
+        viewModel.onNotebookExportPickerLaunched()
+        val retained = viewModel.uiState.value.pendingNotebookExport
+        assertNotNull(retained)
+        assertTrue(viewModel.uiState.value.notebookExportPickerLaunched)
+
+        val selectedFile = File.createTempFile("notebook-export", ".md")
+        try {
+            selectedFile.outputStream().use { stream ->
+                NotebookExportHelper.writeMarkdown(stream, retained!!.markdown)
+            }
+            assertEquals("# Report\n", selectedFile.readText())
+
+            viewModel.onNotebookExportSucceeded()
+            assertNull(viewModel.uiState.value.pendingNotebookExport)
+            assertFalse(viewModel.uiState.value.notebookExportPickerLaunched)
+            assertEquals(HomeUserMessage.NOTEBOOK_EXPORTED, viewModel.uiState.value.userMessage)
+        } finally {
+            selectedFile.delete()
+        }
+    }
+
+    @Test
+    fun `onNotebookExportSucceeded clears pending and shows success toast`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("# Report")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.MARKDOWN)
+        viewModel.onNotebookExportPickerLaunched()
+
+        viewModel.onNotebookExportSucceeded()
+
+        assertNull(viewModel.uiState.value.pendingNotebookExport)
+        assertFalse(viewModel.uiState.value.notebookExportPickerLaunched)
+        assertEquals(HomeUserMessage.NOTEBOOK_EXPORTED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onNotebookExportFailed clears pending and reports EXPORT_FAILED`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("# Report")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.MARKDOWN)
+        viewModel.onNotebookExportPickerLaunched()
+
+        viewModel.onNotebookExportFailed()
+
+        assertNull(viewModel.uiState.value.pendingNotebookExport)
+        assertFalse(viewModel.uiState.value.notebookExportPickerLaunched)
+        assertEquals(HomeActionError.EXPORT_FAILED, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onNotebookExportConfirm print sets pending print request`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("Print me")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.PRINT_PDF)
+
+        assertFalse(viewModel.uiState.value.showNotebookExport)
+        assertEquals("Print me\n", viewModel.uiState.value.pendingNotebookPrint?.markdown)
+    }
+
+    @Test
+    fun `print request survives recreation before PrintManager submission`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("Print me")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.PRINT_PDF)
+        val firstRequest = viewModel.uiState.value.pendingNotebookPrint
+
+        viewModel.onNotebookPrintAdapterInvalidated()
+
+        assertEquals("Print me\n", viewModel.uiState.value.pendingNotebookPrint?.markdown)
+        assertTrue(viewModel.uiState.value.pendingNotebookPrint!!.id != firstRequest!!.id)
+    }
+
+    @Test
+    fun `repeat print export gets a new request id`() {
+        val viewModel = createViewModel()
+        viewModel.onNotebookContentChange("Print me")
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.PRINT_PDF)
+        val firstRequest = viewModel.uiState.value.pendingNotebookPrint
+
+        viewModel.onNotebookAddClick()
+        viewModel.onExportNotebookClick()
+        viewModel.onNotebookExportConfirm(NotebookExportFormat.PRINT_PDF)
+        val secondRequest = viewModel.uiState.value.pendingNotebookPrint
+
+        assertEquals("Print me\n", secondRequest?.markdown)
+        assertTrue(secondRequest!!.id != firstRequest!!.id)
+
+        viewModel.onPendingNotebookPrintHandled()
+        assertNull(viewModel.uiState.value.pendingNotebookPrint)
+    }
+
+    @Test
+    fun `loadNotebook sets loading state then clears after fetch`() = runTest {
+        notebookRepository.seed("1", "Saved content")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoadingNotebook)
+        assertEquals("Saved content", viewModel.uiState.value.notebookContent)
+        assertTrue(notebookRepository.getNotebookCallCount >= 1)
+    }
+
+    @Test
+    fun `selecting Notebook tab again does not reload stored content`() = runTest {
+        notebookRepository.seed("1", "Saved content")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+        val loadsAfterInit = notebookRepository.getNotebookCallCount
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+        viewModel.onTabSelected(HomeTab.NOTES)
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertEquals(loadsAfterInit, notebookRepository.getNotebookCallCount)
+        assertEquals("Saved content", viewModel.uiState.value.notebookContent)
+    }
+
+    @Test
+    fun `unsaved notebook edits survive tab leave before debounce save`() = runTest {
+        notebookRepository.seed("1", "Saved content")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 1_000L)
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+        viewModel.onNotebookContentChange("Draft in progress")
+        assertEquals(NotebookSaveStatus.SAVING, viewModel.uiState.value.notebookSaveStatus)
+
+        // Leave and return before the debounce fires — must not restore stored content.
+        viewModel.onTabSelected(HomeTab.NOTES)
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        assertEquals("Draft in progress", viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.SAVING, viewModel.uiState.value.notebookSaveStatus)
+
+        advanceUntilIdle()
+        assertEquals("Draft in progress", viewModel.uiState.value.notebookContent)
+        assertEquals("Draft in progress", notebookRepository.lastSavedContent)
+        assertEquals(NotebookSaveStatus.SAVED, viewModel.uiState.value.notebookSaveStatus)
+    }
+
+    @Test
+    fun `onNotebookContentChange auto saves after debounce`() = runTest {
+        val viewModel = createViewModel(notebookSaveDebounceMs = 10L)
+
+        viewModel.onNotebookContentChange("Updated draft")
+        advanceUntilIdle()
+
+        assertEquals(NotebookSaveStatus.SAVED, viewModel.uiState.value.notebookSaveStatus)
+        assertEquals("Updated draft", notebookRepository.lastSavedContent)
+    }
+
+    @Test
+    fun `onNotebookContentChange clamps to max length and keeps UI in sync with saved content`() = runTest {
+        val viewModel = createViewModel(notebookSaveDebounceMs = 10L)
+        val oversized = "a".repeat(NotebookInputRules.MAX_CONTENT_LENGTH + 250)
+        val expected = "a".repeat(NotebookInputRules.MAX_CONTENT_LENGTH)
+
+        viewModel.onNotebookContentChange(oversized)
+        assertEquals(expected, viewModel.uiState.value.notebookContent)
+
+        advanceUntilIdle()
+
+        assertEquals(expected, notebookRepository.lastSavedContent)
+        assertEquals(expected, viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.SAVED, viewModel.uiState.value.notebookSaveStatus)
+    }
+
+    @Test
+    fun `failed notebook save exposes FAILED status and retry persists dirty content`() = runTest {
+        notebookRepository.saveError = IllegalStateException("disk full")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 10L)
+
+        viewModel.onNotebookContentChange("Dirty draft")
+        advanceUntilIdle()
+
+        assertEquals(NotebookSaveStatus.FAILED, viewModel.uiState.value.notebookSaveStatus)
+        assertEquals("Dirty draft", viewModel.uiState.value.notebookContent)
+        assertEquals(1, notebookRepository.saveNotebookCallCount)
+
+        notebookRepository.saveError = null
+        viewModel.onRetryNotebookSave()
+        advanceUntilIdle()
+
+        assertEquals(NotebookSaveStatus.SAVED, viewModel.uiState.value.notebookSaveStatus)
+        assertEquals("Dirty draft", notebookRepository.lastSavedContent)
+        assertEquals(2, notebookRepository.saveNotebookCallCount)
     }
 
     @Test
     fun `onUserMessageShown clears message`() {
         val viewModel = createViewModel()
-        viewModel.onCopyNotebookClick()
+        viewModel.onPendingNotebookCopyHandled()
 
         viewModel.onUserMessageShown()
 

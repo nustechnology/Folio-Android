@@ -3,8 +3,12 @@ package com.nus.folio.data.datasource
 import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteLibrary
+import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.NotePaging
 import com.nus.folio.domain.model.NoteSort
+import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.util.NoteUpdatedLabelFormatter
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -43,6 +47,7 @@ class NoteDataSource(
         spaceId: String,
         search: String? = null,
         sort: NoteSort = NoteSort.DEFAULT,
+        origin: String? = null,
         page: Int = NotePaging.DEFAULT_PAGE,
         limit: Int = NotePaging.DEFAULT_LIMIT,
     ): NoteLibrary {
@@ -57,6 +62,11 @@ class NoteDataSource(
                         note.project.orEmpty().contains(query, ignoreCase = true)
                 }
             }
+            scoped = when (origin?.trim()) {
+                "UserCreated" -> scoped.filter { it.origin == NoteOrigin.USER_CREATED }
+                "SavedAssistantAnswer" -> scoped.filter { it.origin == NoteOrigin.SAVED_ANSWER }
+                else -> scoped
+            }
             scoped = when (sort) {
                 NoteSort.ALPHABETICAL_AZ -> scoped.sortedBy { it.title.lowercase() }
                 NoteSort.ALPHABETICAL_ZA -> scoped.sortedByDescending { it.title.lowercase() }
@@ -70,8 +80,8 @@ class NoteDataSource(
             NoteLibrary(
                 notes = pageItems,
                 allCount = scoped.size,
-                pinnedCount = scoped.count { it.isPinned },
-                unfiledCount = scoped.count { it.project.isNullOrBlank() },
+                userCreatedCount = scoped.count { it.origin == NoteOrigin.USER_CREATED },
+                savedAnswerCount = scoped.count { it.origin == NoteOrigin.SAVED_ANSWER },
                 page = safePage,
                 limit = safeLimit,
                 hasMore = offset + pageItems.size < scoped.size,
@@ -128,14 +138,36 @@ class NoteDataSource(
         }
     }
 
-    suspend fun deleteNote(noteId: String) {
+    suspend fun deleteNote(spaceId: String, noteId: String) {
         delay(200)
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        require(noteId.isNotBlank()) { "Note id is required" }
         mutex.withLock {
-            val removed = notes.removeAll { it.id == noteId }
+            val removed = notes.removeAll { it.id == noteId && it.spaceId == spaceId }
             if (!removed) {
                 throw NoSuchElementException("Note not found: $noteId")
             }
             noteTimelines.remove(noteId)
+        }
+    }
+
+    suspend fun convertNoteToSource(spaceId: String, noteId: String, title: String): Source {
+        delay(200)
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        require(noteId.isNotBlank()) { "Note id is required" }
+        require(title.isNotBlank()) { "Title is required" }
+        return mutex.withLock {
+            notes.firstOrNull { it.id == noteId && it.spaceId == spaceId }
+                ?: throw NoSuchElementException("Note not found: $noteId")
+            Source(
+                id = UUID.randomUUID().toString(),
+                title = title.trim(),
+                type = SourceType.TEXT,
+                author = "",
+                addedLabel = "Added just now",
+                status = SourceStatus.PROCESSING,
+                spaceId = spaceId.trim(),
+            )
         }
     }
 

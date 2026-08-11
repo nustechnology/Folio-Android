@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
@@ -61,8 +63,16 @@ internal fun EditSourceBottomSheet(
     initialContent: String = "",
     onDismiss: () -> Unit,
     onSave: (title: String, author: String, content: String) -> Unit = { _, _, _ -> },
+    isSubmitting: Boolean = false,
+    /**
+     * When true (default), save animates the sheet closed then invokes [onSave]
+     * (Home edit). When false, [onSave] runs immediately and the parent closes
+     * the sheet by clearing state (Source Detail with loading).
+     */
+    closeOnSave: Boolean = true,
 ) {
     val context = LocalContext.current
+    val discardProtection = rememberSheetDiscardProtectionState()
 
     DisposableEffect(Unit) {
         val window = context.findActivityOrNull()?.window
@@ -75,19 +85,42 @@ internal fun EditSourceBottomSheet(
     }
 
     AnimatedModalSheet(
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (!isSubmitting) onDismiss()
+        },
+        dismissOnScrimClick = !isSubmitting,
+        confirmDismiss = {
+            discardProtection.confirmDismiss(blockWhileBusy = isSubmitting)
+        },
         contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
     ) { requestDismiss ->
+        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         EditSourceSheetContent(
             source = source,
             initialContent = initialContent,
-            onCancelClick = { requestDismiss() },
+            isSubmitting = isSubmitting,
+            onDirtyChange = { discardProtection.hasUnsavedContent = it },
+            onCancelClick = {
+                if (!isSubmitting) requestDismiss()
+            },
             onSave = { title, author, content ->
-                requestDismiss { onSave(title, author, content) }
+                if (isSubmitting) return@EditSourceSheetContent
+                if (closeOnSave) {
+                    discardProtection.bypassDiscardConfirm = true
+                    requestDismiss { onSave(title, author, content) }
+                } else {
+                    onSave(title, author, content)
+                }
             },
         )
     }
+
+    SheetDiscardConfirmBottomSheet(
+        visible = discardProtection.showDiscardConfirm,
+        onKeepEditing = { discardProtection.showDiscardConfirm = false },
+        onDiscard = { discardProtection.discardAndDismiss() },
+    )
 }
 
 @Composable
@@ -96,6 +129,8 @@ internal fun EditSourceSheetContent(
     initialContent: String = "",
     onCancelClick: () -> Unit,
     onSave: (title: String, author: String, content: String) -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
+    isSubmitting: Boolean = false,
 ) {
     val isTextSource = source.type == SourceType.TEXT
     var title by rememberSaveable(source.id) { mutableStateOf(source.title) }
@@ -107,9 +142,19 @@ internal fun EditSourceSheetContent(
         null
     }
     val canSave = title.isNotBlank() &&
+        !isSubmitting &&
         (!isTextSource || AddSourceInputRules.isContentValid(content))
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     val scrollState = rememberScrollState()
+
+    SideEffect {
+        val contentChanged = isTextSource && content != initialContent
+        onDirtyChange(
+            title != source.title ||
+                author != source.author ||
+                contentChanged,
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -207,6 +252,7 @@ internal fun EditSourceSheetContent(
                     )
                 },
                 labelRes = R.string.edit_source_save,
+                isLoading = isSubmitting,
                 modifier = Modifier.weight(1f),
             )
         }

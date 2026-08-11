@@ -57,6 +57,7 @@ internal fun SourceDetailHeader(
     detail: SourceDetail?,
     showOpenOriginal: Boolean,
     onBackClick: () -> Unit,
+    onMoreClick: () -> Unit,
     onAskSourceClick: () -> Unit,
     onOpenOriginalClick: () -> Unit,
 ) {
@@ -101,6 +102,10 @@ internal fun SourceDetailHeader(
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 32.sp,
             )
+            if (detail != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                MoreOptionsIconButton(onClick = onMoreClick)
+            }
         }
 
         if (detail != null) {
@@ -145,6 +150,29 @@ internal fun SourceDetailHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+@Composable
+private fun MoreOptionsIconButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .border(1.dp, HomeCardBorder, CircleShape)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_more_vertical),
+            contentDescription = stringResource(R.string.home_notes_more),
+            tint = HomeTextPrimary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

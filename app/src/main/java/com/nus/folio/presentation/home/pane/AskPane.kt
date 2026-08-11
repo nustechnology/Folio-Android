@@ -1,7 +1,6 @@
 package com.nus.folio.presentation.home.pane
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,10 +30,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.Source
@@ -53,12 +49,10 @@ import com.nus.folio.presentation.home.isAskStreaming
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
-import com.nus.folio.ui.theme.HomeStatusFailedText
 
 @Composable
 internal fun AskPane(
     uiState: HomeUiState,
-    onRetry: () -> Unit,
     onAskSubmit: (String) -> Unit,
     onAskStop: () -> Unit,
     onScopeChipClick: () -> Unit,
@@ -73,26 +67,6 @@ internal fun AskPane(
         uiState.isLoading -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = HomeHeader)
-            }
-        }
-        uiState.askError != null -> {
-            Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = uiState.askError.ifBlank {
-                            stringResource(R.string.home_error_generic)
-                        },
-                        color = HomeStatusFailedText,
-                        fontSize = 14.sp,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.home_retry),
-                        modifier = Modifier.clickable(onClick = onRetry),
-                        color = HomeHeader,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
             }
         }
         else -> {
@@ -304,7 +278,6 @@ private fun AskPanePreview() {
     FolioAndroidTheme(dynamicColor = false) {
         AskPane(
             uiState = HomeUiState(allSources = listOf(previewReadySource)),
-            onRetry = {},
             onAskSubmit = {},
             onAskStop = {},
             onScopeChipClick = {},
@@ -337,7 +310,6 @@ private fun AskPaneStreamingPreview() {
                     ),
                 ),
             ),
-            onRetry = {},
             onAskSubmit = {},
             onAskStop = {},
             onScopeChipClick = {},
@@ -372,7 +344,6 @@ private fun AskPaneCompletedPreview() {
                     ),
                 ),
             ),
-            onRetry = {},
             onAskSubmit = {},
             onAskStop = {},
             onScopeChipClick = {},
@@ -392,7 +363,6 @@ private fun AskPaneNoEvidencePreview() {
     FolioAndroidTheme(dynamicColor = false) {
         AskPane(
             uiState = HomeUiState(allSources = emptyList()),
-            onRetry = {},
             onAskSubmit = {},
             onAskStop = {},
             onScopeChipClick = {},
@@ -412,7 +382,6 @@ private fun AskPaneLoadingPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         AskPane(
             uiState = HomeUiState(isLoading = true),
-            onRetry = {},
             onAskSubmit = {},
             onAskStop = {},
             onScopeChipClick = {},

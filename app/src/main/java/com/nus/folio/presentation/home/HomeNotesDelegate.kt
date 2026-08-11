@@ -1,17 +1,16 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.CreateNoteRequest
-import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.NotePaging
 import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
+import com.nus.folio.domain.model.toApiOrigin
+import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
-import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
-import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
@@ -19,6 +18,8 @@ import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.domain.util.NoteInputRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -37,11 +38,11 @@ internal class HomeNotesDelegate(
     private val createNoteUseCase: CreateNoteUseCase,
     private val updateNoteUseCase: UpdateNoteUseCase,
     private val deleteNoteUseCase: DeleteNoteUseCase,
-    private val createSourceUseCase: CreateSourceUseCase,
-    private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
+    private val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase,
     private val onSourceCreated: (Source, fallbackTitle: String) -> Unit,
     private val searchDebounceMs: Long,
     private val pageLimit: Int = NotePaging.DEFAULT_LIMIT,
+    private val createMinDelayMs: Long = CREATE_MIN_DELAY_MS,
 ) {
 
     private var notesLoadJob: Job? = null
@@ -124,6 +125,7 @@ internal class HomeNotesDelegate(
             spaceId = spaceId,
             search = current.searchQuery.trim().takeIf { it.isNotEmpty() },
             sort = current.selectedNoteSort,
+            origin = current.selectedNoteFilter.toApiOrigin(),
             page = page,
             limit = pageLimit,
         )
@@ -141,8 +143,8 @@ internal class HomeNotesDelegate(
                         notesError = null,
                         allNotes = merged,
                         notesAllCount = library.allCount,
-                        notesPinnedCount = library.pinnedCount,
-                        notesUnfiledCount = library.unfiledCount,
+                        notesUserCreatedCount = library.userCreatedCount,
+                        notesSavedAnswerCount = library.savedAnswerCount,
                         notesCurrentPage = library.page,
                         notesHasMore = library.hasMore,
                         isLoadingMoreNotes = false,
@@ -167,10 +169,9 @@ internal class HomeNotesDelegate(
     }
 
     fun onNoteFilterSelected(filter: NoteFilter) {
-        state.update { current ->
-            val next = current.copy(selectedNoteFilter = filter)
-            next.copy(visibleNotes = filterNotes(next))
-        }
+        if (filter == state.value.selectedNoteFilter) return
+        state.update { it.copy(selectedNoteFilter = filter) }
+        loadNotesOnly()
     }
 
     fun onFilterSortClick() {
@@ -190,64 +191,94 @@ internal class HomeNotesDelegate(
         loadNotesOnly()
     }
 
+    fun onAddNoteClick() {
+        if (state.value.isCreatingNote) return
+        state.update { it.copy(showAddNoteSheet = true) }
+    }
+
+    fun onAddNoteSheetDismiss() {
+        if (state.value.isCreatingNote) return
+        state.update { it.copy(showAddNoteSheet = false) }
+    }
+
     fun onAddNoteSubmit(
         title: String,
         content: String,
     ) {
+        if (state.value.isCreatingNote) return
         if (NoteInputRules.titleValidationError(title) != null) return
         val trimmedContent = content.trim()
         if (NoteInputRules.contentValidationError(trimmedContent) != null) return
         val resolvedTitle = NoteInputRules.resolveTitle(title)
 
+        state.update { it.copy(isCreatingNote = true) }
         scope.launch {
-            createNoteUseCase(
-                CreateNoteRequest(
-                    spaceId = spaceId,
-                    title = resolvedTitle,
-                    content = trimmedContent,
-                    origin = NoteOrigin.USER_CREATED,
-                    project = state.value.spaceTitle.ifBlank { null },
-                ),
-            ).onSuccess { created ->
-                state.update { current ->
-                    val alreadyExists = current.allNotes.any { it.id == created.id }
-                    val belongsToActiveSearch = created.matchesActiveNotesSearch(current.searchQuery)
-                    val shouldApplyLocally = belongsToActiveSearch
-                    val notes = if (shouldApplyLocally) {
-                        listOf(created) + current.allNotes.filterNot { it.id == created.id }
-                    } else {
-                        current.allNotes
-                    }
-                    val next = current.copy(
-                        allNotes = notes,
-                        notesAllCount = if (shouldApplyLocally && !alreadyExists) {
-                            current.notesAllCount + 1
-                        } else {
-                            current.notesAllCount
-                        },
-                        notesPinnedCount = if (shouldApplyLocally && !alreadyExists && created.isPinned) {
-                            current.notesPinnedCount + 1
-                        } else {
-                            current.notesPinnedCount
-                        },
-                        notesUnfiledCount = if (
-                            shouldApplyLocally &&
-                            !alreadyExists &&
-                            created.project.isNullOrBlank()
-                        ) {
-                            current.notesUnfiledCount + 1
-                        } else {
-                            current.notesUnfiledCount
-                        },
-                        userMessage = HomeUserMessage.NOTE_SAVED,
+            val result = coroutineScope {
+                val createDeferred = async {
+                    createNoteUseCase(
+                        CreateNoteRequest(
+                            spaceId = spaceId,
+                            title = resolvedTitle,
+                            content = trimmedContent,
+                            origin = NoteOrigin.USER_CREATED,
+                            project = state.value.spaceTitle.ifBlank { null },
+                        ),
                     )
-                    next.copy(visibleNotes = filterNotes(next))
                 }
-            }.onFailure { throwable ->
-                state.update {
-                    it.copy(actionError = throwable.toHomeActionError())
-                }
+                delay(createMinDelayMs)
+                createDeferred.await()
             }
+            result
+                .onSuccess { created ->
+                    state.update { current ->
+                        val alreadyExists = current.allNotes.any { it.id == created.id }
+                        val belongsToActiveSearch = created.matchesActiveNotesSearch(current.searchQuery)
+                        val shouldApplyLocally = belongsToActiveSearch
+                        val notes = if (shouldApplyLocally) {
+                            listOf(created) + current.allNotes.filterNot { it.id == created.id }
+                        } else {
+                            current.allNotes
+                        }
+                        val next = current.copy(
+                            allNotes = notes,
+                            notesAllCount = if (shouldApplyLocally && !alreadyExists) {
+                                current.notesAllCount + 1
+                            } else {
+                                current.notesAllCount
+                            },
+                            notesUserCreatedCount = if (
+                                shouldApplyLocally &&
+                                !alreadyExists &&
+                                created.origin == NoteOrigin.USER_CREATED
+                            ) {
+                                current.notesUserCreatedCount + 1
+                            } else {
+                                current.notesUserCreatedCount
+                            },
+                            notesSavedAnswerCount = if (
+                                shouldApplyLocally &&
+                                !alreadyExists &&
+                                created.origin == NoteOrigin.SAVED_ANSWER
+                            ) {
+                                current.notesSavedAnswerCount + 1
+                            } else {
+                                current.notesSavedAnswerCount
+                            },
+                            showAddNoteSheet = false,
+                            isCreatingNote = false,
+                            userMessage = HomeUserMessage.NOTE_SAVED,
+                        )
+                        next.copy(visibleNotes = filterNotes(next))
+                    }
+                }
+                .onFailure { throwable ->
+                    state.update {
+                        it.copy(
+                            isCreatingNote = false,
+                            actionError = throwable.toHomeActionError(),
+                        )
+                    }
+                }
         }
     }
 
@@ -373,9 +404,9 @@ internal class HomeNotesDelegate(
                         next.copy(visibleNotes = filterNotes(next))
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
                     state.update {
-                        it.copy(userMessage = HomeUserMessage.EDIT_NOTE_NOT_SUPPORTED)
+                        it.copy(actionError = throwable.toHomeActionError())
                     }
                 }
         }
@@ -396,11 +427,13 @@ internal class HomeNotesDelegate(
     }
 
     fun onConvertNoteCreate(title: String, snapshot: String) {
+        val converting = state.value.convertingNote ?: return
         val trimmedTitle = AddSourceInputRules.limitTitle(
             title.trim().ifBlank { AddSourceInputRules.defaultManualTitle() },
         )
-        val trimmedContent = snapshot.trim()
-        if (trimmedContent.isBlank()) return
+        // Snapshot remains UI-preview only; the API snapshots note content server-side.
+        if (snapshot.trim().isBlank()) return
+        val convertSpaceId = converting.spaceId.ifBlank { spaceId }
 
         state.update {
             it.copy(
@@ -411,20 +444,10 @@ internal class HomeNotesDelegate(
         }
 
         scope.launch {
-            val session = getCurrentSessionUseCase()
-            val author = AddSourceInputRules.limitAuthor(
-                AddSourceInputRules.currentUserDisplayName(
-                    displayName = session?.displayName,
-                    email = session?.email,
-                ),
-            )
-            createSourceUseCase(
-                CreateSourceRequest.Manual(
-                    spaceId = spaceId,
-                    title = trimmedTitle,
-                    author = author,
-                    content = trimmedContent,
-                ),
+            convertNoteToSourceUseCase(
+                spaceId = convertSpaceId,
+                noteId = converting.id,
+                title = trimmedTitle,
             ).onSuccess { created ->
                 onSourceCreated(created, trimmedTitle)
             }.onFailure { throwable ->
@@ -455,9 +478,10 @@ internal class HomeNotesDelegate(
 
     fun onDeleteNoteConfirm() {
         val deleting = state.value.deletingNote ?: return
+        val deleteSpaceId = deleting.spaceId.ifBlank { spaceId }
 
         scope.launch {
-            deleteNoteUseCase(deleting.id)
+            deleteNoteUseCase(spaceId = deleteSpaceId, noteId = deleting.id)
                 .onSuccess {
                     state.update { current ->
                         val existedInActiveSearch = current.allNotes.any { it.id == deleting.id }
@@ -473,18 +497,21 @@ internal class HomeNotesDelegate(
                             } else {
                                 current.notesAllCount
                             },
-                            notesPinnedCount = if (existedInActiveSearch && deleting.isPinned) {
-                                (current.notesPinnedCount - 1).coerceAtLeast(0)
-                            } else {
-                                current.notesPinnedCount
-                            },
-                            notesUnfiledCount = if (
+                            notesUserCreatedCount = if (
                                 existedInActiveSearch &&
-                                deleting.project.isNullOrBlank()
+                                deleting.origin == NoteOrigin.USER_CREATED
                             ) {
-                                (current.notesUnfiledCount - 1).coerceAtLeast(0)
+                                (current.notesUserCreatedCount - 1).coerceAtLeast(0)
                             } else {
-                                current.notesUnfiledCount
+                                current.notesUserCreatedCount
+                            },
+                            notesSavedAnswerCount = if (
+                                existedInActiveSearch &&
+                                deleting.origin == NoteOrigin.SAVED_ANSWER
+                            ) {
+                                (current.notesSavedAnswerCount - 1).coerceAtLeast(0)
+                            } else {
+                                current.notesSavedAnswerCount
                             },
                             deletingNote = null,
                             viewingNote = null,
@@ -494,9 +521,9 @@ internal class HomeNotesDelegate(
                         next.copy(visibleNotes = filterNotes(next))
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
                     state.update {
-                        it.copy(userMessage = HomeUserMessage.DELETE_NOTE_NOT_SUPPORTED)
+                        it.copy(actionError = throwable.toHomeActionError())
                     }
                 }
         }
@@ -510,44 +537,7 @@ internal class HomeNotesDelegate(
             project?.contains(query, ignoreCase = true) == true
     }
 
-    fun onNotebookAddClick() {
-        state.update { it.copy(showNotebookActions = true) }
-    }
-
-    fun onNotebookActionsDismiss() {
-        state.update { it.copy(showNotebookActions = false) }
-    }
-
-    fun onCopyNotebookClick() {
-        state.update {
-            it.copy(
-                showNotebookActions = false,
-                userMessage = HomeUserMessage.COPY_NOTEBOOK_NOT_SUPPORTED,
-            )
-        }
-    }
-
-    fun onExportNotebookClick() {
-        state.update {
-            it.copy(
-                showNotebookActions = false,
-                showNotebookExport = true,
-            )
-        }
-    }
-
-    fun onNotebookExportDismiss() {
-        state.update { it.copy(showNotebookExport = false) }
-    }
-
-    fun onNotebookExportConfirm(
-        @Suppress("UNUSED_PARAMETER") format: NotebookExportFormat,
-    ) {
-        state.update {
-            it.copy(
-                showNotebookExport = false,
-                userMessage = HomeUserMessage.EXPORT_NOTEBOOK_NOT_SUPPORTED,
-            )
-        }
+    companion object {
+        private const val CREATE_MIN_DELAY_MS = 1_000L
     }
 }

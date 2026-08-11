@@ -12,6 +12,7 @@ class GetNotesUseCase(
         spaceId: String,
         search: String? = null,
         sort: NoteSort = NoteSort.DEFAULT,
+        origin: String? = null,
         page: Int = NotePaging.DEFAULT_PAGE,
         limit: Int = NotePaging.DEFAULT_LIMIT,
     ): Result<NoteLibrary> =
@@ -19,6 +20,7 @@ class GetNotesUseCase(
             spaceId = spaceId,
             search = search,
             sort = sort,
+            origin = origin,
             page = page,
             limit = limit,
         )

@@ -2,7 +2,6 @@ package com.nus.folio.testing
 
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskStreamEvent
-import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.repository.AskRepository
 import kotlinx.coroutines.awaitCancellation
@@ -11,8 +10,6 @@ import kotlinx.coroutines.flow.flow
 
 class FakeAskRepository : AskRepository {
 
-    var getAskTopicsResult: Result<List<AskTopic>>? = null
-    var getAskTopicsCallCount = 0
     var lastSpaceId: String? = null
 
     var getSuggestedQuestionsResult: Result<List<String>>? = null
@@ -25,13 +22,6 @@ class FakeAskRepository : AskRepository {
     var streamEvents: List<AskStreamEvent>? = null
     /** When true, the stream suspends after emitting [streamEvents] until cancelled. */
     var hangAfterStreamEvents: Boolean = false
-
-    override suspend fun getAskTopics(spaceId: String): Result<List<AskTopic>> {
-        getAskTopicsCallCount++
-        lastSpaceId = spaceId
-        getAskTopicsResult?.let { return it }
-        return Result.success(sampleTopics.filter { it.spaceId == spaceId })
-    }
 
     override suspend fun getSuggestedQuestions(sourceId: String): Result<List<String>> {
         getSuggestedQuestionsCallCount++
@@ -78,14 +68,6 @@ class FakeAskRepository : AskRepository {
     }
 
     companion object {
-        val sampleTopics = listOf(
-            AskTopic("1a", "Core dissertation arguments", 4, 2, "1"),
-            AskTopic("1b", "Turing and modern AI", 3, 1, "1"),
-            AskTopic("2a", "Policy brief themes", 2, 2, "2"),
-            AskTopic("3a", "Scientific manuscripts timeline", 1, 1, "3"),
-            AskTopic("4a", "Week 7 lecture prep", 2, 1, "4"),
-        )
-
         val sampleSuggestions = mapOf(
             "1" to listOf(
                 "What is Turing's main claim about machine intelligence?",

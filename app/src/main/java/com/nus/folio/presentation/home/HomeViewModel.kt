@@ -11,17 +11,20 @@ import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceSort
+import com.nus.folio.domain.model.toApiOrigin
 import com.nus.folio.domain.model.toApiSourceType
 import com.nus.folio.domain.repository.SourceFileBytesReader
+import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
-import com.nus.folio.domain.usecase.GetAskTopicsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
+import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.SaveNotebookUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
@@ -30,6 +33,7 @@ import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
+import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -42,7 +46,7 @@ import kotlinx.coroutines.launch
 /**
  * Home screen façade. Owns [uiState] and the shared load/search/tab handlers,
  * and forwards tab-specific actions to [HomeSourcesDelegate], [HomeAskDelegate],
- * and [HomeNotesDelegate].
+ * [HomeNotesDelegate], and [HomeNotebookDelegate].
  */
 class HomeViewModel(
     private val spaceId: String,
@@ -53,7 +57,6 @@ class HomeViewModel(
     private val updateSourceUseCase: UpdateSourceUseCase,
     private val deleteSourceUseCase: DeleteSourceUseCase,
     private val getSourceDetailUseCase: GetSourceDetailUseCase,
-    private val getAskTopicsUseCase: GetAskTopicsUseCase,
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
     private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
     private val getNotesUseCase: GetNotesUseCase,
@@ -61,6 +64,9 @@ class HomeViewModel(
     private val createNoteUseCase: CreateNoteUseCase,
     private val updateNoteUseCase: UpdateNoteUseCase,
     private val deleteNoteUseCase: DeleteNoteUseCase,
+    private val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase,
+    private val getNotebookUseCase: GetNotebookUseCase,
+    private val saveNotebookUseCase: SaveNotebookUseCase,
     private val sourceFileBytesReader: SourceFileBytesReader,
     private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
     private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
@@ -68,7 +74,9 @@ class HomeViewModel(
     private val openSourceDelayMs: Long = OPEN_SOURCE_DELAY_MS,
     private val searchDebounceMs: Long = SEARCH_DEBOUNCE_MS,
     private val createMinDelayMs: Long = CREATE_MIN_DELAY_MS,
+    private val createNoteMinDelayMs: Long = CREATE_NOTE_MIN_DELAY_MS,
     private val loadMinDelayMs: Long = LOAD_MIN_DELAY_MS,
+    private val notebookSaveDebounceMs: Long = NOTEBOOK_SAVE_DEBOUNCE_MS,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -117,10 +125,19 @@ class HomeViewModel(
         createNoteUseCase = createNoteUseCase,
         updateNoteUseCase = updateNoteUseCase,
         deleteNoteUseCase = deleteNoteUseCase,
-        createSourceUseCase = createSourceUseCase,
-        getCurrentSessionUseCase = getCurrentSessionUseCase,
+        convertNoteToSourceUseCase = convertNoteToSourceUseCase,
         onSourceCreated = sources::onSourceCreated,
         searchDebounceMs = searchDebounceMs,
+        createMinDelayMs = createNoteMinDelayMs,
+    )
+
+    private val notebook = HomeNotebookDelegate(
+        spaceId = spaceId,
+        state = _uiState,
+        scope = viewModelScope,
+        getNotebookUseCase = getNotebookUseCase,
+        saveNotebookUseCase = saveNotebookUseCase,
+        saveDebounceMs = notebookSaveDebounceMs,
     )
 
     init {
@@ -137,7 +154,6 @@ class HomeViewModel(
                 it.copy(
                     isLoading = true,
                     sourcesError = null,
-                    askError = null,
                     notesError = null,
                 )
             }
@@ -156,7 +172,7 @@ class HomeViewModel(
     fun loadHome() {
         viewModelScope.launch {
             _uiState.update {
-                it.copy(isLoading = true, sourcesError = null, askError = null, notesError = null)
+                it.copy(isLoading = true, sourcesError = null, notesError = null)
             }
 
             val loadingStartedAt = System.currentTimeMillis()
@@ -169,19 +185,18 @@ class HomeViewModel(
                     sort = state.selectedSort,
                 )
             }
-            val askDeferred = async { getAskTopicsUseCase(spaceId) }
             val notesDeferred = async {
                 getNotesUseCase(
                     spaceId = spaceId,
                     search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
                     sort = state.selectedNoteSort,
+                    origin = state.selectedNoteFilter.toApiOrigin(),
                     page = NotePaging.DEFAULT_PAGE,
                     limit = NotePaging.DEFAULT_LIMIT,
                 )
             }
 
             val sourcesResult = sourcesDeferred.await()
-            val askResult = askDeferred.await()
             val notesResult = notesDeferred.await()
 
             val elapsed = System.currentTimeMillis() - loadingStartedAt
@@ -203,21 +218,14 @@ class HomeViewModel(
                     },
                 )
 
-                next = askResult.fold(
-                    onSuccess = { topics -> next.copy(askError = null, allAskTopics = topics) },
-                    onFailure = { throwable ->
-                        next.copy(askError = throwable.message.orEmpty())
-                    },
-                )
-
                 next = notesResult.fold(
                     onSuccess = { library ->
                         next.copy(
                             notesError = null,
                             allNotes = library.notes,
                             notesAllCount = library.allCount,
-                            notesPinnedCount = library.pinnedCount,
-                            notesUnfiledCount = library.unfiledCount,
+                            notesUserCreatedCount = library.userCreatedCount,
+                            notesSavedAnswerCount = library.savedAnswerCount,
                             notesCurrentPage = library.page,
                             notesHasMore = library.hasMore,
                             isLoadingMoreNotes = false,
@@ -230,10 +238,10 @@ class HomeViewModel(
 
                 next.copy(
                     visibleSources = next.allSources,
-                    visibleAskTopics = filterAskTopics(next),
                     visibleNotes = filterNotes(next),
                 )
             }
+            notebook.loadNotebook()
         }
     }
 
@@ -244,7 +252,6 @@ class HomeViewModel(
                 isSearchingNotes = state.selectedTab == HomeTab.NOTES,
             )
             next.copy(
-                visibleAskTopics = filterAskTopics(next),
                 visibleNotes = filterNotes(next),
                 visibleSources = next.allSources,
             )
@@ -293,7 +300,6 @@ class HomeViewModel(
             )
             next.copy(
                 visibleSources = next.allSources,
-                visibleAskTopics = filterAskTopics(next),
                 visibleNotes = filterNotes(next),
             )
         }
@@ -306,11 +312,19 @@ class HomeViewModel(
                 notes.loadNotesOnly()
             }
         }
+        if (tab == HomeTab.NOTEBOOK) {
+            notebook.loadNotebook()
+        }
     }
 
     fun onAddSourceClick() = sources.onAddSourceClick()
 
     fun onAddSourceSheetDismiss() = sources.onAddSourceSheetDismiss()
+
+    fun onAddSourceFileSelected() = sources.onAddSourceFileSelected()
+
+    fun onAddSourceFileSelectionFailed(error: AddSourceInputRules.FileValidationError) =
+        sources.onAddSourceFileSelectionFailed(error)
 
     fun onAddSourceSubmit(draft: AddSourceDraft) = sources.onAddSourceSubmit(draft)
 
@@ -321,6 +335,10 @@ class HomeViewModel(
     fun onSourceProcessingAsk() = sources.onSourceProcessingAsk()
 
     fun onSourceProcessingRetry() = sources.onSourceProcessingRetry()
+
+    fun onAddNoteClick() = notes.onAddNoteClick()
+
+    fun onAddNoteSheetDismiss() = notes.onAddNoteSheetDismiss()
 
     fun onAddNoteSubmit(
         title: String,
@@ -358,19 +376,39 @@ class HomeViewModel(
 
     fun onAskSourceSelected(sourceId: String) = ask.onAskSourceSelected(sourceId)
 
-    fun onNotebookAddClick() = notes.onNotebookAddClick()
+    fun onNotebookAddClick() = notebook.onNotebookAddClick()
 
-    fun onNotebookActionsDismiss() = notes.onNotebookActionsDismiss()
+    fun onNotebookActionsDismiss() = notebook.onNotebookActionsDismiss()
 
-    fun onCopyNotebookClick() = notes.onCopyNotebookClick()
+    fun onCopyNotebookClick() = notebook.onCopyNotebookClick()
 
-    fun onExportNotebookClick() = notes.onExportNotebookClick()
+    fun onExportNotebookClick() = notebook.onExportNotebookClick()
 
-    fun onNotebookExportDismiss() = notes.onNotebookExportDismiss()
+    fun onNotebookExportDismiss() = notebook.onNotebookExportDismiss()
 
     fun onNotebookExportConfirm(
         format: NotebookExportFormat,
-    ) = notes.onNotebookExportConfirm(format)
+    ) = notebook.onNotebookExportConfirm(format)
+
+    fun onNotebookContentChange(content: String) = notebook.onNotebookContentChange(content)
+
+    fun onRetryNotebookSave() = notebook.retryNotebookSave()
+
+    fun onPendingNotebookCopyHandled() = notebook.onPendingNotebookCopyHandled()
+
+    fun onPendingNotebookExportHandled() = notebook.onPendingNotebookExportHandled()
+
+    fun onNotebookExportSucceeded() = notebook.onNotebookExportSucceeded()
+
+    fun onNotebookExportPickerLaunched() = notebook.onNotebookExportPickerLaunched()
+
+    fun onNotebookExportFailed() = notebook.onNotebookExportFailed()
+
+    fun onNotebookPrintSubmitted() = notebook.onNotebookPrintSubmitted()
+
+    fun onNotebookPrintAdapterInvalidated() = notebook.onNotebookPrintAdapterInvalidated()
+
+    fun onPendingNotebookPrintHandled() = notebook.onPendingNotebookPrintHandled()
 
     fun onSourceOptionsClick(source: Source) = sources.onSourceOptionsClick(source)
 
@@ -441,7 +479,6 @@ class HomeViewModel(
         private val updateSourceUseCase: UpdateSourceUseCase,
         private val deleteSourceUseCase: DeleteSourceUseCase,
         private val getSourceDetailUseCase: GetSourceDetailUseCase,
-        private val getAskTopicsUseCase: GetAskTopicsUseCase,
         private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
         private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
         private val getNotesUseCase: GetNotesUseCase,
@@ -449,6 +486,9 @@ class HomeViewModel(
         private val createNoteUseCase: CreateNoteUseCase,
         private val updateNoteUseCase: UpdateNoteUseCase,
         private val deleteNoteUseCase: DeleteNoteUseCase,
+        private val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase,
+        private val getNotebookUseCase: GetNotebookUseCase,
+        private val saveNotebookUseCase: SaveNotebookUseCase,
         private val sourceFileBytesReader: SourceFileBytesReader,
         private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
         private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
@@ -465,7 +505,6 @@ class HomeViewModel(
                 updateSourceUseCase = updateSourceUseCase,
                 deleteSourceUseCase = deleteSourceUseCase,
                 getSourceDetailUseCase = getSourceDetailUseCase,
-                getAskTopicsUseCase = getAskTopicsUseCase,
                 getAskSuggestionsUseCase = getAskSuggestionsUseCase,
                 streamAskAnswerUseCase = streamAskAnswerUseCase,
                 getNotesUseCase = getNotesUseCase,
@@ -473,6 +512,9 @@ class HomeViewModel(
                 createNoteUseCase = createNoteUseCase,
                 updateNoteUseCase = updateNoteUseCase,
                 deleteNoteUseCase = deleteNoteUseCase,
+                convertNoteToSourceUseCase = convertNoteToSourceUseCase,
+                getNotebookUseCase = getNotebookUseCase,
+                saveNotebookUseCase = saveNotebookUseCase,
                 sourceFileBytesReader = sourceFileBytesReader,
                 refreshAuthSessionUseCase = refreshAuthSessionUseCase,
                 getCurrentSessionUseCase = getCurrentSessionUseCase,
@@ -484,7 +526,9 @@ class HomeViewModel(
     companion object {
         private const val OPEN_SOURCE_DELAY_MS = 500L
         private const val SEARCH_DEBOUNCE_MS = 300L
+        private const val NOTEBOOK_SAVE_DEBOUNCE_MS = 600L
         private const val CREATE_MIN_DELAY_MS = 1_500L
+        private const val CREATE_NOTE_MIN_DELAY_MS = 1_000L
         private const val LOAD_MIN_DELAY_MS = 1_000L
     }
 }

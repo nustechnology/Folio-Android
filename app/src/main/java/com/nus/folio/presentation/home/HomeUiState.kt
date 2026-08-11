@@ -1,7 +1,6 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.AskCitation
-import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteSort
@@ -18,7 +17,6 @@ data class HomeUiState(
     val isRefreshingSources: Boolean = false,
     val isRefreshingNotes: Boolean = false,
     val sourcesError: String? = null,
-    val askError: String? = null,
     val notesError: String? = null,
     val searchQuery: String = "",
     val selectedFilter: SourceFilter = SourceFilter.ALL,
@@ -28,14 +26,12 @@ data class HomeUiState(
     val selectedTab: HomeTab = HomeTab.SOURCES,
     val allSources: List<Source> = emptyList(),
     val visibleSources: List<Source> = emptyList(),
-    val allAskTopics: List<AskTopic> = emptyList(),
-    val visibleAskTopics: List<AskTopic> = emptyList(),
     val allNotes: List<Note> = emptyList(),
     val visibleNotes: List<Note> = emptyList(),
     val allCount: Int = 0,
     val notesAllCount: Int = 0,
-    val notesPinnedCount: Int = 0,
-    val notesUnfiledCount: Int = 0,
+    val notesUserCreatedCount: Int = 0,
+    val notesSavedAnswerCount: Int = 0,
     val notesCurrentPage: Int = 1,
     val notesHasMore: Boolean = false,
     val isLoadingMoreNotes: Boolean = false,
@@ -53,10 +49,24 @@ data class HomeUiState(
     val deletingSource: Source? = null,
     val showNotebookActions: Boolean = false,
     val showNotebookExport: Boolean = false,
+    val notebookContent: String = "",
+    val isLoadingNotebook: Boolean = false,
+    val notebookSaveStatus: NotebookSaveStatus = NotebookSaveStatus.IDLE,
+    val pendingNotebookCopy: String? = null,
+    val pendingNotebookExport: NotebookExportRequest? = null,
+    /** True after CreateDocument was launched; keeps request without re-opening the picker. */
+    val notebookExportPickerLaunched: Boolean = false,
+    /**
+     * Held until print finishes or the host leaves for a non-configuration reason.
+     * Survives activity recreation; [NotebookPrintRequest.id] is bumped on configuration change.
+     */
+    val pendingNotebookPrint: NotebookPrintRequest? = null,
     val showSortSheet: Boolean = false,
     val showNoteSortSheet: Boolean = false,
     val showAddSourceSheet: Boolean = false,
     val isCreatingSource: Boolean = false,
+    val showAddNoteSheet: Boolean = false,
+    val isCreatingNote: Boolean = false,
     val processingSourceId: String? = null,
     val processingSourceTitle: String? = null,
     val processingProgress: Int = 0,
@@ -163,11 +173,32 @@ fun HomeUiState.askSourceTitle(): String =
 fun HomeUiState.askScopeSelectedSourceLabel(): String =
     if (askScope == AskScope.CURRENT_SOURCE) askSourceTitle() else ""
 
+enum class NotebookSaveStatus {
+    IDLE,
+    SAVING,
+    SAVED,
+    FAILED,
+}
+
+data class NotebookExportRequest(
+    val filename: String,
+    val markdown: String,
+)
+
+/**
+ * Each PDF export gets a unique [id] so Compose relaunches print after repeat exports
+ * and after configuration changes (new WebView + [android.print.PrintDocumentAdapter]).
+ */
+data class NotebookPrintRequest(
+    val id: Long,
+    val markdown: String,
+)
+
 enum class HomeUserMessage {
     SOURCE_UPDATED,
     SOURCE_DELETED,
     SOURCE_CREATED,
-    SOURCE_UPDATE_FAILED,
+    SOURCE_FILE_SELECTED,
     SOURCE_DELETE_FAILED,
     SOURCE_CREATE_FAILED,
     SOURCE_RETRY_FAILED,
@@ -176,12 +207,8 @@ enum class HomeUserMessage {
     NOTE_SAVED,
     NOTE_SAVED_FROM_ASK,
     ASK_FEEDBACK_RECORDED,
-    ASK_NOT_SUPPORTED,
-    COPY_NOTEBOOK_NOT_SUPPORTED,
-    EXPORT_NOTEBOOK_NOT_SUPPORTED,
-    EDIT_NOTE_NOT_SUPPORTED,
-    CONVERT_NOTE_NOT_SUPPORTED,
-    DELETE_NOTE_NOT_SUPPORTED,
+    NOTEBOOK_COPIED,
+    NOTEBOOK_EXPORTED,
 }
 
 /** Safe action-failure codes for toasts; resolved to strings in the UI (CWE-209). */
@@ -191,6 +218,7 @@ enum class HomeActionError {
     FILE_REQUIRED,
     FILE_UNSUPPORTED,
     FILE_TOO_LARGE,
+    EXPORT_FAILED,
 }
 
 enum class HomeTab {

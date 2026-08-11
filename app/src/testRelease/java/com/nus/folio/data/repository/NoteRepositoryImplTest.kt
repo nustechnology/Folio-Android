@@ -18,7 +18,7 @@ class NoteRepositoryImplTest {
         assertTrue(result.isSuccess)
         assertEquals(2, result.getOrNull()?.allCount)
         assertEquals(2, result.getOrNull()?.notes?.size)
-        assertEquals(1, result.getOrNull()?.pinnedCount)
+        assertEquals(1, result.getOrNull()?.userCreatedCount)
         assertEquals(false, result.getOrNull()?.hasMore)
     }
 
@@ -64,7 +64,7 @@ class NoteRepositoryImplTest {
 
     @Test
     fun `deleteNote returns success and persists`() = runTest {
-        val result = repository.deleteNote("2")
+        val result = repository.deleteNote(spaceId = "1", noteId = "2")
 
         assertTrue(result.isSuccess)
         assertEquals(1, repository.getNotes("1").getOrNull()?.allCount)

@@ -152,6 +152,23 @@ internal class HomeSourcesDelegate(
         state.update { it.copy(showAddSourceSheet = false) }
     }
 
+    fun onAddSourceFileSelected() {
+        state.update { it.copy(userMessage = HomeUserMessage.SOURCE_FILE_SELECTED) }
+    }
+
+    fun onAddSourceFileSelectionFailed(error: AddSourceInputRules.FileValidationError) {
+        state.update {
+            it.copy(
+                actionError = when (error) {
+                    AddSourceInputRules.FileValidationError.UNSUPPORTED_FORMAT ->
+                        HomeActionError.FILE_UNSUPPORTED
+                    AddSourceInputRules.FileValidationError.SIZE_EXCEEDED ->
+                        HomeActionError.FILE_TOO_LARGE
+                },
+            )
+        }
+    }
+
     fun onAddSourceSubmit(draft: AddSourceDraft) {
         if (state.value.isCreatingSource) return
 
@@ -203,7 +220,7 @@ internal class HomeSourcesDelegate(
     }
 
     /**
-     * Shared post-create path for Add Source and Convert Note → Manual source.
+     * Shared post-create path for Add Source and Convert Note → source.
      * Opens the processing sheet, toasts success, refreshes the list, and observes SSE.
      */
     fun onSourceCreated(created: Source, fallbackTitle: String) {

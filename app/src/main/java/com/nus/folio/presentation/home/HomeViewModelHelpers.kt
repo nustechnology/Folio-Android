@@ -1,9 +1,9 @@
 package com.nus.folio.presentation.home
 
-import com.nus.folio.domain.model.AskTopic
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
+import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.Source
 
 /** Allowlisted validation keys — never shown raw; mapped in [toHomeActionError]. */
@@ -36,20 +36,14 @@ internal fun Throwable.toHomeActionError(): HomeActionError = when (this) {
 
 internal fun filterSources(state: HomeUiState): List<Source> = state.allSources
 
-internal fun filterAskTopics(state: HomeUiState): List<AskTopic> {
-    val query = state.searchQuery.trim()
-    if (query.isEmpty()) return state.allAskTopics
-    return state.allAskTopics.filter { it.title.contains(query, ignoreCase = true) }
-}
-
 internal fun filterNotes(state: HomeUiState): List<Note> =
     baseFilteredNotes(state).filterBySearchQuery(state.searchQuery)
 
 private fun baseFilteredNotes(state: HomeUiState): List<Note> =
     when (state.selectedNoteFilter) {
         NoteFilter.ALL -> state.allNotes
-        NoteFilter.PINNED -> state.allNotes.filter { it.isPinned }
-        NoteFilter.UNFILED -> state.allNotes.filter { it.project.isNullOrBlank() }
+        NoteFilter.USER_CREATED -> state.allNotes.filter { it.origin == NoteOrigin.USER_CREATED }
+        NoteFilter.SAVED_ANSWER -> state.allNotes.filter { it.origin == NoteOrigin.SAVED_ANSWER }
     }
 
 private fun List<Note>.filterBySearchQuery(searchQuery: String): List<Note> {

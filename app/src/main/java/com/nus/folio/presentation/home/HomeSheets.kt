@@ -13,6 +13,7 @@ import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.presentation.home.bottomsheet.AddNoteBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.AddSourceBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDraft
+import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.presentation.home.bottomsheet.AnswerScopeBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.CitationPreviewBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ConversationBottomSheet
@@ -30,12 +31,13 @@ import com.nus.folio.presentation.home.bottomsheet.ViewNoteBottomSheet
 @Composable
 internal fun HomeOverlaySheets(
     uiState: HomeUiState,
-    showAddNoteSheet: Boolean,
     showConversationSheet: Boolean,
     showAnswerScopeSheet: Boolean,
     showSignOutConfirm: Boolean,
     onAddSourceSheetDismiss: () -> Unit,
     onAddSourceSubmit: (AddSourceDraft) -> Unit,
+    onAddSourceFileSelected: () -> Unit,
+    onAddSourceFileSelectionFailed: (AddSourceInputRules.FileValidationError) -> Unit,
     onSortSelected: (SourceSort) -> Unit,
     onNoteSortSelected: (NoteSort) -> Unit,
     onSortSheetDismiss: () -> Unit,
@@ -90,6 +92,8 @@ internal fun HomeOverlaySheets(
             isSubmitting = uiState.isCreatingSource,
             onDismiss = onAddSourceSheetDismiss,
             onSubmit = onAddSourceSubmit,
+            onFileSelected = onAddSourceFileSelected,
+            onFileSelectionFailed = onAddSourceFileSelectionFailed,
         )
     }
 
@@ -121,8 +125,9 @@ internal fun HomeOverlaySheets(
         )
     }
 
-    if (showAddNoteSheet) {
+    if (uiState.showAddNoteSheet) {
         AddNoteBottomSheet(
+            isSubmitting = uiState.isCreatingNote,
             onDismiss = onAddNoteSheetDismiss,
             onSubmit = onAddNoteSubmit,
         )

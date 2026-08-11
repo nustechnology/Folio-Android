@@ -8,6 +8,7 @@ import com.nus.folio.presentation.home.HomeSourceFilterChipSelectedBorder
 import com.nus.folio.presentation.home.HomeUiState
 import com.nus.folio.presentation.home.NoteIconBadgeColors
 import com.nus.folio.presentation.home.SourceTypeBadgeColors
+import com.nus.folio.presentation.home.noteFilterBadgeColors
 import com.nus.folio.presentation.home.noteOriginBadgeColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -300,19 +301,22 @@ private fun NotesFilterChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         NoteFilterChip(
-            label = stringResource(R.string.home_filter_all, uiState.notesAllCount),
+            label = stringResource(R.string.home_filter_notes_all),
             selected = uiState.selectedNoteFilter == NoteFilter.ALL,
+            filter = NoteFilter.ALL,
             onClick = { onFilterSelected(NoteFilter.ALL) },
         )
         NoteFilterChip(
-            label = stringResource(R.string.home_filter_pinned, uiState.notesPinnedCount),
-            selected = uiState.selectedNoteFilter == NoteFilter.PINNED,
-            onClick = { onFilterSelected(NoteFilter.PINNED) },
+            label = stringResource(R.string.home_filter_notes_user_created),
+            selected = uiState.selectedNoteFilter == NoteFilter.USER_CREATED,
+            filter = NoteFilter.USER_CREATED,
+            onClick = { onFilterSelected(NoteFilter.USER_CREATED) },
         )
         NoteFilterChip(
-            label = stringResource(R.string.home_filter_unfiled, uiState.notesUnfiledCount),
-            selected = uiState.selectedNoteFilter == NoteFilter.UNFILED,
-            onClick = { onFilterSelected(NoteFilter.UNFILED) },
+            label = stringResource(R.string.home_filter_notes_saved_answers),
+            selected = uiState.selectedNoteFilter == NoteFilter.SAVED_ANSWER,
+            filter = NoteFilter.SAVED_ANSWER,
+            onClick = { onFilterSelected(NoteFilter.SAVED_ANSWER) },
         )
     }
 }
@@ -321,10 +325,24 @@ private fun NotesFilterChips(
 private fun NoteFilterChip(
     label: String,
     selected: Boolean,
+    filter: NoteFilter,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) HomeSourceFilterChipSelected else HomeCardBackground
-    val border = if (selected) HomeSourceFilterChipSelectedBorder else HomeCardBorder
+    val typeColors = noteFilterBadgeColors(filter)
+    val background = when {
+        selected && typeColors != null -> typeColors.background
+        selected -> HomeSourceFilterChipSelected
+        else -> HomeCardBackground
+    }
+    val border = when {
+        selected && typeColors != null -> typeColors.content.copy(alpha = 0.35f)
+        selected -> HomeSourceFilterChipSelectedBorder
+        else -> HomeCardBorder
+    }
+    val contentColor = when {
+        selected && typeColors != null -> typeColors.content
+        else -> HomeTextPrimary
+    }
     Text(
         text = label,
         modifier = Modifier
@@ -339,7 +357,7 @@ private fun NoteFilterChip(
             .padding(horizontal = 14.dp, vertical = 8.dp),
         fontSize = 13.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        color = HomeTextPrimary,
+        color = contentColor,
     )
 }
 
@@ -538,8 +556,8 @@ private fun NotesPanePreview() {
                     ),
                 ),
                 notesAllCount = 32,
-                notesPinnedCount = 8,
-                notesUnfiledCount = 4,
+                notesUserCreatedCount = 20,
+                notesSavedAnswerCount = 12,
             ),
             onRetry = {},
             onAddClick = {},
@@ -559,8 +577,8 @@ private fun NotesPaneEmptyPreview() {
             uiState = HomeUiState(
                 visibleNotes = emptyList(),
                 notesAllCount = 0,
-                notesPinnedCount = 0,
-                notesUnfiledCount = 0,
+                notesUserCreatedCount = 0,
+                notesSavedAnswerCount = 0,
             ),
             onRetry = {},
             onAddClick = {},

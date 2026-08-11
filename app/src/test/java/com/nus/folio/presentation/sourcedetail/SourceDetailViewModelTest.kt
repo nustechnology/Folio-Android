@@ -10,15 +10,23 @@ import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcePreviewUrlUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
+import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.testing.FakeSourceRepository
 import com.nus.folio.testing.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SourceDetailViewModelTest {
 
     @get:Rule
@@ -38,6 +46,8 @@ class SourceDetailViewModelTest {
             getSourcePreviewUrlUseCase = GetSourcePreviewUrlUseCase(repository),
             retrySourceUseCase = RetrySourceUseCase(repository),
             observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(repository),
+            updateSourceUseCase = UpdateSourceUseCase(repository),
+            deleteSourceUseCase = DeleteSourceUseCase(repository),
             contentRevealDelayMs = contentRevealDelayMs,
         )
 
@@ -173,5 +183,54 @@ class SourceDetailViewModelTest {
         assertEquals(SourceStatus.PROCESSING, viewModel.uiState.value.detail?.status)
         assertFalse(viewModel.uiState.value.isRetrying)
         assertNull(viewModel.uiState.value.previewUrl)
+    }
+
+    @Test
+    fun `onEditSourceSave ignores repeated save while updating`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        repository.updateSourceGate = { gate.await() }
+        val viewModel = createViewModel()
+        viewModel.onEditSourceClick()
+
+        viewModel.onEditSourceSave(title = "Updated title", author = "Author", content = "")
+        assertTrue(viewModel.uiState.value.isUpdatingSource)
+        viewModel.onEditSourceSave(title = "Second title", author = "Author", content = "")
+        viewModel.onEditSourceDismiss()
+
+        assertEquals(1, repository.updateSourceCallCount)
+        assertEquals("Updated title", repository.lastUpdatedSource?.title)
+        assertNotNull(viewModel.uiState.value.editingSource)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.editingSource)
+        assertFalse(viewModel.uiState.value.isUpdatingSource)
+        assertEquals("Updated title", viewModel.uiState.value.detail?.title)
+        assertEquals(SourceDetailUserMessage.SOURCE_UPDATED, viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onDeleteSourceConfirm ignores repeated confirm while deleting`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        repository.deleteSourceGate = { gate.await() }
+        val viewModel = createViewModel()
+        viewModel.onDeleteSourceClick()
+
+        viewModel.onDeleteSourceConfirm()
+        assertTrue(viewModel.uiState.value.isDeletingSource)
+        viewModel.onDeleteSourceConfirm()
+        viewModel.onDeleteSourceDismiss()
+
+        assertEquals(1, repository.deleteSourceCallCount)
+        assertNotNull(viewModel.uiState.value.deletingSource)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.deletingSource)
+        assertFalse(viewModel.uiState.value.isDeletingSource)
+        assertTrue(viewModel.uiState.value.sourceDeleted)
+        assertEquals(SourceDetailUserMessage.SOURCE_DELETED, viewModel.uiState.value.userMessage)
     }
 }

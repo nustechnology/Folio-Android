@@ -26,20 +26,3 @@ class GetCurrentSessionUseCaseTest {
         assertEquals("user@folio.app", useCase()?.email)
     }
 }
-
-class ClearAuthSessionUseCaseTest {
-
-    private val repository = FakeAuthRepository()
-    private val useCase = ClearAuthSessionUseCase(repository)
-
-    @Test
-    fun `invoke clears current session via signOut`() = runTest {
-        repository.signInResult = Result.success(AuthSession("user@folio.app", "User"))
-        repository.signIn("user@folio.app", "secret")
-
-        useCase()
-
-        assertNull(repository.getCurrentSession())
-        assertEquals(1, repository.signOutCallCount)
-    }
-}

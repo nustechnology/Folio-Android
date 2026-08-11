@@ -9,11 +9,12 @@ import com.nus.folio.domain.model.NoteLibrary
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.domain.model.NotePaging
 import com.nus.folio.domain.model.NoteSort
+import com.nus.folio.domain.model.Source
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Debug notes data source — list/create/detail/update/delete via the real API.
+ * Debug notes data source — list/create/detail/update/delete/convert via the real API.
  * On HTTP 401, refreshes the access token once and retries.
  */
 class NoteDataSource(
@@ -29,6 +30,7 @@ class NoteDataSource(
         spaceId: String,
         search: String? = null,
         sort: NoteSort = NoteSort.DEFAULT,
+        origin: String? = null,
         page: Int = NotePaging.DEFAULT_PAGE,
         limit: Int = NotePaging.DEFAULT_LIMIT,
     ): NoteLibrary {
@@ -39,6 +41,7 @@ class NoteDataSource(
                 spaceId = spaceId.trim(),
                 sort = sort.apiValue,
                 search = search?.trim()?.takeIf { it.isNotEmpty() },
+                origin = origin?.trim()?.takeIf { it.isNotEmpty() },
                 page = page.coerceAtLeast(1),
                 limit = limit.coerceAtLeast(1),
             )
@@ -123,40 +126,69 @@ class NoteDataSource(
                 content = trimmedContent,
             )
         }
-        val updated = remote.copy(
-            title = trimmedTitle,
-            content = trimmedContent,
-            // Preserve client-only fields the PATCH payload may omit.
-            project = note.project ?: remote.project,
-            origin = note.origin,
-            citationCount = note.citationCount.takeIf { it > 0 } ?: remote.citationCount,
-            citations = note.citations.ifEmpty { remote.citations },
-            spaceId = note.spaceId.ifBlank { remote.spaceId },
-            isPinned = note.isPinned,
-        )
-        mutex.withLock {
-            upsertLocked(updated, preferFront = false)
+        val updated = mutex.withLock {
+            val cached = notes.firstOrNull { it.id == note.id }
+            val merged = remote.copy(
+                title = trimmedTitle,
+                content = trimmedContent,
+                spaceId = note.spaceId.trim().ifBlank { remote.spaceId },
+                // Preserve client-only fields the PATCH payload may omit.
+                project = remote.project ?: note.project ?: cached?.project,
+                origin = when {
+                    remote.origin != NoteOrigin.USER_CREATED -> remote.origin
+                    note.origin != NoteOrigin.USER_CREATED -> note.origin
+                    else -> cached?.origin ?: remote.origin
+                },
+                citationCount = when {
+                    remote.citationCount > 0 -> remote.citationCount
+                    note.citationCount > 0 -> note.citationCount
+                    else -> cached?.citationCount ?: remote.citationCount
+                },
+                citations = remote.citations.ifEmpty {
+                    note.citations.ifEmpty { cached?.citations.orEmpty() }
+                },
+                isPinned = note.isPinned,
+            )
+            upsertLocked(merged, preferFront = true)
+            merged
         }
         return updated
     }
 
-    suspend fun deleteNote(noteId: String) {
+    suspend fun deleteNote(spaceId: String, noteId: String) {
+        require(spaceId.isNotBlank()) { "Space id is required" }
         require(noteId.isNotBlank()) { "Note id is required" }
-        val trimmedId = noteId.trim()
-        val spaceId = mutex.withLock {
-            notes.firstOrNull { it.id == trimmedId }?.spaceId
-        }?.takeIf { it.isNotBlank() }
-            ?: throw NoSuchElementException("Note not found: $trimmedId")
+        val trimmedSpaceId = spaceId.trim()
+        val trimmedNoteId = noteId.trim()
         withAuthRetry { accessToken ->
             notesApi.deleteNote(
                 accessToken = accessToken,
-                spaceId = spaceId,
-                noteId = trimmedId,
+                spaceId = trimmedSpaceId,
+                noteId = trimmedNoteId,
             )
         }
         mutex.withLock {
-            notes.removeAll { it.id == trimmedId }
+            notes.removeAll { it.id == trimmedNoteId }
         }
+    }
+
+    suspend fun convertNoteToSource(spaceId: String, noteId: String, title: String): Source {
+        require(spaceId.isNotBlank()) { "Space id is required" }
+        require(noteId.isNotBlank()) { "Note id is required" }
+        require(title.isNotBlank()) { "Title is required" }
+        val trimmedTitle = title.trim()
+        val remote = withAuthRetry { accessToken ->
+            notesApi.convertNoteToSource(
+                accessToken = accessToken,
+                spaceId = spaceId.trim(),
+                noteId = noteId.trim(),
+                title = trimmedTitle,
+            )
+        }
+        return remote.copy(
+            title = trimmedTitle,
+            spaceId = remote.spaceId.ifBlank { spaceId.trim() },
+        )
     }
 
     private fun upsertLocked(note: Note, preferFront: Boolean = false) {

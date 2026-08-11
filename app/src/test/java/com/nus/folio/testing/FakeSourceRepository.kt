@@ -38,6 +38,8 @@ class FakeSourceRepository : SourceRepository {
     var lastDeletedSourceId: String? = null
     var lastRetriedSourceId: String? = null
     var getSourcesGate: (suspend (sourceType: String?, search: String?) -> Unit)? = null
+    var updateSourceGate: (suspend () -> Unit)? = null
+    var deleteSourceGate: (suspend () -> Unit)? = null
 
     private val sources: MutableList<Source> = sampleSources.toMutableList()
     private val processingEvents = MutableSharedFlow<SourceProcessingEvent>(extraBufferCapacity = 16)
@@ -126,6 +128,7 @@ class FakeSourceRepository : SourceRepository {
         updateSourceCallCount++
         lastUpdatedSource = source
         lastUpdatedContent = content
+        updateSourceGate?.invoke()
         updateSourceResult?.let { return it }
         val index = sources.indexOfFirst { it.id == source.id }
         if (index < 0) {
@@ -138,6 +141,7 @@ class FakeSourceRepository : SourceRepository {
     override suspend fun deleteSource(sourceId: String): Result<Unit> {
         deleteSourceCallCount++
         lastDeletedSourceId = sourceId
+        deleteSourceGate?.invoke()
         deleteSourceResult?.let { return it }
         val removed = sources.removeAll { it.id == sourceId }
         if (!removed) {

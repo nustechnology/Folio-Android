@@ -56,6 +56,15 @@ internal object FolioApiPaths {
         baseUrl: String = BASE_URL,
     ): String = url(baseUrl, "$SPACES/${encode(spaceId)}/notes/${encode(noteId)}")
 
+    fun spaceNoteConvertToSource(
+        spaceId: String,
+        noteId: String,
+        baseUrl: String = BASE_URL,
+    ): String = url(
+        baseUrl,
+        "$SPACES/${encode(spaceId)}/notes/${encode(noteId)}/convert-to-source",
+    )
+
     fun sources(baseUrl: String = BASE_URL, query: String? = null): String =
         urlWithQuery(baseUrl, SOURCES, query)
 
