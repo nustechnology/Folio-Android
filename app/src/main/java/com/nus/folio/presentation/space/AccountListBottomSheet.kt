@@ -44,6 +44,7 @@ import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeSearchField
 import com.nus.folio.ui.theme.HomeSearchPlaceholder
 import com.nus.folio.ui.theme.HomeSheetBackground
+import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 
@@ -54,8 +55,8 @@ private val SettingsButtonShape = RoundedCornerShape(10.dp)
 internal fun AccountListBottomSheet(
     accounts: List<SpaceAccountItem>,
     onDismiss: () -> Unit,
-    onOpenSettings: () -> Unit = {},
-    onAccountSelected: (accountId: String) -> Unit = {},
+    onOpenAccountSettings: () -> Unit = {},
+    onSignOutClick: () -> Unit = {},
 ) {
     AnimatedModalSheet(
         onDismiss = onDismiss,
@@ -64,10 +65,8 @@ internal fun AccountListBottomSheet(
         AddSourceDragHandle()
         AccountListSheetContent(
             accounts = accounts,
-            onOpenSettingsClick = { requestDismiss(after = onOpenSettings) },
-            onAccountClick = { accountId ->
-                requestDismiss { onAccountSelected(accountId) }
-            },
+            onSignOutClick = { requestDismiss(after = onSignOutClick) },
+            onAccountClick = { requestDismiss(after = onOpenAccountSettings) },
         )
     }
 }
@@ -75,8 +74,8 @@ internal fun AccountListBottomSheet(
 @Composable
 private fun AccountListSheetContent(
     accounts: List<SpaceAccountItem>,
-    onOpenSettingsClick: () -> Unit,
-    onAccountClick: (accountId: String) -> Unit = {},
+    onSignOutClick: () -> Unit,
+    onAccountClick: () -> Unit = {},
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -101,14 +100,14 @@ private fun AccountListSheetContent(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onOpenSettingsClick,
+                        onClick = onSignOutClick,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_settings),
-                    contentDescription = stringResource(R.string.space_account_open_settings),
-                    tint = HomeTextPrimary,
+                    painter = painterResource(R.drawable.ic_logout),
+                    contentDescription = stringResource(R.string.space_account_sign_out),
+                    tint = HomeStatusFailedText,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -121,7 +120,7 @@ private fun AccountListSheetContent(
             accounts.forEach { account ->
                 AccountListRow(
                     account = account,
-                    onClick = { onAccountClick(account.id) },
+                    onClick = onAccountClick,
                 )
             }
         }
@@ -214,7 +213,7 @@ private fun AccountListSheetContentPreview() {
                             isSelected = true,
                         ),
                     ),
-                    onOpenSettingsClick = {},
+                    onSignOutClick = {},
                 )
             }
         }

@@ -4,6 +4,7 @@ import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
@@ -61,6 +62,8 @@ class SourceDataSource(
         sourceType: String? = null,
         search: String? = null,
         sort: SourceSort = SourceSort.DEFAULT,
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
     ): SourceLibrary {
         delay(200)
         return mutex.withLock {
@@ -83,7 +86,23 @@ class SourceDataSource(
                 SourceSort.ALPHABETICAL_ZA -> scoped.sortedByDescending { it.title.lowercase() }
                 SourceSort.RECENTLY_ADDED -> scoped
             }
-            SourceSampleData.libraryFrom(scoped)
+            val safePage = page.coerceAtLeast(1)
+            val safeLimit = limit.coerceAtLeast(1)
+            val offset = ((safePage - 1L) * safeLimit)
+                .coerceAtMost(scoped.size.toLong())
+                .toInt()
+            val pageItems = scoped.drop(offset).take(safeLimit)
+            SourceSampleData.libraryFrom(
+                sources = pageItems,
+                allCount = scoped.size,
+                papersCount = scoped.count { it.type == SourceType.FILE },
+                booksCount = scoped.count { it.type == SourceType.BOOK },
+                webCount = scoped.count { it.type == SourceType.WEB },
+                textCount = scoped.count { it.type == SourceType.TEXT },
+                page = safePage,
+                limit = safeLimit,
+                hasMore = offset + pageItems.size < scoped.size,
+            )
         }
     }
 

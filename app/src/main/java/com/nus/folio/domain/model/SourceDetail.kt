@@ -12,6 +12,36 @@ data class SourceSheetTab(
     val htmlTable: String,
 )
 
+/**
+ * Parsed `structuredContent` payload from the Source API.
+ * See backend guide: document HTML, spreadsheet grids, or slide cards.
+ */
+sealed class StructuredContent {
+    data class Document(
+        val html: String,
+    ) : StructuredContent()
+
+    data class Sheets(
+        val sheets: List<StructuredSheet>,
+    ) : StructuredContent()
+
+    data class Slides(
+        val slides: List<StructuredSlide>,
+    ) : StructuredContent()
+}
+
+data class StructuredSheet(
+    val name: String,
+    val headers: List<String> = emptyList(),
+    val rows: List<List<String>> = emptyList(),
+)
+
+data class StructuredSlide(
+    val slideNumber: Int,
+    val title: String = "",
+    val bullets: List<String> = emptyList(),
+)
+
 data class SourceDetail(
     val id: String,
     val title: String,
@@ -26,4 +56,5 @@ data class SourceDetail(
     val htmlContent: String? = null,
     val sheets: List<SourceSheetTab> = emptyList(),
     val plainContent: String? = null,
+    val structuredContent: StructuredContent? = null,
 )

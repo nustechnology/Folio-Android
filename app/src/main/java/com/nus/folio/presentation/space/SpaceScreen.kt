@@ -25,8 +25,13 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,12 +52,15 @@ import com.nus.folio.components.FolioToastVisuals
 import com.nus.folio.components.ItemOptionAction
 import com.nus.folio.components.ItemOptionStyle
 import com.nus.folio.components.ItemOptionsBottomSheet
+import com.nus.folio.components.dismissKeyboardOnTapOutside
+import com.nus.folio.components.rememberDismissKeyboardThen
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.Space
 import com.nus.folio.domain.model.SpaceSort
 import com.nus.folio.domain.model.initialsFromDisplayName
 import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.findActivityOrNull
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeCardBackground
@@ -60,11 +68,14 @@ import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 @Composable
 fun SpaceScreen(
     onSpaceSelected: (Space) -> Unit,
     onNavigateToAccount: () -> Unit,
+    onSignOut: suspend () -> Result<Unit>,
     onRequiresReauth: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SpaceViewModel = viewModel(
@@ -80,8 +91,15 @@ fun SpaceScreen(
     ),
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+    var isSigningOut by remember { mutableStateOf(false) }
+    val onAccountClick = rememberDismissKeyboardThen(viewModel::onAccountClick)
+    val onAddClick = rememberDismissKeyboardThen(viewModel::onAddClick)
+    val onFilterSortClick = rememberDismissKeyboardThen(viewModel::onFilterSortClick)
+    val onOpenSignOutConfirm = rememberDismissKeyboardThen { showSignOutConfirm = true }
     val selectedAccount = uiState.accounts.firstOrNull { it.isSelected }
     val avatarInitial = selectedAccount?.let {
         initialsFromDisplayName(it.displayName, it.email)
@@ -108,6 +126,15 @@ fun SpaceScreen(
         viewModel.onActionErrorShown()
     }
 
+    DisposableEffect(Unit) {
+        val activity = context.findActivityOrNull()
+        onDispose {
+            if (activity?.isChangingConfigurations != true) {
+                viewModel.clearSearch()
+            }
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         SpaceContent(
             uiState = uiState,
@@ -115,9 +142,9 @@ fun SpaceScreen(
             onRetry = viewModel::onRetry,
             onRefresh = viewModel::onRefresh,
             onSearchQueryChange = viewModel::onSearchQueryChange,
-            onFilterSortClick = viewModel::onFilterSortClick,
-            onAvatarClick = viewModel::onAccountClick,
-            onAddClick = viewModel::onAddClick,
+            onFilterSortClick = onFilterSortClick,
+            onAvatarClick = onAccountClick,
+            onAddClick = onAddClick,
             onLoadMore = viewModel::onLoadMore,
             onSpaceClick = onSpaceSelected,
             onSpaceMoreClick = viewModel::onSpaceOptionsClick,
@@ -125,7 +152,7 @@ fun SpaceScreen(
         )
 
         SpaceAddFab(
-            onClick = viewModel::onAddClick,
+            onClick = onAddClick,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
@@ -185,8 +212,43 @@ fun SpaceScreen(
             AccountListBottomSheet(
                 accounts = uiState.accounts,
                 onDismiss = viewModel::onAccountSheetDismiss,
-                onOpenSettings = onNavigateToAccount,
-                onAccountSelected = viewModel::onAccountSelected,
+                onOpenAccountSettings = onNavigateToAccount,
+                onSignOutClick = onOpenSignOutConfirm,
+            )
+        }
+
+        if (showSignOutConfirm) {
+            DeleteConfirmationBottomSheet(
+                titleRes = R.string.account_sign_out_title,
+                messageRes = R.string.account_sign_out_message,
+                confirmLabelRes = R.string.account_sign_out,
+                isSubmitting = isSigningOut,
+                closeOnConfirm = false,
+                onDismiss = {
+                    if (!isSigningOut) showSignOutConfirm = false
+                },
+                onConfirm = {
+                    scope.launch {
+                        isSigningOut = true
+                        try {
+                            val result = onSignOut()
+                            if (result.isSuccess) {
+                                showSignOutConfirm = false
+                            } else {
+                                toastHostState.showToast(
+                                    FolioToastVisuals(
+                                        title = context.getString(R.string.home_error_generic),
+                                        style = FolioToastStyle.Error,
+                                    ),
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } finally {
+                            isSigningOut = false
+                        }
+                    }
+                },
             )
         }
 
@@ -242,7 +304,8 @@ internal fun SpaceContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(HomeBackground),
+            .background(HomeBackground)
+            .dismissKeyboardOnTapOutside(),
     ) {
         Column(
             modifier = Modifier

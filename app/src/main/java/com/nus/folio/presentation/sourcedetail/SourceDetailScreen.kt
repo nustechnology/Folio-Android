@@ -34,6 +34,7 @@ import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
 import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
 import com.nus.folio.ui.theme.FolioAndroidTheme
@@ -267,6 +268,42 @@ private fun SourceDetail.toSource(): Source =
         spaceId = spaceId,
         fileExtension = fileExtension,
     )
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Source detail — web")
+@Composable
+private fun SourceDetailWebPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SourceDetailContent(
+            highlightText = null,
+            uiState = SourceDetailUiState(
+                detail = SourceDetail(
+                    id = "9",
+                    title = "Wikipedia: Neural Networks",
+                    author = "Wikipedia",
+                    addedLabel = "Added 2d ago",
+                    type = SourceType.WEB,
+                    status = SourceStatus.READY,
+                    spaceId = "1",
+                    fileExtension = "md",
+                    contentFormat = SourceContentFormat.DOCUMENT,
+                    originalFileName = "wikipedia-neural-networks.md",
+                    htmlContent = "<p>Fallback markdown HTML.</p>",
+                    structuredContent = StructuredContent.Document(
+                        "<h1>Artificial neural network</h1><p>Structured web HTML preview.</p>",
+                    ),
+                ),
+                previewUrl = "https://en.wikipedia.org/wiki/Artificial_neural_network",
+            ),
+            onBackClick = {},
+            onMoreClick = {},
+            onAskSourceClick = {},
+            onOpenOriginalClick = {},
+            onRetryLoad = {},
+            onRetryProcessing = {},
+            onSheetSelected = {},
+        )
+    }
+}
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable

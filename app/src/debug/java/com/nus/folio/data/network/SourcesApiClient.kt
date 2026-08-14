@@ -3,12 +3,16 @@ package com.nus.folio.data.network
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
+import com.nus.folio.domain.model.StructuredContentHtml
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -31,7 +35,9 @@ interface SourcesApi {
         sourceType: String? = null,
         search: String? = null,
         sort: String = SourceSort.DEFAULT.apiValue,
-    ): List<Source>
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
+    ): SourceLibrary
 
     suspend fun getSource(
         accessToken: String,
@@ -114,12 +120,20 @@ class SourcesApiClient(
         sourceType: String?,
         search: String?,
         sort: String,
-    ): List<Source> = withContext(Dispatchers.IO) {
+        page: Int,
+        limit: Int,
+    ): SourceLibrary = withContext(Dispatchers.IO) {
+        val safePage = page.coerceAtLeast(1)
+        val safeLimit = limit.coerceAtLeast(1)
         val query = buildString {
             append("spaceId=")
             append(URLEncoder.encode(spaceId, Charsets.UTF_8.name()))
             append("&sort=")
             append(URLEncoder.encode(sort, Charsets.UTF_8.name()))
+            append("&page=")
+            append(safePage)
+            append("&limit=")
+            append(safeLimit)
             val trimmedType = sourceType?.trim().orEmpty()
             if (trimmedType.isNotEmpty()) {
                 append("&sourceType=")
@@ -137,7 +151,14 @@ class SourcesApiClient(
             connectTimeoutMs = TIMEOUT_MS,
             readTimeoutMs = TIMEOUT_MS,
             failureLabel = "Get sources",
-            parse = { response -> SourcesJsonParsers.parseSourcesList(response.body, nowMillis()) },
+            parse = { response ->
+                SourcesJsonParsers.parseSourcesPage(
+                    responseBody = response.body,
+                    nowMillis = nowMillis(),
+                    page = safePage,
+                    limit = safeLimit,
+                )
+            },
         )
     }
 
@@ -699,6 +720,12 @@ class SourcesApiClient(
                 else -> SourceContentFormat.DOCUMENT
             }
 
+        internal fun parseStructuredContent(json: JSONObject): StructuredContent? =
+            SourcesJsonParsers.parseStructuredContent(json)
+
+        internal fun parseStructuredContent(raw: String?): StructuredContent? =
+            SourcesJsonParsers.parseStructuredContent(raw)
+
         internal fun contentToHtml(content: String): String {
             val trimmed = content.trim()
             if (trimmed.isEmpty()) return ""
@@ -998,16 +1025,29 @@ class SourcesApiClient(
             val listSource = parseSource(json, nowMillis)
             val fileName = json.optString("fileName").orEmpty()
             val extension = listSource.fileExtension
-            val contentFormat = contentFormatFrom(extension)
             val rawContent = json.optString("content").orEmpty()
-            val sheets = if (contentFormat == SourceContentFormat.SHEET) {
-                parseSheets(json, rawContent)
-            } else {
-                emptyList()
+            val structuredContent = parseStructuredContent(json)
+            val contentFormat = structuredContent?.let(StructuredContentHtml::contentFormat)
+                ?: contentFormatFrom(extension)
+            val sheets = when (structuredContent) {
+                is StructuredContent.Sheets ->
+                    StructuredContentHtml.toSheetTabs(structuredContent.sheets)
+                else -> if (contentFormat == SourceContentFormat.SHEET) {
+                    parseSheets(json, rawContent)
+                } else {
+                    emptyList()
+                }
             }
-            val htmlContent = when (contentFormat) {
-                SourceContentFormat.SHEET -> null
-                else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
+            val htmlContent = when (structuredContent) {
+                is StructuredContent.Document -> structuredContent.html
+                is StructuredContent.Slides ->
+                    StructuredContentHtml.slidesToHtml(structuredContent.slides)
+                        .takeIf { it.isNotBlank() }
+                is StructuredContent.Sheets -> null
+                null -> when {
+                    contentFormat == SourceContentFormat.SHEET -> null
+                    else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
+                }
             }
             val plainContent = rawContent.takeIf {
                 listSource.type == SourceType.TEXT && it.isNotBlank()
@@ -1028,6 +1068,7 @@ class SourcesApiClient(
                 htmlContent = htmlContent,
                 sheets = sheets,
                 plainContent = plainContent,
+                structuredContent = structuredContent,
             )
         }
 

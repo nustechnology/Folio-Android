@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +60,7 @@ import com.nus.folio.R
 import com.nus.folio.components.BouncingDotsIndicator
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
@@ -160,87 +162,81 @@ private fun LoginContent(
     var password by remember { mutableStateOf("") }
     val inputsEnabled = !uiState.authUnavailable
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(LoginBackground)
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .imePadding()
+            .dismissKeyboardOnTapOutside()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp)
+            .padding(top = 48.dp, bottom = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp)
-                .padding(top = 48.dp, bottom = 56.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            LoginHeader()
+        LoginHeader()
 
-            Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
-            LoginEmailField(
-                value = email,
-                onValueChange = {
-                    email = it
-                    onClearEmailError()
-                },
-                enabled = inputsEnabled,
-                errorMessage = uiState.emailError?.let { loginErrorMessage(it) },
-            )
+        LoginEmailField(
+            value = email,
+            onValueChange = {
+                email = it
+                onClearEmailError()
+            },
+            enabled = inputsEnabled,
+            errorMessage = uiState.emailError?.let { loginErrorMessage(it) },
+        )
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            LoginPasswordField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    onClearPasswordError()
-                },
-                passwordVisible = uiState.passwordVisible,
-                onToggleVisibility = onTogglePasswordVisibility,
-                enabled = inputsEnabled,
-                errorMessage = uiState.passwordError?.let { loginErrorMessage(it) },
-            )
+        LoginPasswordField(
+            value = password,
+            onValueChange = {
+                password = it
+                onClearPasswordError()
+            },
+            passwordVisible = uiState.passwordVisible,
+            onToggleVisibility = onTogglePasswordVisibility,
+            enabled = inputsEnabled,
+            errorMessage = uiState.passwordError?.let { loginErrorMessage(it) },
+        )
 
-            Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-            LoginForgotPassword(
-                onClick = onForgotPasswordClick,
-                enabled = inputsEnabled,
-            )
+        LoginForgotPassword(
+            onClick = onForgotPasswordClick,
+            enabled = inputsEnabled,
+        )
 
-            LoginFeedback(uiState = uiState)
+        LoginFeedback(uiState = uiState)
 
-            Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-            LoginPrimaryButton(
-                onClick = { onSignInClick(email, password) },
+        LoginPrimaryButton(
+            onClick = { onSignInClick(email, password) },
+            enabled = inputsEnabled,
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (!uiState.authUnavailable) {
+            LoginSignUpPrompt(
+                onSignUpClick = onSignUpClick,
                 enabled = inputsEnabled,
             )
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp, start = 28.dp, end = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            if (!uiState.authUnavailable) {
-                LoginSignUpPrompt(
-                    onSignUpClick = onSignUpClick,
-                    enabled = inputsEnabled,
-                )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = stringResource(R.string.login_footer),
-                fontSize = 12.sp,
-                color = LoginTextMuted,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp,
-            )
-        }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = stringResource(R.string.login_footer),
+            fontSize = 12.sp,
+            color = LoginTextMuted,
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp,
+        )
     }
 }
 

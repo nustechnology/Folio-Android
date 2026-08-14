@@ -44,6 +44,7 @@ class FakeNoteRepository : NoteRepository {
     var lastConvertSpaceId: String? = null
     var lastConvertNoteId: String? = null
     var getNoteResult: Result<Note>? = null
+    var getNotesGate: (suspend (origin: String?, search: String?) -> Unit)? = null
 
     private val notes: MutableList<Note> = sampleNotes.toMutableList()
     private val noteTimelines: MutableMap<String, NoteTimeline> = mutableMapOf<String, NoteTimeline>().apply {
@@ -72,6 +73,7 @@ class FakeNoteRepository : NoteRepository {
         lastOrigin = origin
         lastPage = page
         lastLimit = limit
+        getNotesGate?.invoke(origin, search)
         getNotesResult?.let { return it }
         return Result.success(libraryFor(spaceId, search, sort, origin, page, limit))
     }

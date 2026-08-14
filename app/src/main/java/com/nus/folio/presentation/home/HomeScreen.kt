@@ -38,6 +38,8 @@ import com.nus.folio.components.FolioSearchField
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
 import com.nus.folio.components.FolioToastVisuals
+import com.nus.folio.components.dismissKeyboardOnTapOutside
+import com.nus.folio.components.rememberDismissKeyboardThen
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.domain.model.Note
@@ -112,6 +114,14 @@ fun HomeScreen(
     var showAnswerScopeSheet by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
     val toastHostState = rememberFolioToastHostState()
+    val onAddSourceClick = rememberDismissKeyboardThen(viewModel::onAddSourceClick)
+    val onAddNoteClick = rememberDismissKeyboardThen(viewModel::onAddNoteClick)
+    val onFilterSortClick = rememberDismissKeyboardThen(viewModel::onFilterSortClick)
+    val onNotebookAddClick = rememberDismissKeyboardThen(viewModel::onNotebookAddClick)
+    val onExportNotebookClick = rememberDismissKeyboardThen(viewModel::onExportNotebookClick)
+    val onOpenConversationSheet = rememberDismissKeyboardThen { showConversationSheet = true }
+    val onOpenAnswerScopeSheet = rememberDismissKeyboardThen { showAnswerScopeSheet = true }
+    val onOpenSignOutConfirm = rememberDismissKeyboardThen { showSignOutConfirm = true }
 
     val exportDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/markdown"),
@@ -155,6 +165,7 @@ fun HomeScreen(
                 viewModel.onNotebookPrintAdapterInvalidated()
             } else {
                 viewModel.onPendingNotebookPrintHandled()
+                viewModel.clearSearch()
             }
         }
     }
@@ -239,23 +250,23 @@ fun HomeScreen(
             onRefreshNotes = viewModel::onRefreshNotes,
             onSearchQueryChange = viewModel::onSearchQueryChange,
             onFilterSelected = viewModel::onFilterSelected,
-            onFilterSortClick = viewModel::onFilterSortClick,
+            onFilterSortClick = onFilterSortClick,
             onNoteFilterSelected = viewModel::onNoteFilterSelected,
             onTabSelected = viewModel::onTabSelected,
             onAddClick = {
                 when (uiState.selectedTab) {
-                    HomeTab.NOTES -> viewModel.onAddNoteClick()
-                    HomeTab.ASK -> showConversationSheet = true
-                    HomeTab.SOURCES -> viewModel.onAddSourceClick()
-                    HomeTab.NOTEBOOK -> viewModel.onNotebookAddClick()
+                    HomeTab.NOTES -> onAddNoteClick()
+                    HomeTab.ASK -> onOpenConversationSheet()
+                    HomeTab.SOURCES -> onAddSourceClick()
+                    HomeTab.NOTEBOOK -> onNotebookAddClick()
                 }
             },
             onBackClick = onNavigateBack,
             onAskSubmit = viewModel::onAskSubmit,
             onAskStop = viewModel::onAskStop,
             onAskUserEnterAnimationFinished = viewModel::onAskUserEnterAnimationFinished,
-            onScopeChipClick = { showAnswerScopeSheet = true },
-            onAskAddSourceClick = viewModel::onAddSourceClick,
+            onScopeChipClick = onOpenAnswerScopeSheet,
+            onAskAddSourceClick = onAddSourceClick,
             onAskSaveAsNote = viewModel::onAskSaveAsNote,
             onAskFeedback = viewModel::onAskFeedback,
             onAskCitationClick = viewModel::onAskCitationClick,
@@ -263,10 +274,11 @@ fun HomeScreen(
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
+            onLoadMoreSources = viewModel::onLoadMoreSources,
             onLoadMoreNotes = viewModel::onLoadMoreNotes,
             onNotebookContentChange = viewModel::onNotebookContentChange,
             onRetryNotebookSave = viewModel::onRetryNotebookSave,
-            onSignOut = { showSignOutConfirm = true },
+            onSignOut = onOpenSignOutConfirm,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -324,7 +336,7 @@ fun HomeScreen(
             onViewNoteClick = viewModel::onViewNoteClick,
             onNoteOptionsDismiss = viewModel::onNoteOptionsDismiss,
             onCopyNotebookClick = viewModel::onCopyNotebookClick,
-            onExportNotebookClick = viewModel::onExportNotebookClick,
+            onExportNotebookClick = onExportNotebookClick,
             onNotebookActionsDismiss = viewModel::onNotebookActionsDismiss,
             onNotebookExportDismiss = viewModel::onNotebookExportDismiss,
             onNotebookExportConfirm = viewModel::onNotebookExportConfirm,
@@ -366,6 +378,7 @@ internal fun HomeContent(
     onSourceClick: (Source) -> Unit,
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
+    onLoadMoreSources: () -> Unit = {},
     onLoadMoreNotes: () -> Unit = {},
     onNotebookContentChange: (String) -> Unit = {},
     onRetryNotebookSave: () -> Unit = {},
@@ -378,7 +391,8 @@ internal fun HomeContent(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(HomeBackground),
+            .background(HomeBackground)
+            .dismissKeyboardOnTapOutside(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -441,6 +455,7 @@ internal fun HomeContent(
                     onFilterSelected = onFilterSelected,
                     onSourceMoreClick = onSourceMoreClick,
                     onSourceClick = onSourceClick,
+                    onLoadMore = onLoadMoreSources,
                     modifier = Modifier
                         .weight(1f)
                         .padding(bottom = HomeBottomNavClearance),
@@ -459,7 +474,7 @@ internal fun HomeContent(
                         .weight(1f)
                         .then(
                             if (hideBottomNavForAskInput) {
-                                Modifier.padding(bottom = HomeBottomNavClearance + 110.dp )
+                                Modifier.padding(bottom = 185.dp )
                             } else {
                                 Modifier.padding(bottom = HomeBottomNavClearance )
                             },

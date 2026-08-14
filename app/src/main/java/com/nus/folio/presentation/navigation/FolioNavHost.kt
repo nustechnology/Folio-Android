@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -24,7 +23,7 @@ import com.nus.folio.presentation.resetpassword.ResetPasswordScreen
 import com.nus.folio.presentation.signup.SignUpScreen
 import com.nus.folio.presentation.sourcedetail.SourceDetailScreen
 import com.nus.folio.presentation.space.SpaceScreen
-import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 object FolioDestination {
     const val LOGIN = "login"
@@ -70,6 +69,22 @@ private fun NavHostController.navigateToLoginAfterSignOut() {
         FolioDestination.LOGIN_SIGNED_OUT_RESULT,
         true,
     )
+}
+
+private suspend fun NavHostController.signOutAndNavigate(
+    clearAuthSession: suspend () -> Result<Unit>,
+): Result<Unit> {
+    val result = try {
+        clearAuthSession()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+    if (result.isSuccess) {
+        navigateToLoginAfterSignOut()
+    }
+    return result
 }
 
 @Composable
@@ -138,6 +153,7 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(FolioDestination.SPACES) {
+            val container = LocalAppContainer.current
             SpaceScreen(
                 onSpaceSelected = { space ->
                     navController.navigate(
@@ -146,6 +162,11 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 },
                 onNavigateToAccount = {
                     navController.navigate(FolioDestination.ACCOUNT)
+                },
+                onSignOut = {
+                    navController.signOutAndNavigate {
+                        container.clearAuthSessionUseCase()
+                    }
                 },
                 onRequiresReauth = {
                     navController.navigate(FolioDestination.LOGIN) {
@@ -156,7 +177,6 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
         }
         composable(FolioDestination.ACCOUNT) {
             val container = LocalAppContainer.current
-            val scope = rememberCoroutineScope()
             AccountSettingsScreen(
                 onBackClick = {
                     // Prefer Spaces as the post-auth root; never pop it away on a double tap.
@@ -165,9 +185,8 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                     }
                 },
                 onSignOut = {
-                    scope.launch {
+                    navController.signOutAndNavigate {
                         container.clearAuthSessionUseCase()
-                        navController.navigateToLoginAfterSignOut()
                     }
                 },
             )

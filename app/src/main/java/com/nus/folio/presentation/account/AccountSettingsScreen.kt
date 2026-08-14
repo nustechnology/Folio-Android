@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,12 +60,14 @@ import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 private val MenuItemShape = RoundedCornerShape(14.dp)
 
 @Composable
 fun AccountSettingsScreen(
-    onSignOut: () -> Unit,
+    onSignOut: suspend () -> Result<Unit>,
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
@@ -75,9 +78,11 @@ fun AccountSettingsScreen(
     ),
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val toastHostState = rememberFolioToastHostState()
     var showSignOutConfirm by remember { mutableStateOf(false) }
+    var isSigningOut by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.userMessage) {
         val message = uiState.userMessage ?: return@LaunchedEffect
@@ -101,8 +106,33 @@ fun AccountSettingsScreen(
                 titleRes = R.string.account_sign_out_title,
                 messageRes = R.string.account_sign_out_message,
                 confirmLabelRes = R.string.account_sign_out,
-                onDismiss = { showSignOutConfirm = false },
-                onConfirm = onSignOut,
+                isSubmitting = isSigningOut,
+                closeOnConfirm = false,
+                onDismiss = {
+                    if (!isSigningOut) showSignOutConfirm = false
+                },
+                onConfirm = {
+                    scope.launch {
+                        isSigningOut = true
+                        try {
+                            val result = onSignOut()
+                            if (result.isSuccess) {
+                                showSignOutConfirm = false
+                            } else {
+                                toastHostState.showToast(
+                                    FolioToastVisuals(
+                                        title = context.getString(R.string.home_error_generic),
+                                        style = FolioToastStyle.Error,
+                                    ),
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } finally {
+                            isSigningOut = false
+                        }
+                    }
+                },
             )
         }
 

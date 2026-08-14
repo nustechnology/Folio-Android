@@ -34,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
 import com.nus.folio.components.FolioToastHost
 import com.nus.folio.components.FolioToastStyle
+import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
@@ -127,6 +128,7 @@ internal fun SignUpContent(
             .background(LoginBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .dismissKeyboardOnTapOutside()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 28.dp)
             .padding(top = 32.dp, bottom = 28.dp),

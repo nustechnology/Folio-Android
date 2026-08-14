@@ -38,4 +38,12 @@ data class SourceLibrary(
     val booksCount: Int,
     val webCount: Int,
     val textCount: Int,
+    val page: Int = SourcePaging.DEFAULT_PAGE,
+    val limit: Int = SourcePaging.DEFAULT_LIMIT,
+    val hasMore: Boolean = false,
 )
+
+object SourcePaging {
+    const val DEFAULT_LIMIT = 10
+    const val DEFAULT_PAGE = 1
+}

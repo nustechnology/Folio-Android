@@ -34,6 +34,8 @@ import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceStatus
+import com.nus.folio.domain.model.StructuredContent
+import com.nus.folio.domain.model.StructuredContentHtml
 import com.nus.folio.presentation.home.HomeCardShape
 import com.nus.folio.ui.theme.HomeCardBackground
 import com.nus.folio.ui.theme.HomeCardBorder
@@ -81,12 +83,19 @@ internal fun SourceDetailBody(
                 if (isContentLoading) {
                     SourceDetailHtmlLoading()
                 } else {
-                    val htmlBody = when (detail.contentFormat) {
-                        SourceContentFormat.SHEET -> {
+                    val htmlBody = when (val structured = detail.structuredContent) {
+                        is StructuredContent.Document -> structured.html
+                        is StructuredContent.Slides ->
+                            StructuredContentHtml.slidesToHtml(structured.slides)
+                        is StructuredContent.Sheets ->
                             detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
-                                ?: detail.htmlContent.orEmpty()
+                                ?: StructuredContentHtml.body(structured, selectedSheetIndex)
+                        null -> when {
+                            detail.contentFormat == SourceContentFormat.SHEET ->
+                                detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
+                                    ?: detail.htmlContent.orEmpty()
+                            else -> detail.htmlContent.orEmpty()
                         }
-                        else -> detail.htmlContent.orEmpty()
                     }
 
                     SourceHtmlRenderer(

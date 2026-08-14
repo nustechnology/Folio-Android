@@ -49,6 +49,20 @@ class SourceDataSourceCreateTest {
     }
 
     @Test
+    fun `fetchSources does not throw for large page and limit`() = runTest {
+        val dataSource = SourceDataSource()
+
+        val library = dataSource.fetchSources(
+            spaceId = "1",
+            page = Int.MAX_VALUE,
+            limit = Int.MAX_VALUE,
+        )
+
+        assertTrue(library.sources.isEmpty())
+        assertFalse(library.hasMore)
+    }
+
+    @Test
     fun `createSource web adds local processing source`() = runTest {
         val dataSource = SourceDataSource()
 

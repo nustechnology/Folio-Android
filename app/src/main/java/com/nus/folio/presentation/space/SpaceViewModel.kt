@@ -218,6 +218,14 @@ class SpaceViewModel(
         }
     }
 
+    /** Clears the search field and reloads the full space list (e.g. when leaving Spaces). */
+    fun clearSearch() {
+        if (_uiState.value.searchQuery.isEmpty()) return
+        spacesLoadJob?.cancel()
+        _uiState.update { it.copy(searchQuery = "") }
+        loadSpaces(searchQuery = "")
+    }
+
     fun onFilterSortClick() {
         _uiState.update { it.copy(showSortSheet = true) }
     }

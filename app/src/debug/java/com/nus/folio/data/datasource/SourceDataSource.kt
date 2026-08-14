@@ -7,6 +7,7 @@ import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
@@ -39,22 +40,26 @@ class SourceDataSource(
         sourceType: String? = null,
         search: String? = null,
         sort: SourceSort = SourceSort.DEFAULT,
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
     ): SourceLibrary {
-        val listed = withAuthRetry { accessToken ->
+        val library = withAuthRetry { accessToken ->
             sourcesApi.listSources(
                 accessToken = accessToken,
                 spaceId = spaceId,
                 sourceType = sourceType?.trim()?.takeIf { it.isNotEmpty() },
                 search = search?.trim()?.takeIf { it.isNotEmpty() },
                 sort = sort.apiValue,
+                page = page,
+                limit = limit,
             )
         }
         mutex.withLock {
-            for (source in listed) {
+            for (source in library.sources) {
                 upsertLocked(source)
             }
         }
-        return SourceSampleData.libraryFrom(listed)
+        return library
     }
 
     suspend fun createSource(request: CreateSourceRequest): Source {

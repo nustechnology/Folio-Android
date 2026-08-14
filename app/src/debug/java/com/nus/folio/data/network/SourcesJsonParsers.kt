@@ -3,9 +3,15 @@ package com.nus.folio.data.network
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
+import com.nus.folio.domain.model.StructuredContentHtml
+import com.nus.folio.domain.model.StructuredSheet
+import com.nus.folio.domain.model.StructuredSlide
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -40,18 +46,107 @@ internal object SourcesJsonParsers {
         return parseSource(sourceJson, nowMillis)
     }
 
-    fun parseSourcesList(responseBody: String, nowMillis: Long): List<Source> {
-        if (responseBody.isBlank()) return emptyList()
+    fun parseSourcesPage(
+        responseBody: String,
+        nowMillis: Long,
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
+    ): SourceLibrary {
+        if (responseBody.isBlank()) {
+            return SourceLibrary(
+                sources = emptyList(),
+                allCount = 0,
+                papersCount = 0,
+                booksCount = 0,
+                webCount = 0,
+                textCount = 0,
+                page = page,
+                limit = limit,
+                hasMore = false,
+            )
+        }
         val root = JSONObject(responseBody)
-        val sourcesArray = root.optJSONObject("data")?.optJSONArray("sources")
+        val data = root.optJSONObject("data")
+        val sourcesArray = data?.optJSONArray("sources")
             ?: root.optJSONArray("sources")
             ?: JSONArray()
-        return buildList {
+        val sources = buildList {
             for (index in 0 until sourcesArray.length()) {
                 val item = sourcesArray.optJSONObject(index) ?: continue
                 add(parseSource(item, nowMillis))
             }
         }
+
+        val pagination = data?.optJSONObject("pagination")
+            ?: root.optJSONObject("pagination")
+        val aggregateCounts = listOfNotNull(
+            data?.optJSONObject("counts"),
+            root.optJSONObject("counts"),
+            data,
+            root,
+            pagination,
+        )
+        val allCount = firstAvailableCount(
+            containers = aggregateCounts,
+            keys = listOf("allCount", "totalCount", "sourceCount"),
+        ) ?: sources.size
+        val papersCount = firstAvailableCount(
+            containers = aggregateCounts,
+            keys = listOf("papersCount", "fileCount", "totalFileCount"),
+        ) ?: sources.count { it.type == SourceType.FILE }
+        val booksCount = firstAvailableCount(
+            containers = aggregateCounts,
+            keys = listOf("booksCount", "totalBookCount"),
+        ) ?: sources.count { it.type == SourceType.BOOK }
+        val webCount = firstAvailableCount(
+            containers = aggregateCounts,
+            keys = listOf("webCount", "totalWebCount"),
+        ) ?: sources.count { it.type == SourceType.WEB }
+        val textCount = firstAvailableCount(
+            containers = aggregateCounts,
+            keys = listOf("textCount", "manualCount", "totalManualCount"),
+        ) ?: sources.count { it.type == SourceType.TEXT }
+
+        val totalPages = pagination?.takeIf { it.has("totalPages") }?.optInt("totalPages")
+        val responsePage = pagination?.optInt("page", page) ?: page
+        val responseLimit = pagination?.optInt("limit", limit) ?: limit
+        val hasMore = when {
+            totalPages != null -> responsePage < totalPages
+            pagination != null && pagination.has("totalCount") ->
+                responsePage * responseLimit < (allCount)
+            else -> sources.size >= responseLimit
+        }
+
+        return SourceLibrary(
+            sources = sources,
+            allCount = allCount.coerceAtLeast(0),
+            papersCount = papersCount.coerceAtLeast(0),
+            booksCount = booksCount.coerceAtLeast(0),
+            webCount = webCount.coerceAtLeast(0),
+            textCount = textCount.coerceAtLeast(0),
+            page = responsePage,
+            limit = responseLimit,
+            hasMore = hasMore,
+        )
+    }
+
+    /** @deprecated Prefer [parseSourcesPage] for paged list responses. */
+    fun parseSourcesList(responseBody: String, nowMillis: Long): List<Source> =
+        parseSourcesPage(responseBody, nowMillis).sources
+
+    private fun firstAvailableCount(
+        containers: List<JSONObject>,
+        keys: List<String>,
+    ): Int? {
+        for (container in containers) {
+            for (key in keys) {
+                if (container.has(key) && !container.isNull(key)) {
+                    val value = container.optInt(key, Int.MIN_VALUE)
+                    if (value != Int.MIN_VALUE) return value
+                }
+            }
+        }
+        return null
     }
 
     fun parsePreviewUrl(responseBody: String): String? {
@@ -107,16 +202,32 @@ internal object SourcesJsonParsers {
         val listSource = parseSource(json, nowMillis)
         val fileName = json.optString("fileName").orEmpty()
         val extension = listSource.fileExtension
-        val contentFormat = contentFormatFrom(extension)
         val rawContent = json.optString("content").orEmpty()
-        val sheets = if (contentFormat == SourceContentFormat.SHEET) {
-            parseSheets(json, rawContent)
-        } else {
-            emptyList()
+        val structuredContent = parseStructuredContent(json)
+        val contentFormat = structuredContent?.let(StructuredContentHtml::contentFormat)
+            ?: contentFormatFrom(extension)
+        val sheets = when (structuredContent) {
+            is StructuredContent.Sheets ->
+                StructuredContentHtml.toSheetTabs(structuredContent.sheets)
+            else -> if (contentFormat == SourceContentFormat.SHEET) {
+                parseSheets(json, rawContent)
+            } else {
+                emptyList()
+            }
         }
-        val htmlContent = when (contentFormat) {
-            SourceContentFormat.SHEET -> null
-            else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
+        val htmlContent = when (structuredContent) {
+            is StructuredContent.Document -> structuredContent.html
+            is StructuredContent.Slides ->
+                StructuredContentHtml.slidesToHtml(structuredContent.slides)
+                    .takeIf { it.isNotBlank() }
+            is StructuredContent.Sheets -> null
+            null -> when {
+                contentFormat == SourceContentFormat.SHEET -> null
+                else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
+            }
+        }
+        val plainContent = rawContent.takeIf {
+            listSource.type == SourceType.TEXT && it.isNotBlank()
         }
         return SourceDetail(
             id = listSource.id,
@@ -133,6 +244,8 @@ internal object SourcesJsonParsers {
             },
             htmlContent = htmlContent,
             sheets = sheets,
+            plainContent = plainContent,
+            structuredContent = structuredContent,
         )
     }
 
@@ -176,6 +289,97 @@ internal object SourcesJsonParsers {
             "pptx", "ppt" -> SourceContentFormat.SLIDES
             else -> SourceContentFormat.DOCUMENT
         }
+
+    fun parseStructuredContent(json: JSONObject): StructuredContent? {
+        val asObject = json.optJSONObject("structuredContent")
+            ?: json.optJSONObject("structured_content")
+        if (asObject != null) {
+            return parseStructuredContentObject(asObject)
+        }
+        val raw = sequenceOf("structuredContent", "structured_content")
+            .map { json.optString(it) }
+            .firstOrNull { it.isNotBlank() }
+        return parseStructuredContent(raw)
+    }
+
+    fun parseStructuredContent(raw: String?): StructuredContent? {
+        val value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        // Legacy: backend occasionally sent a raw HTML fragment instead of JSON.
+        if (value.startsWith("<")) {
+            return SourcesApiClient.sanitizeHtmlFragment(value)
+                .takeIf { it.isNotBlank() }
+                ?.let(StructuredContent::Document)
+        }
+        return runCatching { parseStructuredContentObject(JSONObject(value)) }.getOrNull()
+    }
+
+    private fun parseStructuredContentObject(obj: JSONObject): StructuredContent? {
+        when (obj.optString("type").trim().lowercase(Locale.US)) {
+            "document" -> {
+                val html = SourcesApiClient.sanitizeHtmlFragment(obj.optString("html"))
+                    .takeIf { it.isNotBlank() }
+                    ?: return null
+                return StructuredContent.Document(html)
+            }
+            "sheets" -> {
+                val sheetsArray = obj.optJSONArray("sheets") ?: return null
+                val sheets = buildList {
+                    for (index in 0 until sheetsArray.length()) {
+                        val item = sheetsArray.optJSONObject(index) ?: continue
+                        add(
+                            StructuredSheet(
+                                name = item.optString("name").ifBlank { "Sheet ${index + 1}" },
+                                headers = stringListFrom(item.optJSONArray("headers")),
+                                rows = stringRowsFrom(item.optJSONArray("rows")),
+                            ),
+                        )
+                    }
+                }
+                return sheets.takeIf { it.isNotEmpty() }?.let(StructuredContent::Sheets)
+            }
+            "slides" -> {
+                val slidesArray = obj.optJSONArray("slides") ?: return null
+                val slides = buildList {
+                    for (index in 0 until slidesArray.length()) {
+                        val item = slidesArray.optJSONObject(index) ?: continue
+                        add(
+                            StructuredSlide(
+                                slideNumber = item.optInt("slideNumber", index + 1),
+                                title = item.optString("title"),
+                                bullets = stringListFrom(item.optJSONArray("bullets")),
+                            ),
+                        )
+                    }
+                }
+                return slides.takeIf { it.isNotEmpty() }?.let(StructuredContent::Slides)
+            }
+            else -> {
+                val html = SourcesApiClient.sanitizeHtmlFragment(obj.optString("html"))
+                    .takeIf { it.isNotBlank() }
+                    ?: return null
+                return StructuredContent.Document(html)
+            }
+        }
+    }
+
+    private fun stringListFrom(array: JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                add(array.optString(index))
+            }
+        }
+    }
+
+    private fun stringRowsFrom(array: JSONArray?): List<List<String>> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                add(stringListFrom(array.optJSONArray(index)))
+            }
+        }
+    }
 
     fun contentToHtml(content: String): String {
         val trimmed = content.trim()
