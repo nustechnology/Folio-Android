@@ -1,10 +1,12 @@
 package com.nus.folio.data.repository
 
 import com.nus.folio.data.datasource.SourceDataSource
+import com.nus.folio.data.datasource.SourceSampleData
 import com.nus.folio.data.network.SourcesApi
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceLibrary
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
@@ -54,7 +56,14 @@ class SourceRepositoryImplTest {
             sourceType: String?,
             search: String?,
             sort: String,
-        ): List<Source> = listedSources.filter { it.spaceId == spaceId }
+            page: Int,
+            limit: Int,
+        ): SourceLibrary = SourceSampleData.libraryFrom(
+            sources = listedSources.filter { it.spaceId == spaceId },
+            page = page,
+            limit = limit,
+            hasMore = false,
+        )
 
         override suspend fun getSource(accessToken: String, sourceId: String): SourceDetail {
             if (throwOnGet || sourceId == "missing") {

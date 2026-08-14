@@ -3,8 +3,10 @@ package com.nus.folio.presentation.home
 import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
+import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.model.toApiSourceType
 import com.nus.folio.domain.repository.SourceFileBytesReader
@@ -52,18 +54,20 @@ internal class HomeSourcesDelegate(
     private val openSourceDelayMs: Long,
     private val searchDebounceMs: Long,
     private val createMinDelayMs: Long,
+    private val filterSkeletonMinDelayMs: Long,
+    private val pageLimit: Int = SourcePaging.DEFAULT_LIMIT,
     private val applyAskScope: (sourceId: String?, forceReset: Boolean) -> Unit,
 ) {
 
     private var openSourceJob: Job? = null
     private var processingObserveJob: Job? = null
-    /** In-flight sources reload (search debounce, filter/sort, pull-to-refresh). */
+    /** In-flight sources reload (search debounce, filter/sort, pull-to-refresh, load-more). */
     private var sourcesLoadJob: Job? = null
 
     fun loadSourcesOnly() {
         sourcesLoadJob?.cancel()
         sourcesLoadJob = scope.launch {
-            reloadSources()
+            loadSourcesInternal(reset = true)
         }
     }
 
@@ -71,56 +75,134 @@ internal class HomeSourcesDelegate(
         if (state.value.isRefreshingSources) return
         sourcesLoadJob?.cancel()
         sourcesLoadJob = scope.launch {
-            state.update { it.copy(isRefreshingSources = true) }
+            state.update {
+                it.copy(
+                    isRefreshingSources = true,
+                    isFilteringSources = false,
+                    isLoadingMoreSources = false,
+                )
+            }
             try {
-                reloadSources()
+                loadSourcesInternal(reset = true)
             } finally {
                 state.update { it.copy(isRefreshingSources = false) }
             }
         }
     }
 
-    private suspend fun reloadSources() {
+    fun onLoadMore() {
         val current = state.value
-        getSourcesUseCase(
-            spaceId = spaceId,
-            sourceType = current.selectedFilter.toApiSourceType(),
-            search = current.searchQuery.trim().takeIf { it.isNotEmpty() },
-            sort = current.selectedSort,
-        ).fold(
-            onSuccess = { library ->
-                state.update { existing ->
-                    val next = existing.copy(
-                        sourcesError = null,
-                        allSources = library.sources,
-                        allCount = library.allCount,
-                    )
-                    next.copy(visibleSources = next.allSources)
-                }
-            },
-            onFailure = { throwable ->
-                state.update {
-                    it.copy(sourcesError = throwable.message.orEmpty())
-                }
-            },
-        )
+        if (
+            current.isLoading ||
+            current.isRefreshingSources ||
+            current.isLoadingMoreSources ||
+            current.isFilteringSources ||
+            !current.sourcesHasMore ||
+            current.selectedTab != HomeTab.SOURCES
+        ) {
+            return
+        }
+        sourcesLoadJob?.cancel()
+        sourcesLoadJob = scope.launch {
+            loadSourcesInternal(reset = false)
+        }
+    }
+
+    private suspend fun loadSourcesInternal(reset: Boolean) {
+        val enforceMinSkeleton = reset && state.value.isFilteringSources
+        val current = state.value
+        val page = if (reset) {
+            SourcePaging.DEFAULT_PAGE
+        } else {
+            current.sourcesCurrentPage + 1
+        }
+        if (reset) {
+            state.update {
+                it.copy(isLoadingMoreSources = false)
+            }
+        } else {
+            state.update { it.copy(isLoadingMoreSources = true) }
+        }
+
+        coroutineScope {
+            val resultDeferred = async {
+                getSourcesUseCase(
+                    spaceId = spaceId,
+                    sourceType = current.selectedFilter.toApiSourceType(),
+                    search = current.searchQuery.trim().takeIf { it.isNotEmpty() },
+                    sort = current.selectedSort,
+                    page = page,
+                    limit = pageLimit,
+                )
+            }
+            if (enforceMinSkeleton) {
+                delay(filterSkeletonMinDelayMs)
+            }
+            resultDeferred.await().fold(
+                onSuccess = { library ->
+                    state.update { existing ->
+                        val merged = if (reset) {
+                            library.sources
+                        } else {
+                            val existingIds = existing.allSources.mapTo(HashSet()) { it.id }
+                            existing.allSources + library.sources.filterNot { it.id in existingIds }
+                        }
+                        val next = existing.copy(
+                            sourcesError = null,
+                            isFilteringSources = false,
+                            isLoadingMoreSources = false,
+                            allSources = merged,
+                            allCount = library.allCount,
+                            sourcesCurrentPage = library.page,
+                            sourcesHasMore = library.hasMore,
+                        )
+                        next.copy(visibleSources = next.allSources)
+                    }
+                },
+                onFailure = { throwable ->
+                    state.update {
+                        if (reset) {
+                            it.copy(
+                                sourcesError = throwable.message.orEmpty(),
+                                isFilteringSources = false,
+                                isLoadingMoreSources = false,
+                            )
+                        } else {
+                            it.copy(isLoadingMoreSources = false)
+                        }
+                    }
+                },
+            )
+        }
     }
 
     fun cancelSearchJob() {
         sourcesLoadJob?.cancel()
+        state.update {
+            it.copy(
+                isFilteringSources = false,
+                isLoadingMoreSources = false,
+            )
+        }
     }
 
     fun scheduleSearchReload() {
         sourcesLoadJob?.cancel()
         sourcesLoadJob = scope.launch {
             delay(searchDebounceMs)
-            reloadSources()
+            loadSourcesInternal(reset = true)
         }
     }
 
     fun onFilterSelected(filter: SourceFilter) {
         if (filter == state.value.selectedFilter) return
-        state.update { it.copy(selectedFilter = filter) }
+        state.update {
+            it.copy(
+                selectedFilter = filter,
+                isFilteringSources = true,
+                sourcesError = null,
+            )
+        }
         loadSourcesOnly()
     }
 
@@ -138,7 +220,14 @@ internal class HomeSourcesDelegate(
             return
         }
         sourcesLoadJob?.cancel()
-        state.update { it.copy(showSortSheet = false, selectedSort = sort) }
+        state.update {
+            it.copy(
+                showSortSheet = false,
+                selectedSort = sort,
+                isFilteringSources = true,
+                sourcesError = null,
+            )
+        }
         loadSourcesOnly()
     }
 
@@ -340,7 +429,7 @@ internal class HomeSourcesDelegate(
     private fun queueRefreshSourcesAfterCreate() {
         sourcesLoadJob?.cancel()
         sourcesLoadJob = scope.launch {
-            reloadSources()
+            loadSourcesInternal(reset = true)
         }
     }
 
@@ -437,6 +526,14 @@ internal class HomeSourcesDelegate(
     }
 
     fun onSourceClick(source: Source) {
+        when (source.status) {
+            SourceStatus.READY -> openReadySource(source)
+            SourceStatus.PROCESSING -> openProcessingSheet(source)
+            SourceStatus.FAILED -> openFailedProcessingSheet(source)
+        }
+    }
+
+    private fun openReadySource(source: Source) {
         if (state.value.isOpeningSource) return
         openSourceJob?.cancel()
         openSourceJob = scope.launch {
@@ -455,6 +552,30 @@ internal class HomeSourcesDelegate(
                     openSourceDetailHighlight = null,
                 )
             }
+        }
+    }
+
+    private fun openProcessingSheet(source: Source) {
+        state.update {
+            it.copy(
+                processingSourceId = source.id,
+                processingSourceTitle = source.title,
+                processingProgress = 0,
+                processingState = SourceProcessingState.ADDED,
+            )
+        }
+        startObservingProcessing(source.id)
+    }
+
+    private fun openFailedProcessingSheet(source: Source) {
+        stopProcessingObservation()
+        state.update {
+            it.copy(
+                processingSourceId = source.id,
+                processingSourceTitle = source.title,
+                processingProgress = 100,
+                processingState = SourceProcessingState.FAILED,
+            )
         }
     }
 
@@ -521,7 +642,7 @@ internal class HomeSourcesDelegate(
                         val updatedSources = current.allSources.filterNot { it.id == deleting.id }
                         val next = current.copy(
                             allSources = updatedSources,
-                            allCount = updatedSources.size,
+                            allCount = (current.allCount - 1).coerceAtLeast(0),
                             deletingSource = null,
                             userMessage = HomeUserMessage.SOURCE_DELETED,
                         )

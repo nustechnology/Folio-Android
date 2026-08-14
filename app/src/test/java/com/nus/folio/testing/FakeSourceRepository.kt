@@ -6,10 +6,12 @@ import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
 import com.nus.folio.domain.repository.SourceRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,6 +34,8 @@ class FakeSourceRepository : SourceRepository {
     var lastSourceType: String? = null
     var lastSearch: String? = null
     var lastSort: SourceSort? = null
+    var lastPage: Int? = null
+    var lastLimit: Int? = null
     var lastCreateRequest: CreateSourceRequest? = null
     var lastUpdatedSource: Source? = null
     var lastUpdatedContent: String? = null
@@ -60,15 +64,19 @@ class FakeSourceRepository : SourceRepository {
         sourceType: String?,
         search: String?,
         sort: SourceSort,
+        page: Int,
+        limit: Int,
     ): Result<SourceLibrary> {
         getSourcesCallCount++
         lastSpaceId = spaceId
         lastSourceType = sourceType
         lastSearch = search
         lastSort = sort
+        lastPage = page
+        lastLimit = limit
         getSourcesGate?.invoke(sourceType, search)
         getSourcesResult?.let { return it }
-        return Result.success(libraryFor(spaceId, sourceType, search, sort))
+        return Result.success(libraryFor(spaceId, sourceType, search, sort, page, limit))
     }
 
     override suspend fun createSource(request: CreateSourceRequest): Result<Source> {
@@ -167,6 +175,8 @@ class FakeSourceRepository : SourceRepository {
         sourceType: String? = null,
         search: String? = null,
         sort: SourceSort = SourceSort.DEFAULT,
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
     ): SourceLibrary {
         var scoped = sources.filter { it.spaceId == spaceId }
         scoped = when (sourceType?.lowercase()) {
@@ -184,13 +194,20 @@ class FakeSourceRepository : SourceRepository {
             SourceSort.ALPHABETICAL_ZA -> scoped.sortedByDescending { it.title.lowercase() }
             SourceSort.RECENTLY_ADDED -> scoped
         }
+        val safePage = page.coerceAtLeast(1)
+        val safeLimit = limit.coerceAtLeast(1)
+        val offset = (safePage - 1) * safeLimit
+        val pageItems = scoped.drop(offset).take(safeLimit)
         return SourceLibrary(
-            sources = scoped,
+            sources = pageItems,
             allCount = scoped.size,
             papersCount = scoped.count { it.type == SourceType.FILE },
             booksCount = scoped.count { it.type == SourceType.BOOK },
             webCount = scoped.count { it.type == SourceType.WEB },
             textCount = scoped.count { it.type == SourceType.TEXT },
+            page = safePage,
+            limit = safeLimit,
+            hasMore = offset + pageItems.size < scoped.size,
         )
     }
 
@@ -217,6 +234,13 @@ class FakeSourceRepository : SourceRepository {
                 plainContent = when (source.type) {
                     SourceType.TEXT -> "Sample manual source content for editing."
                     else -> null
+                },
+                structuredContent = if (source.type == SourceType.WEB) {
+                    StructuredContent.Document(
+                        "<h1>${source.title}</h1><p>Preview content.</p>",
+                    )
+                } else {
+                    null
                 },
             ),
         )

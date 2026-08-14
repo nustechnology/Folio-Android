@@ -1,6 +1,7 @@
 package com.nus.folio.data.datasource
 
 import com.nus.folio.domain.model.SourceContentFormat
+import com.nus.folio.domain.model.StructuredContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,6 +58,8 @@ class SourceSampleDataTest {
         val web = SourceSampleData.buildSourceDetail(sources.first { it.id == "9" })
         assertEquals("Wikipedia: Neural Networks", web.title)
         assertTrue(web.htmlContent.orEmpty().contains("Artificial neural network"))
+        val structured = web.structuredContent as StructuredContent.Document
+        assertTrue(structured.html.contains("Artificial neural network"))
     }
 
     @Test

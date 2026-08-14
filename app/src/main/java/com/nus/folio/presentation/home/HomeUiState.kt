@@ -15,7 +15,11 @@ data class HomeUiState(
     val spaceTitle: String = "",
     val isLoading: Boolean = false,
     val isRefreshingSources: Boolean = false,
+    /** True while reloading sources after a filter/sort change (list shows skeleton). */
+    val isFilteringSources: Boolean = false,
     val isRefreshingNotes: Boolean = false,
+    /** True while reloading notes after a filter/sort change (list shows skeleton). */
+    val isFilteringNotes: Boolean = false,
     val sourcesError: String? = null,
     val notesError: String? = null,
     val searchQuery: String = "",
@@ -29,6 +33,9 @@ data class HomeUiState(
     val allNotes: List<Note> = emptyList(),
     val visibleNotes: List<Note> = emptyList(),
     val allCount: Int = 0,
+    val sourcesCurrentPage: Int = 1,
+    val sourcesHasMore: Boolean = false,
+    val isLoadingMoreSources: Boolean = false,
     val notesAllCount: Int = 0,
     val notesUserCreatedCount: Int = 0,
     val notesSavedAnswerCount: Int = 0,

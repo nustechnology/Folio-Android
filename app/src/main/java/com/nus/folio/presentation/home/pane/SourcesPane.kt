@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,7 +37,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +76,8 @@ import com.nus.folio.ui.theme.HomeStatusReadyBackground
 import com.nus.folio.ui.theme.HomeStatusReadyText
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +89,7 @@ internal fun SourcesPane(
     onFilterSelected: (SourceFilter) -> Unit,
     onSourceMoreClick: (Source) -> Unit,
     onSourceClick: (Source) -> Unit,
+    onLoadMore: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val pullRefreshState = rememberPullToRefreshState()
@@ -116,7 +125,7 @@ internal fun SourcesPane(
                 .fillMaxWidth(),
         ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading || uiState.isFilteringSources -> {
                     SourcesSkeletonList()
                 }
                 uiState.sourcesError != null -> {
@@ -157,7 +166,27 @@ internal fun SourcesPane(
                     }
                 }
                 else -> {
+                    val listState = rememberLazyListState()
+                    val currentOnLoadMore by rememberUpdatedState(onLoadMore)
+                    val currentSourcesHasMore by rememberUpdatedState(uiState.sourcesHasMore)
+                    val currentIsLoadingMoreSources by rememberUpdatedState(uiState.isLoadingMoreSources)
+                    LaunchedEffect(listState) {
+                        snapshotFlow {
+                            val layoutInfo = listState.layoutInfo
+                            val totalItems = layoutInfo.totalItemsCount
+                            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                            totalItems > 0 && lastVisible >= totalItems - LOAD_MORE_THRESHOLD
+                        }
+                            .distinctUntilChanged()
+                            .filter { nearEnd -> nearEnd }
+                            .collect {
+                                if (currentSourcesHasMore && !currentIsLoadingMoreSources) {
+                                    currentOnLoadMore()
+                                }
+                            }
+                    }
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -169,13 +198,32 @@ internal fun SourcesPane(
                                 onMoreClick = { onSourceMoreClick(source) },
                             )
                         }
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        if (uiState.isLoadingMoreSources) {
+                            item(key = "sources-loading-more") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = HomeHeader,
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            }
+                        } else {
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+private const val LOAD_MORE_THRESHOLD = 3
 
 @Composable
 private fun SourcesSkeletonList() {
@@ -502,6 +550,29 @@ private fun SourcesPaneLoadingPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         SourcesPane(
             uiState = HomeUiState(isLoading = true),
+            onRetry = {},
+            onAddClick = {},
+            onFilterSelected = {},
+            onSourceMoreClick = {},
+            onSourceClick = {},
+            modifier = Modifier.background(HomeBackground),
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 700, name = "Sources — filtering")
+@Composable
+private fun SourcesPaneFilteringPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        SourcesPane(
+            uiState = HomeUiState(
+                isFilteringSources = true,
+                selectedFilter = SourceFilter.FILE,
+                allSources = listOf(
+                    Source("1", "Alan Turing", SourceType.FILE, "Alan Turing", "Added 2d ago", SourceStatus.READY, "1", "pdf"),
+                ),
+                allCount = 1,
+            ),
             onRetry = {},
             onAddClick = {},
             onFilterSelected = {},

@@ -4,6 +4,7 @@ import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -376,6 +377,23 @@ class SourcesApiClientMappingTest {
             "http://localhost:9000/folio-sources/sources/a24bc98e/paper.pdf",
             url,
         )
+    }
+
+    @Test
+    fun `parseStructuredContent accepts legacy html fragment`() {
+        val structured = SourcesApiClient.parseStructuredContent(
+            """<h1 onclick="alert(1)">Neural Networks</h1><p>Article body.</p><script>evil()</script>""",
+        ) as StructuredContent.Document
+
+        assertEquals("<h1>Neural Networks</h1><p>Article body.</p>", structured.html)
+        assertTrue(!structured.html.contains("<script", ignoreCase = true))
+        assertTrue(!structured.html.contains("onclick", ignoreCase = true))
+    }
+
+    @Test
+    fun `parseStructuredContent returns null for blank html`() {
+        assertNull(SourcesApiClient.parseStructuredContent("   "))
+        assertNull(SourcesApiClient.parseStructuredContent(null))
     }
 
     @Test

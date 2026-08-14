@@ -12,9 +12,7 @@
     <string name="login_error_password_required">Enter your password.</string>
     <string name="login_error_invalid_credentials">Invalid email or password. Please try again.</string>
     <string name="login_error_sign_in_failed">Sign in failed. Please try again.</string>
-    <string name="login_error_password_reset_failed">Could not send password reset link. Please try again.</string>
     <string name="login_error_auth_unavailable">Sign-in is not available in this build yet.</string>
-    <string name="login_password_reset_sent">Password reset link sent. Check your inbox.</string>
     <string name="login_show_password">Show password</string>
     <string name="login_hide_password">Hide password</string>
     <string name="login_no_account">Don\'t have an account?</string>
@@ -105,9 +103,7 @@
     <string name="home_tab_sources">Sources</string>
     <string name="home_tab_ask">Ask</string>
     <string name="home_tab_notes">Notes</string>
-    <string name="home_tab_account">Account</string>
     <string name="home_tab_notebook">Notebook</string>
-    <string name="home_placeholder_ask">Ask coming soon</string>
     <string name="home_ask_question_title">Ask a question</string>
     <string name="home_ask_input_hint">Ask a question…</string>
     <string name="home_ask_current_source">Current source</string>
@@ -131,7 +127,6 @@
     <string name="home_ask_avatar_user">You</string>
     <string name="toast_note_saved_from_ask">Note saved</string>
     <string name="toast_note_saved_from_ask_description">Open the Notes tab to find your saved answer.</string>
-    <string name="home_ask_citation_cd">Citation %1$d</string>
     <string name="citation_preview_title">Citation</string>
     <string name="citation_preview_index">[%1$d]</string>
     <string name="citation_preview_evidence_label">Evidence</string>
@@ -143,12 +138,10 @@
     <string name="answer_scope_title">Answer scope</string>
     <string name="answer_scope_entire_space">Entire space</string>
     <string name="answer_scope_entire_space_subtitle">%1$d ready sources</string>
-    <string name="answer_scope_current_source">Current source</string>
     <string name="answer_scope_source_subtitle">Source</string>
     <string name="answer_scope_search">Search scopes</string>
     <string name="answer_scope_search_hint">Search sources…</string>
     <string name="answer_scope_no_matches">No sources match your search.</string>
-    <string name="home_error_load_failed">Could not load sources. Please try again.</string>
     <string name="home_error_generic">Something went wrong. Please try again.</string>
     <string name="home_error_network">Could not reach the server. Check your connection and try again.</string>
     <string name="home_retry">Retry</string>
@@ -236,11 +229,9 @@
     <string name="edit_note_title">Edit note</string>
     <string name="edit_note_description">Update the title and content for this note.</string>
 
-    <string name="home_empty_ask">No topics match your search.</string>
     <string name="home_empty_notes">No notes yet</string>
     <string name="home_empty_notes_subtitle">Create a note to start capturing ideas.</string>
     <string name="home_empty_notes_action">Add note</string>
-    <string name="home_placeholder_notebook">Notebook coming soon</string>
     <string name="notebook_save_status_saving">Saving…</string>
     <string name="notebook_save_status_saved">Saved</string>
     <string name="notebook_save_status_failed">Couldn\'t save</string>
@@ -268,8 +259,6 @@
     <string name="notebook_export_print_pdf">Print / PDF</string>
     <string name="notebook_export_print_pdf_subtitle">System print</string>
     <string name="notebook_export_failed">Could not export notebook. Please try again.</string>
-    <string name="home_ask_meta">%1$d sources · %2$d notes</string>
-    <string name="home_ask_more">More options</string>
     <string name="home_notes_more">More options</string>
     <string name="note_options_view">View</string>
     <string name="note_options_edit">Edit</string>
@@ -284,14 +273,11 @@
     <string name="note_convert_create">Create source</string>
     <string name="note_delete_title">Delete notes?</string>
     <string name="note_delete_message">This does not change the notebook or an existing source snapshot.</string>
-    <string name="home_notes_unfiled">Unfiled</string>
     <string name="home_note_badge_user_created">User-created</string>
     <string name="home_note_badge_saved_answer">Saved answer</string>
     <string name="home_note_badge_citations">%d citations</string>
 
-    <string name="account_title">Profile</string>
     <string name="account_subtitle">Account settings</string>
-    <string name="account_search">Search</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_sign_out_title">Sign out?</string>
     <string name="account_sign_out_message">You will need to sign in again to access your spaces.</string>
@@ -357,7 +343,7 @@
     <string name="space_add">Create space</string>
     <string name="space_account">Account</string>
     <string name="space_account_sheet_title">Account</string>
-    <string name="space_account_open_settings">Account settings</string>
+    <string name="space_account_sign_out">Sign out</string>
     <string name="space_meta">%1$d sources · %2$d notes</string>
     <string name="space_more">More options</string>
     <string name="space_options_rename">Rename</string>
@@ -371,5 +357,4 @@
     <string name="space_empty_no_spaces_subtitle">Create a space to organize your sources and notes.</string>
     <string name="space_empty_no_spaces_action">Create space</string>
     <string name="space_retry">Retry</string>
-    <string name="space_error_load_failed">Could not load spaces. Please try again.</string>
 </resources>

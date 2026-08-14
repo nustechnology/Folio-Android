@@ -6,6 +6,7 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.repository.SourceOriginalFileResolver
@@ -23,6 +24,8 @@ class SourceRepositoryImpl(
         sourceType: String?,
         search: String?,
         sort: SourceSort,
+        page: Int,
+        limit: Int,
     ): Result<SourceLibrary> =
         try {
             Result.success(
@@ -31,6 +34,8 @@ class SourceRepositoryImpl(
                     sourceType = sourceType,
                     search = search,
                     sort = sort,
+                    page = page,
+                    limit = limit,
                 ),
             )
         } catch (e: CancellationException) {

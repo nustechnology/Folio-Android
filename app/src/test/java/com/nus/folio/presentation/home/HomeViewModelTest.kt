@@ -6,11 +6,14 @@ import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.model.NoteSort
+import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourceLibrary
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
+import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.repository.SourceFileBytes
 import com.nus.folio.domain.repository.SourceFileBytesReader
@@ -112,6 +115,7 @@ class HomeViewModelTest {
             createMinDelayMs = 0L,
             createNoteMinDelayMs = 0L,
             loadMinDelayMs = 0L,
+            filterSkeletonMinDelayMs = 0L,
         )
 
     @Test
@@ -166,6 +170,31 @@ class HomeViewModelTest {
         assertEquals("File", sourceRepository.lastSourceType)
         assertEquals(4, viewModel.uiState.value.visibleSources.size)
         assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.FILE })
+        assertFalse(viewModel.uiState.value.isFilteringSources)
+    }
+
+    @Test
+    fun `onFilterSelected shows filtering skeleton until API returns`() = runTest {
+        val filterStarted = CompletableDeferred<Unit>()
+        val releaseFilter = CompletableDeferred<Unit>()
+        sourceRepository.getSourcesGate = { sourceType, _ ->
+            if (sourceType == "File") {
+                filterStarted.complete(Unit)
+                releaseFilter.await()
+            }
+        }
+        val viewModel = createViewModel()
+
+        viewModel.onFilterSelected(SourceFilter.FILE)
+        filterStarted.await()
+
+        assertTrue(viewModel.uiState.value.isFilteringSources)
+
+        releaseFilter.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isFilteringSources)
+        assertEquals(4, viewModel.uiState.value.visibleSources.size)
     }
 
     @Test
@@ -191,6 +220,31 @@ class HomeViewModelTest {
         assertFalse(viewModel.uiState.value.showSortSheet)
         assertEquals(SourceSort.ALPHABETICAL_ZA, viewModel.uiState.value.selectedSort)
         assertEquals(SourceSort.ALPHABETICAL_ZA, sourceRepository.lastSort)
+        assertFalse(viewModel.uiState.value.isFilteringSources)
+    }
+
+    @Test
+    fun `onSortSelected shows filtering skeleton until API returns`() = runTest {
+        val sortStarted = CompletableDeferred<Unit>()
+        val releaseSort = CompletableDeferred<Unit>()
+        sourceRepository.getSourcesGate = { _, _ ->
+            if (sourceRepository.lastSort == SourceSort.ALPHABETICAL_ZA) {
+                sortStarted.complete(Unit)
+                releaseSort.await()
+            }
+        }
+        val viewModel = createViewModel()
+
+        viewModel.onSortSelected(SourceSort.ALPHABETICAL_ZA)
+        sortStarted.await()
+
+        assertTrue(viewModel.uiState.value.isFilteringSources)
+
+        releaseSort.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isFilteringSources)
+        assertEquals(SourceSort.ALPHABETICAL_ZA, sourceRepository.lastSort)
     }
 
     @Test
@@ -203,6 +257,7 @@ class HomeViewModelTest {
 
         assertFalse(viewModel.uiState.value.showSortSheet)
         assertEquals(callsBefore, sourceRepository.getSourcesCallCount)
+        assertFalse(viewModel.uiState.value.isFilteringSources)
     }
 
     @Test
@@ -248,6 +303,7 @@ class HomeViewModelTest {
         assertEquals("Web", sourceRepository.lastSourceType)
         assertTrue(viewModel.uiState.value.visibleSources.all { it.type == SourceType.WEB })
         assertEquals(1, viewModel.uiState.value.visibleSources.size)
+        assertFalse(viewModel.uiState.value.isFilteringSources)
     }
 
     @Test
@@ -262,6 +318,56 @@ class HomeViewModelTest {
         assertEquals(callsBefore + 1, noteRepository.getNotesCallCount)
         assertEquals(1, viewModel.uiState.value.visibleNotes.size)
         assertTrue(viewModel.uiState.value.visibleNotes.all { it.origin == NoteOrigin.USER_CREATED })
+        assertFalse(viewModel.uiState.value.isFilteringNotes)
+    }
+
+    @Test
+    fun `onNoteFilterSelected shows filtering skeleton until API returns`() = runTest {
+        val filterStarted = CompletableDeferred<Unit>()
+        val releaseFilter = CompletableDeferred<Unit>()
+        noteRepository.getNotesGate = { origin, _ ->
+            if (origin == "UserCreated") {
+                filterStarted.complete(Unit)
+                releaseFilter.await()
+            }
+        }
+        val viewModel = createViewModel()
+
+        viewModel.onNoteFilterSelected(NoteFilter.USER_CREATED)
+        filterStarted.await()
+
+        assertTrue(viewModel.uiState.value.isFilteringNotes)
+
+        releaseFilter.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isFilteringNotes)
+        assertEquals(1, viewModel.uiState.value.visibleNotes.size)
+    }
+
+    @Test
+    fun `onNoteSortSelected shows filtering skeleton until API returns`() = runTest {
+        val sortStarted = CompletableDeferred<Unit>()
+        val releaseSort = CompletableDeferred<Unit>()
+        noteRepository.getNotesGate = { _, _ ->
+            if (noteRepository.lastSort == NoteSort.ALPHABETICAL_ZA) {
+                sortStarted.complete(Unit)
+                releaseSort.await()
+            }
+        }
+        val viewModel = createViewModel()
+        viewModel.onTabSelected(HomeTab.NOTES)
+
+        viewModel.onNoteSortSelected(NoteSort.ALPHABETICAL_ZA)
+        sortStarted.await()
+
+        assertTrue(viewModel.uiState.value.isFilteringNotes)
+
+        releaseSort.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isFilteringNotes)
+        assertEquals(NoteSort.ALPHABETICAL_ZA, noteRepository.lastSort)
     }
 
     @Test
@@ -274,6 +380,7 @@ class HomeViewModelTest {
         assertEquals("SavedAssistantAnswer", noteRepository.lastOrigin)
         assertEquals(1, viewModel.uiState.value.visibleNotes.size)
         assertTrue(viewModel.uiState.value.visibleNotes.all { it.origin == NoteOrigin.SAVED_ANSWER })
+        assertFalse(viewModel.uiState.value.isFilteringNotes)
     }
 
     @Test
@@ -314,15 +421,42 @@ class HomeViewModelTest {
     @Test
     fun `onSourceClick opens source detail after delay`() {
         val viewModel = createViewModel(openSourceDelayMs = 0L)
-        val source = viewModel.uiState.value.visibleSources.first()
+        val source = viewModel.uiState.value.visibleSources.first { it.status == SourceStatus.READY }
 
         viewModel.onSourceClick(source)
 
         assertFalse(viewModel.uiState.value.isOpeningSource)
         assertEquals(source.id, viewModel.uiState.value.openSourceDetailId)
+        assertNull(viewModel.uiState.value.processingSourceId)
 
         viewModel.onOpenSourceDetailHandled()
 
+        assertNull(viewModel.uiState.value.openSourceDetailId)
+    }
+
+    @Test
+    fun `onSourceClick PROCESSING opens processing sheet`() {
+        val viewModel = createViewModel(spaceId = "2", spaceTitle = "Urban Mobility", openSourceDelayMs = 0L)
+        val source = viewModel.uiState.value.visibleSources.first { it.status == SourceStatus.PROCESSING }
+
+        viewModel.onSourceClick(source)
+
+        assertEquals(source.id, viewModel.uiState.value.processingSourceId)
+        assertEquals(source.title, viewModel.uiState.value.processingSourceTitle)
+        assertEquals(SourceProcessingState.ADDED, viewModel.uiState.value.processingState)
+        assertNull(viewModel.uiState.value.openSourceDetailId)
+    }
+
+    @Test
+    fun `onSourceClick FAILED opens processing sheet in failed state`() {
+        val viewModel = createViewModel(openSourceDelayMs = 0L)
+        val source = viewModel.uiState.value.visibleSources.first { it.status == SourceStatus.FAILED }
+
+        viewModel.onSourceClick(source)
+
+        assertEquals(source.id, viewModel.uiState.value.processingSourceId)
+        assertEquals(source.title, viewModel.uiState.value.processingSourceTitle)
+        assertEquals(SourceProcessingState.FAILED, viewModel.uiState.value.processingState)
         assertNull(viewModel.uiState.value.openSourceDetailId)
     }
 
@@ -349,6 +483,20 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `clearSearch clears query and reloads sources`() {
+        val viewModel = createViewModel()
+        viewModel.onSearchQueryChange("Turing")
+        val callsAfterSearch = sourceRepository.getSourcesCallCount
+
+        viewModel.clearSearch()
+
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        assertEquals(5, viewModel.uiState.value.visibleSources.size)
+        assertTrue(sourceRepository.getSourcesCallCount > callsAfterSearch)
+        assertNull(sourceRepository.lastSearch)
+    }
+
+    @Test
     fun `loadSources reloads library`() {
         val viewModel = createViewModel()
 
@@ -357,6 +505,59 @@ class HomeViewModelTest {
         assertTrue(sourceRepository.getSourcesCallCount >= 2)
         assertEquals(5, viewModel.uiState.value.visibleSources.size)
         assertEquals(2, viewModel.uiState.value.visibleNotes.size)
+    }
+
+    @Test
+    fun `onLoadMoreSources appends next page`() {
+        val pageOne = SourceLibrary(
+            sources = listOf(
+                Source("p1", "Page One", SourceType.FILE, "A", "Added 1d ago", SourceStatus.READY, "1", "pdf"),
+            ),
+            allCount = 2,
+            papersCount = 2,
+            booksCount = 0,
+            webCount = 0,
+            textCount = 0,
+            page = 1,
+            limit = 1,
+            hasMore = true,
+        )
+        val pageTwo = SourceLibrary(
+            sources = listOf(
+                Source("p2", "Page Two", SourceType.FILE, "B", "Added 1d ago", SourceStatus.READY, "1", "pdf"),
+            ),
+            allCount = 2,
+            papersCount = 2,
+            booksCount = 0,
+            webCount = 0,
+            textCount = 0,
+            page = 2,
+            limit = 1,
+            hasMore = false,
+        )
+        sourceRepository.getSourcesResult = Result.success(pageOne)
+        val viewModel = createViewModel()
+        assertEquals(1, viewModel.uiState.value.visibleSources.size)
+        assertTrue(viewModel.uiState.value.sourcesHasMore)
+
+        sourceRepository.getSourcesResult = Result.success(pageTwo)
+        viewModel.onLoadMoreSources()
+
+        assertEquals(listOf("p1", "p2"), viewModel.uiState.value.visibleSources.map { it.id })
+        assertFalse(viewModel.uiState.value.sourcesHasMore)
+        assertFalse(viewModel.uiState.value.isLoadingMoreSources)
+        assertEquals(2, viewModel.uiState.value.sourcesCurrentPage)
+    }
+
+    @Test
+    fun `onLoadMoreSources is ignored when hasMore is false`() {
+        val viewModel = createViewModel()
+        assertFalse(viewModel.uiState.value.sourcesHasMore)
+        val callsBefore = sourceRepository.getSourcesCallCount
+
+        viewModel.onLoadMoreSources()
+
+        assertEquals(callsBefore, sourceRepository.getSourcesCallCount)
     }
 
     @Test

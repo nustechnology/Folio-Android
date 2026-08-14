@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
+import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
@@ -96,7 +97,8 @@ private fun ResetPasswordContent(
             .fillMaxSize()
             .background(LoginBackground)
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .dismissKeyboardOnTapOutside(),
     ) {
         Column(
             modifier = Modifier

@@ -5,6 +5,7 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceFileLocation
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceSort
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,8 @@ interface SourceRepository {
         sourceType: String? = null,
         search: String? = null,
         sort: SourceSort = SourceSort.DEFAULT,
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
     ): Result<SourceLibrary>
     suspend fun createSource(request: CreateSourceRequest): Result<Source>
     suspend fun updateSource(source: Source, content: String? = null): Result<Source>

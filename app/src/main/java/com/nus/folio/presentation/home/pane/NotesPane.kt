@@ -121,7 +121,7 @@ internal fun NotesPane(
                 .fillMaxWidth(),
         ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading || uiState.isFilteringNotes -> {
                     NotesSkeletonList()
                 }
                 uiState.notesError != null -> {
@@ -596,6 +596,40 @@ private fun NotesPaneLoadingPreview() {
     FolioAndroidTheme(dynamicColor = false) {
         NotesPane(
             uiState = HomeUiState(isLoading = true),
+            onRetry = {},
+            onAddClick = {},
+            onFilterSelected = {},
+            onNoteClick = {},
+            onNoteMoreClick = {},
+            modifier = Modifier.background(HomeBackground),
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 393, heightDp = 700, name = "Notes — filtering")
+@Composable
+private fun NotesPaneFilteringPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        NotesPane(
+            uiState = HomeUiState(
+                isFilteringNotes = true,
+                selectedNoteFilter = NoteFilter.USER_CREATED,
+                allNotes = listOf(
+                    Note(
+                        id = "1",
+                        title = "Research Question Draft",
+                        content = "Draft content",
+                        project = "Urban Mobility",
+                        updatedLabel = "Updated 1d ago",
+                        isPinned = true,
+                        spaceId = "1",
+                        origin = NoteOrigin.USER_CREATED,
+                    ),
+                ),
+                notesAllCount = 1,
+                notesUserCreatedCount = 1,
+                notesSavedAnswerCount = 0,
+            ),
             onRetry = {},
             onAddClick = {},
             onFilterSelected = {},

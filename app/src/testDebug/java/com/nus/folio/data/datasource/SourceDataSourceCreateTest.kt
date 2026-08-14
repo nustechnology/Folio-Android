@@ -6,6 +6,8 @@ import com.nus.folio.domain.model.CreateSourceRequest
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
+import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceStatus
@@ -20,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -39,6 +42,8 @@ class SourceDataSourceCreateTest {
         var lastListSourceType: String? = null
         var lastListSearch: String? = null
         var lastListSort: String? = null
+        var lastListPage: Int? = null
+        var lastListLimit: Int? = null
         var lastGetSourceId: String? = null
         var lastRetrySourceId: String? = null
         var lastDeleteSourceId: String? = null
@@ -76,15 +81,24 @@ class SourceDataSourceCreateTest {
             sourceType: String?,
             search: String?,
             sort: String,
-        ): List<Source> {
+            page: Int,
+            limit: Int,
+        ): SourceLibrary {
             listCallCount++
             lastAccessToken = accessToken
             lastListSpaceId = spaceId
             lastListSourceType = sourceType
             lastListSearch = search
             lastListSort = sort
+            lastListPage = page
+            lastListLimit = limit
             throwIfUnauthorized(accessToken)
-            return listedSources
+            return SourceSampleData.libraryFrom(
+                sources = listedSources,
+                page = page,
+                limit = limit,
+                hasMore = false,
+            )
         }
 
         override suspend fun getSource(accessToken: String, sourceId: String): SourceDetail {
@@ -289,6 +303,9 @@ class SourceDataSourceCreateTest {
         assertEquals("File", api.lastListSourceType)
         assertEquals("API", api.lastListSearch)
         assertEquals("alphabetical-az", api.lastListSort)
+        assertEquals(SourcePaging.DEFAULT_PAGE, api.lastListPage)
+        assertEquals(SourcePaging.DEFAULT_LIMIT, api.lastListLimit)
+        assertFalse(library.hasMore)
     }
 
     @Test

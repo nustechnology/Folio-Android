@@ -10,6 +10,7 @@ import com.nus.folio.domain.model.NotePaging
 import com.nus.folio.domain.model.NoteSort
 import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.toApiOrigin
 import com.nus.folio.domain.model.toApiSourceType
@@ -76,6 +77,7 @@ class HomeViewModel(
     private val createMinDelayMs: Long = CREATE_MIN_DELAY_MS,
     private val createNoteMinDelayMs: Long = CREATE_NOTE_MIN_DELAY_MS,
     private val loadMinDelayMs: Long = LOAD_MIN_DELAY_MS,
+    private val filterSkeletonMinDelayMs: Long = FILTER_SKELETON_MIN_DELAY_MS,
     private val notebookSaveDebounceMs: Long = NOTEBOOK_SAVE_DEBOUNCE_MS,
 ) : ViewModel() {
 
@@ -113,6 +115,7 @@ class HomeViewModel(
         openSourceDelayMs = openSourceDelayMs,
         searchDebounceMs = searchDebounceMs,
         createMinDelayMs = createMinDelayMs,
+        filterSkeletonMinDelayMs = filterSkeletonMinDelayMs,
         applyAskScope = ask::applyAskScope,
     )
 
@@ -129,6 +132,7 @@ class HomeViewModel(
         onSourceCreated = sources::onSourceCreated,
         searchDebounceMs = searchDebounceMs,
         createMinDelayMs = createNoteMinDelayMs,
+        filterSkeletonMinDelayMs = filterSkeletonMinDelayMs,
     )
 
     private val notebook = HomeNotebookDelegate(
@@ -183,6 +187,8 @@ class HomeViewModel(
                     sourceType = state.selectedFilter.toApiSourceType(),
                     search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
                     sort = state.selectedSort,
+                    page = SourcePaging.DEFAULT_PAGE,
+                    limit = SourcePaging.DEFAULT_LIMIT,
                 )
             }
             val notesDeferred = async {
@@ -211,6 +217,9 @@ class HomeViewModel(
                             sourcesError = null,
                             allSources = library.sources,
                             allCount = library.allCount,
+                            sourcesCurrentPage = library.page,
+                            sourcesHasMore = library.hasMore,
+                            isLoadingMoreSources = false,
                         )
                     },
                     onFailure = { throwable ->
@@ -263,6 +272,30 @@ class HomeViewModel(
         }
     }
 
+    /** Clears the search field and reloads unfiltered lists (e.g. when leaving Home). */
+    fun clearSearch() {
+        sources.cancelSearchJob()
+        notes.cancelSearchJob()
+        val previousQuery = _uiState.value.searchQuery
+        if (previousQuery.isBlank()) return
+        val previousTab = _uiState.value.selectedTab
+        _uiState.update { state ->
+            val next = state.copy(
+                searchQuery = "",
+                isSearchingNotes = false,
+            )
+            next.copy(
+                visibleSources = next.allSources,
+                visibleNotes = filterNotes(next),
+            )
+        }
+        when (previousTab) {
+            HomeTab.SOURCES -> sources.loadSourcesOnly()
+            HomeTab.NOTES -> notes.loadNotesOnly()
+            HomeTab.ASK, HomeTab.NOTEBOOK -> Unit
+        }
+    }
+
     fun onFilterSelected(filter: SourceFilter) = sources.onFilterSelected(filter)
 
     fun onFilterSortClick() {
@@ -285,6 +318,8 @@ class HomeViewModel(
     fun onNoteFilterSelected(filter: NoteFilter) = notes.onNoteFilterSelected(filter)
 
     fun onLoadMoreNotes() = notes.onLoadMore()
+
+    fun onLoadMoreSources() = sources.onLoadMore()
 
     fun onRefreshNotes() = notes.onRefreshNotes()
 
@@ -530,5 +565,6 @@ class HomeViewModel(
         private const val CREATE_MIN_DELAY_MS = 1_500L
         private const val CREATE_NOTE_MIN_DELAY_MS = 1_000L
         private const val LOAD_MIN_DELAY_MS = 1_000L
+        private const val FILTER_SKELETON_MIN_DELAY_MS = 500L
     }
 }

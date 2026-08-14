@@ -5,9 +5,11 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceLibrary
+import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.model.SourceType
+import com.nus.folio.domain.model.StructuredContent
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -19,14 +21,27 @@ internal object SourceSampleData {
 
     fun mutableDefaultSources(): MutableList<Source> = samples.toMutableList()
 
-    fun libraryFrom(sources: List<Source>): SourceLibrary =
+    fun libraryFrom(
+        sources: List<Source>,
+        allCount: Int = sources.size,
+        papersCount: Int = sources.count { it.type == SourceType.FILE },
+        booksCount: Int = sources.count { it.type == SourceType.BOOK },
+        webCount: Int = sources.count { it.type == SourceType.WEB },
+        textCount: Int = sources.count { it.type == SourceType.TEXT },
+        page: Int = SourcePaging.DEFAULT_PAGE,
+        limit: Int = SourcePaging.DEFAULT_LIMIT,
+        hasMore: Boolean = false,
+    ): SourceLibrary =
         SourceLibrary(
             sources = sources,
-            allCount = sources.size,
-            papersCount = sources.count { it.type == SourceType.FILE },
-            booksCount = sources.count { it.type == SourceType.BOOK },
-            webCount = sources.count { it.type == SourceType.WEB },
-            textCount = sources.count { it.type == SourceType.TEXT },
+            allCount = allCount,
+            papersCount = papersCount,
+            booksCount = booksCount,
+            webCount = webCount,
+            textCount = textCount,
+            page = page,
+            limit = limit,
+            hasMore = hasMore,
         )
 
     /**
@@ -77,6 +92,7 @@ internal object SourceSampleData {
             htmlContent = parts.htmlContent,
             sheets = parts.sheets,
             plainContent = parts.plainContent,
+            structuredContent = parts.structuredContent,
         )
     }
 
@@ -125,6 +141,9 @@ internal object SourceSampleData {
                 SourceContentFormat.DOCUMENT,
                 SourceSampleHtml.neuralNetworksArticleHtml,
                 emptyList(),
+                structuredContent = StructuredContent.Document(
+                    SourceSampleHtml.neuralNetworksArticleHtml,
+                ),
             )
             "10" -> DetailParts(
                 "xlsx",
@@ -175,16 +194,18 @@ internal object SourceSampleData {
             }
             is CreateSourceRequest.Web -> {
                 val title = request.title.trim().ifBlank { request.sourceUrl.trim() }
+                val html = webContentHtml(
+                    title = title,
+                    author = request.author.trim(),
+                    sourceUrl = request.sourceUrl.trim(),
+                )
                 DetailParts(
                     extension = "md",
                     format = SourceContentFormat.DOCUMENT,
-                    htmlContent = webContentHtml(
-                        title = title,
-                        author = request.author.trim(),
-                        sourceUrl = request.sourceUrl.trim(),
-                    ),
+                    htmlContent = html,
                     sheets = emptyList(),
                     originalFileName = buildOriginalFileName(title, "md"),
+                    structuredContent = StructuredContent.Document(html),
                 )
             }
             is CreateSourceRequest.File -> {
@@ -315,6 +336,7 @@ internal object SourceSampleData {
         val sheets: List<SourceSheetTab>,
         val originalFileName: String? = null,
         val plainContent: String? = null,
+        val structuredContent: StructuredContent? = null,
     )
 
     private val samples = listOf(

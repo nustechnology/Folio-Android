@@ -3,6 +3,7 @@ package com.nus.folio.domain.usecase
 import com.nus.folio.testing.FakeSourceRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,19 +25,24 @@ class GetSourcesUseCaseTest {
     }
 
     @Test
-    fun `invoke forwards sourceType search and sort`() = runTest {
+    fun `invoke forwards sourceType search sort and paging`() = runTest {
         val result = useCase(
             spaceId = "1",
             sourceType = "File",
             search = "Turing",
             sort = com.nus.folio.domain.model.SourceSort.ALPHABETICAL_AZ,
+            page = 1,
+            limit = 3,
         )
 
         assertTrue(result.isSuccess)
         assertEquals("File", repository.lastSourceType)
         assertEquals("Turing", repository.lastSearch)
         assertEquals(com.nus.folio.domain.model.SourceSort.ALPHABETICAL_AZ, repository.lastSort)
+        assertEquals(1, repository.lastPage)
+        assertEquals(3, repository.lastLimit)
         assertEquals(1, result.getOrNull()?.sources?.size)
+        assertFalse(result.getOrNull()!!.hasMore)
     }
 
     @Test

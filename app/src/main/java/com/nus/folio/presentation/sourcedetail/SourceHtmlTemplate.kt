@@ -108,17 +108,36 @@ internal object SourceHtmlTemplate {
         }
     """.trimIndent()
 
-    private val documentStyles = ""
+    private val documentStyles = """
+        .pdf-page {
+            margin: 0 0 28px;
+            padding: 0 0 24px;
+            border-bottom: 1px solid #E6DCCB;
+        }
+        .pdf-page:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+    """.trimIndent()
 
     private val slidesStyles = """
+        .slide {
+            margin: 0 0 20px;
+            padding: 16px 18px;
+            border: 1px solid #E6DCCB;
+            border-radius: 12px;
+            background: #FFFBF5;
+        }
+        .slide:last-child {
+            margin-bottom: 0;
+        }
         .slide-heading {
             font-size: 22px;
             margin-top: 0;
         }
         .slide-divider {
-            border: none;
-            border-top: 1px solid #E6DCCB;
-            margin: 28px 0;
+            display: none;
         }
     """.trimIndent()
 

@@ -233,6 +233,32 @@ class SpaceViewModelTest {
     }
 
     @Test
+    fun `clearSearch clears query and reloads spaces`() {
+        val viewModel = createViewModel()
+        viewModel.onSearchQueryChange("Policy")
+        val callsAfterSearch = spaceRepository.getSpacesCallCount
+
+        viewModel.clearSearch()
+
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        assertNull(spaceRepository.lastSearchQuery)
+        assertTrue(spaceRepository.getSpacesCallCount > callsAfterSearch)
+    }
+
+    @Test
+    fun `clearSearch clears whitespace-only query`() {
+        val viewModel = createViewModel()
+        viewModel.onSearchQueryChange("   ")
+        val callsAfterSearch = spaceRepository.getSpacesCallCount
+
+        viewModel.clearSearch()
+
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        assertNull(spaceRepository.lastSearchQuery)
+        assertTrue(spaceRepository.getSpacesCallCount > callsAfterSearch)
+    }
+
+    @Test
     fun `newer search result is not overwritten by slower older search`() = runTest {
         val firstSearchStarted = CompletableDeferred<Unit>()
         val releaseFirstSearch = CompletableDeferred<Unit>()

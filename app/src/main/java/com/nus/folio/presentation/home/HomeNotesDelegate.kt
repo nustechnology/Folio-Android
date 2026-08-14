@@ -43,6 +43,7 @@ internal class HomeNotesDelegate(
     private val searchDebounceMs: Long,
     private val pageLimit: Int = NotePaging.DEFAULT_LIMIT,
     private val createMinDelayMs: Long = CREATE_MIN_DELAY_MS,
+    private val filterSkeletonMinDelayMs: Long = FILTER_SKELETON_MIN_DELAY_MS,
 ) {
 
     private var notesLoadJob: Job? = null
@@ -51,7 +52,13 @@ internal class HomeNotesDelegate(
     fun cancelSearchJob() {
         notesLoadJob?.cancel()
         notesLoadJob = null
-        state.update { it.copy(isLoadingMoreNotes = false, isSearchingNotes = false) }
+        state.update {
+            it.copy(
+                isLoadingMoreNotes = false,
+                isSearchingNotes = false,
+                isFilteringNotes = false,
+            )
+        }
     }
 
     fun scheduleSearchReload() {
@@ -74,7 +81,13 @@ internal class HomeNotesDelegate(
         if (state.value.isRefreshingNotes) return
         notesLoadJob?.cancel()
         notesLoadJob = scope.launch {
-            state.update { it.copy(isRefreshingNotes = true, isLoadingMoreNotes = false) }
+            state.update {
+                it.copy(
+                    isRefreshingNotes = true,
+                    isLoadingMoreNotes = false,
+                    isFilteringNotes = false,
+                )
+            }
             try {
                 loadNotesInternal(reset = true, showFullScreenLoading = false)
             } finally {
@@ -104,6 +117,7 @@ internal class HomeNotesDelegate(
         reset: Boolean,
         showFullScreenLoading: Boolean,
     ) {
+        val enforceMinSkeleton = reset && state.value.isFilteringNotes
         val current = state.value
         val page = if (reset) {
             NotePaging.DEFAULT_PAGE
@@ -121,56 +135,70 @@ internal class HomeNotesDelegate(
             state.update { it.copy(isLoadingMoreNotes = true) }
         }
 
-        val result = getNotesUseCase(
-            spaceId = spaceId,
-            search = current.searchQuery.trim().takeIf { it.isNotEmpty() },
-            sort = current.selectedNoteSort,
-            origin = current.selectedNoteFilter.toApiOrigin(),
-            page = page,
-            limit = pageLimit,
-        )
-
-        result
-            .onSuccess { library ->
-                state.update { ui ->
-                    val merged = if (reset) {
-                        library.notes
-                    } else {
-                        val existingIds = ui.allNotes.mapTo(HashSet()) { it.id }
-                        ui.allNotes + library.notes.filterNot { it.id in existingIds }
-                    }
-                    val next = ui.copy(
-                        notesError = null,
-                        allNotes = merged,
-                        notesAllCount = library.allCount,
-                        notesUserCreatedCount = library.userCreatedCount,
-                        notesSavedAnswerCount = library.savedAnswerCount,
-                        notesCurrentPage = library.page,
-                        notesHasMore = library.hasMore,
-                        isLoadingMoreNotes = false,
-                        isSearchingNotes = false,
-                    )
-                    next.copy(visibleNotes = filterNotes(next))
-                }
+        coroutineScope {
+            val resultDeferred = async {
+                getNotesUseCase(
+                    spaceId = spaceId,
+                    search = current.searchQuery.trim().takeIf { it.isNotEmpty() },
+                    sort = current.selectedNoteSort,
+                    origin = current.selectedNoteFilter.toApiOrigin(),
+                    page = page,
+                    limit = pageLimit,
+                )
             }
-            .onFailure { throwable ->
-                state.update { ui ->
-                    if (reset) {
-                        ui.copy(
+            if (enforceMinSkeleton) {
+                delay(filterSkeletonMinDelayMs)
+            }
+            resultDeferred.await()
+                .onSuccess { library ->
+                    state.update { ui ->
+                        val merged = if (reset) {
+                            library.notes
+                        } else {
+                            val existingIds = ui.allNotes.mapTo(HashSet()) { it.id }
+                            ui.allNotes + library.notes.filterNot { it.id in existingIds }
+                        }
+                        val next = ui.copy(
+                            notesError = null,
+                            allNotes = merged,
+                            notesAllCount = library.allCount,
+                            notesUserCreatedCount = library.userCreatedCount,
+                            notesSavedAnswerCount = library.savedAnswerCount,
+                            notesCurrentPage = library.page,
+                            notesHasMore = library.hasMore,
                             isLoadingMoreNotes = false,
                             isSearchingNotes = false,
-                            notesError = throwable.message.orEmpty(),
+                            isFilteringNotes = false,
                         )
-                    } else {
-                        ui.copy(isLoadingMoreNotes = false)
+                        next.copy(visibleNotes = filterNotes(next))
                     }
                 }
-            }
+                .onFailure { throwable ->
+                    state.update { ui ->
+                        if (reset) {
+                            ui.copy(
+                                isLoadingMoreNotes = false,
+                                isSearchingNotes = false,
+                                isFilteringNotes = false,
+                                notesError = throwable.message.orEmpty(),
+                            )
+                        } else {
+                            ui.copy(isLoadingMoreNotes = false)
+                        }
+                    }
+                }
+        }
     }
 
     fun onNoteFilterSelected(filter: NoteFilter) {
         if (filter == state.value.selectedNoteFilter) return
-        state.update { it.copy(selectedNoteFilter = filter) }
+        state.update {
+            it.copy(
+                selectedNoteFilter = filter,
+                isFilteringNotes = true,
+                notesError = null,
+            )
+        }
         loadNotesOnly()
     }
 
@@ -187,7 +215,14 @@ internal class HomeNotesDelegate(
             state.update { it.copy(showNoteSortSheet = false) }
             return
         }
-        state.update { it.copy(showNoteSortSheet = false, selectedNoteSort = sort) }
+        state.update {
+            it.copy(
+                showNoteSortSheet = false,
+                selectedNoteSort = sort,
+                isFilteringNotes = true,
+                notesError = null,
+            )
+        }
         loadNotesOnly()
     }
 
@@ -539,5 +574,6 @@ internal class HomeNotesDelegate(
 
     companion object {
         private const val CREATE_MIN_DELAY_MS = 1_000L
+        private const val FILTER_SKELETON_MIN_DELAY_MS = 500L
     }
 }

@@ -41,6 +41,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -89,14 +91,22 @@ internal fun AnimatedModalSheet(
     contentWindowInsets: WindowInsets = WindowInsets.navigationBars,
     content: @Composable (requestDismiss: ModalSheetDismiss) -> Unit,
 ) {
-    val visibleState = remember {
-        MutableTransitionState(false).apply { targetState = true }
-    }
+    val visibleState = remember { MutableTransitionState(false) }
+    var entranceReady by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val dismissThresholdPx = with(density) { ModalSheetDismissDragThreshold.toPx() }
     val dragOffsetY = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        entranceReady = true
+        visibleState.targetState = true
+    }
 
     val requestDismiss = ModalSheetDismiss { after ->
         if (!visibleState.targetState) return@ModalSheetDismiss
@@ -173,12 +183,26 @@ internal fun AnimatedModalSheet(
     }
 
     LaunchedEffect(visibleState.currentState, visibleState.targetState, visibleState.isIdle) {
+        if (!entranceReady) return@LaunchedEffect
         if (!visibleState.currentState && !visibleState.targetState && visibleState.isIdle) {
             val action = pendingAction
             pendingAction = null
             action?.invoke()
             onDismiss()
         }
+    }
+
+    if (!entranceReady) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        )
+        return
     }
 
     BackHandler { requestDismiss() }
@@ -201,6 +225,7 @@ internal fun AnimatedModalSheet(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = {
+                            focusManager.clearFocus()
                             if (dismissOnScrimClick) requestDismiss()
                         },
                     ),
@@ -225,6 +250,7 @@ internal fun AnimatedModalSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .dismissKeyboardOnTapOutside()
                     .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
                     .nestedScroll(dragConnection)
                     .draggable(
