@@ -146,6 +146,29 @@ internal object FolioHttp {
         parse = parse,
     )
 
+    fun <T> putJson(
+        url: String,
+        jsonBody: String,
+        accessToken: String? = null,
+        connectTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
+        readTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
+        failureLabel: String,
+        mapError: (body: String, code: Int, label: String) -> Throwable = ::unauthorizedOrIo,
+        parse: (Response) -> T,
+    ): T = execute(
+        method = "PUT",
+        url = url,
+        headers = jsonContentHeaders(accessToken),
+        connectTimeoutMs = connectTimeoutMs,
+        readTimeoutMs = readTimeoutMs,
+        writeBody = { write(jsonBody.toByteArray(Charsets.UTF_8)) },
+        logBody = jsonBody,
+        logContentType = "application/json",
+        failureLabel = failureLabel,
+        mapError = mapError,
+        parse = parse,
+    )
+
     /**
      * JSON update with wire method PATCH.
      *

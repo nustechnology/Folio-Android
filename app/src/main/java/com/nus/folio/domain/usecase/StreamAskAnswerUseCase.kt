@@ -11,10 +11,12 @@ class StreamAskAnswerUseCase(
         spaceId: String,
         question: String,
         sourceId: String?,
+        conversationId: String? = null,
     ): Flow<AskStreamEvent> =
         repository.streamAnswer(
             spaceId = spaceId,
             question = question,
             sourceId = sourceId,
+            conversationId = conversationId,
         )
 }

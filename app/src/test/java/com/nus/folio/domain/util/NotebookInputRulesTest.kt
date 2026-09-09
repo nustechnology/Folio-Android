@@ -28,4 +28,10 @@ class NotebookInputRulesTest {
     fun `clampContent keeps empty string`() {
         assertEquals("", NotebookInputRules.clampContent(""))
     }
+
+    @Test
+    fun `html and json caps match API limits`() {
+        assertEquals(1_000_000, NotebookInputRules.MAX_HTML_LENGTH)
+        assertEquals(2 * 1024 * 1024, NotebookInputRules.MAX_JSON_BODY_BYTES)
+    }
 }

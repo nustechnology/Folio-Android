@@ -1,31 +1,21 @@
 package com.nus.folio.data.network
 
 import com.nus.folio.domain.model.Source
-import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.model.SourceDetail
 import com.nus.folio.domain.model.SourceLibrary
 import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingEvent
-import com.nus.folio.domain.model.SourceProcessingState
-import com.nus.folio.domain.model.SourceSheetTab
 import com.nus.folio.domain.model.SourceSort
-import com.nus.folio.domain.model.SourceStatus
-import com.nus.folio.domain.model.SourceType
-import com.nus.folio.domain.model.StructuredContent
-import com.nus.folio.domain.model.StructuredContentHtml
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.DataOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URLEncoder
-import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 
 interface SourcesApi {
@@ -444,44 +434,9 @@ class SourcesApiClient(
          */
         private val MULTIPART_MIME_TYPE_PATTERN =
             Regex("^[A-Za-z0-9][A-Za-z0-9!#\$&+\\-.^_]*/[A-Za-z0-9][A-Za-z0-9!#\$&+\\-.^_]*$")
-        internal const val MAX_SSE_RECONNECT_ATTEMPTS = 5
-        /**
-         * Minimum time an accepted SSE connection must stay open before the reconnect
-         * budget resets without having received an event (e.g. keepalive-only streams).
-         */
-        internal const val MIN_SSE_STABLE_OPEN_MS = 10_000L
-        private const val SSE_BACKOFF_BASE_MS = 1_000L
-        private const val SSE_BACKOFF_MAX_MS = 16_000L
         const val SOURCE_TYPE_WEB = "Web"
         const val SOURCE_TYPE_MANUAL = "Manual"
         const val SOURCE_TYPE_FILE = "File"
-
-        /**
-         * Next 1-based reconnect attempt after a stream that had reached HTTP success.
-         * Resets the budget when the connection stayed open for [MIN_SSE_STABLE_OPEN_MS];
-         * otherwise continues counting consecutive flaps. When [openedAtMs] is null
-         * (never opened), always increments.
-         */
-        internal fun nextSseReconnectAttempt(
-            currentAttempt: Int,
-            openedAtMs: Long?,
-            nowMs: Long,
-        ): Int {
-            val base = when {
-                openedAtMs == null -> currentAttempt
-                nowMs - openedAtMs >= MIN_SSE_STABLE_OPEN_MS -> 0
-                else -> currentAttempt
-            }
-            return base + 1
-        }
-
-        /** Exponential backoff for SSE reconnect attempts (1-based). Caps at 16s. */
-        internal fun sseBackoffMillis(attempt: Int): Long {
-            require(attempt >= 1) { "attempt must be >= 1" }
-            val shift = (attempt - 1).coerceAtMost(4)
-            val delay = SSE_BACKOFF_BASE_MS shl shift
-            return delay.coerceAtMost(SSE_BACKOFF_MAX_MS)
-        }
 
         /**
          * Exact UTF-8 byte length of the multipart body written by [createFileSource].
@@ -634,174 +589,6 @@ class SourcesApiClient(
 
         private const val MAX_BOUNDARY_ATTEMPTS = 8
 
-        internal fun parseSseDataPayload(payload: String): SourceProcessingEvent? {
-            if (payload.isBlank()) return null
-            val sourceId = matchJsonString(payload, "sourceId") ?: return null
-            val stateRaw = matchJsonString(payload, "state").orEmpty()
-            val state = SourceProcessingEvent.parseState(stateRaw)
-            val progress = matchJsonInt(payload, "progress") ?: defaultProgressFor(state)
-            return SourceProcessingEvent(
-                sourceId = sourceId,
-                state = state,
-                progress = progress.coerceIn(0, 100),
-            )
-        }
-
-        /**
-         * Processes an SSE `id:` field per the EventSource spec.
-         *
-         * @return the new last-event-id buffer value, or `null` if the field must be ignored
-         * (value contains U+0000 NULL).
-         */
-        internal fun parseSseIdFieldValue(line: String): String? {
-            require(line.startsWith("id:")) { "Expected id: field, got: $line" }
-            val value = line.removePrefix("id:").trimStart()
-            if ('\u0000' in value) return null
-            return value
-        }
-
-        private fun matchJsonString(payload: String, key: String): String? {
-            val regex = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"")
-            return regex.find(payload)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
-        }
-
-        private fun matchJsonInt(payload: String, key: String): Int? {
-            val regex = Regex("\"$key\"\\s*:\\s*(-?\\d+)")
-            return regex.find(payload)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-
-        internal fun defaultProgressFor(state: SourceProcessingState): Int = when (state) {
-            SourceProcessingState.ADDED -> 0
-            SourceProcessingState.EXTRACTING_TEXT -> 25
-            SourceProcessingState.INDEXING_EVIDENCE -> 50
-            SourceProcessingState.READY,
-            SourceProcessingState.FAILED,
-            -> 100
-        }
-
-        internal fun mapSourceType(raw: String): SourceType = when (raw.trim().lowercase(Locale.US)) {
-            "web" -> SourceType.WEB
-            "manual", "text" -> SourceType.TEXT
-            "file", "pdf" -> SourceType.FILE
-            "book" -> SourceType.BOOK
-            else -> SourceType.FILE
-        }
-
-        internal fun mapProcessingState(raw: String): SourceStatus =
-            when (raw.trim().lowercase(Locale.US)) {
-                "ready", "completed", "done", "processed" -> SourceStatus.READY
-                "failed", "error" -> SourceStatus.FAILED
-                else -> SourceStatus.PROCESSING
-            }
-
-        internal fun fileExtensionFrom(fileName: String, fileType: String): String {
-            val fromName = fileName.substringAfterLast('.', missingDelimiterValue = "")
-                .trim()
-                .lowercase(Locale.US)
-                .takeIf { it.isNotBlank() && it.length <= 8 && !it.contains(' ') && it != "null" }
-            if (fromName != null) return fromName
-            val type = fileType.trim().lowercase(Locale.US)
-            if (type.isBlank() || type == "null") return ""
-            return when {
-                type.contains("pdf") -> "pdf"
-                type.contains("html") -> "html"
-                type.contains("markdown") || type == "md" -> "md"
-                type.contains("spreadsheet") || type.contains("excel") || type == "xlsx" -> "xlsx"
-                type.contains("presentation") || type.contains("powerpoint") || type == "pptx" -> "pptx"
-                type.contains("plain") || type == "txt" || type.contains("text") -> "txt"
-                else -> type.substringAfterLast('/').takeIf { it.isNotBlank() && it != "null" }.orEmpty()
-            }
-        }
-
-        internal fun contentFormatFrom(extension: String): SourceContentFormat =
-            when (extension.trim().lowercase(Locale.US)) {
-                "xlsx", "xls", "csv" -> SourceContentFormat.SHEET
-                "pptx", "ppt" -> SourceContentFormat.SLIDES
-                else -> SourceContentFormat.DOCUMENT
-            }
-
-        internal fun parseStructuredContent(json: JSONObject): StructuredContent? =
-            SourcesJsonParsers.parseStructuredContent(json)
-
-        internal fun parseStructuredContent(raw: String?): StructuredContent? =
-            SourcesJsonParsers.parseStructuredContent(raw)
-
-        internal fun contentToHtml(content: String): String {
-            val trimmed = content.trim()
-            if (trimmed.isEmpty()) return ""
-            if (looksLikeHtml(trimmed)) {
-                return sanitizeHtmlFragment(trimmed)
-            }
-            val escaped = escapeHtml(trimmed)
-            return escaped
-                .split(Regex("\\r?\\n\\r?\\n"))
-                .joinToString(separator = "") { paragraph ->
-                    val lines = paragraph.trim().replace("\r\n", "\n").replace("\n", "<br/>")
-                    "<p>$lines</p>"
-                }
-        }
-
-        internal fun sheetContentToHtml(content: String): String {
-            val trimmed = content.trim()
-            if (trimmed.isEmpty()) return ""
-            if (trimmed.contains("<table", ignoreCase = true)) {
-                return sanitizeHtmlFragment(trimmed)
-            }
-
-            val lines = trimmed.lines()
-                .map { it.trimEnd() }
-                .filter { it.isNotBlank() }
-                .filterNot { line ->
-                    // Skip markdown table separator rows: |---|---|
-                    line.replace(" ", "").matches(Regex("^\\|?[-:|]+\\|?$"))
-                }
-            if (lines.isEmpty()) return contentToHtml(content)
-
-            val delimiter = when {
-                lines.any { it.contains('\t') } -> "\t"
-                lines.count { it.count { ch -> ch == '|' } >= 2 } >= (lines.size / 2).coerceAtLeast(1) -> "|"
-                lines.count { it.contains(',') } >= (lines.size / 2).coerceAtLeast(1) -> ","
-                else -> null
-            }
-            if (delimiter == null) return contentToHtml(content)
-
-            val rows = lines.map { line ->
-                when (delimiter) {
-                    "|" -> line.trim().trim('|').split('|').map { cell -> escapeHtml(cell.trim()) }
-                    else -> line.split(delimiter).map { cell -> escapeHtml(cell.trim()) }
-                }
-            }.filter { row -> row.any { cell -> cell.isNotBlank() } }
-            if (rows.isEmpty()) return contentToHtml(content)
-
-            val columnCount = rows.maxOf { it.size }
-            val normalized = rows.map { row ->
-                if (row.size >= columnCount) row
-                else row + List(columnCount - row.size) { "" }
-            }
-            val header = normalized.first()
-            val body = normalized.drop(1)
-            val headerHtml = header.joinToString("") { "<th>$it</th>" }
-            val bodyHtml = body.joinToString("") { row ->
-                "<tr>${row.joinToString("") { cell -> "<td>$cell</td>" }}</tr>"
-            }
-            return buildString {
-                append("<table><thead><tr>")
-                append(headerHtml)
-                append("</tr></thead>")
-                if (bodyHtml.isNotEmpty()) {
-                    append("<tbody>")
-                    append(bodyHtml)
-                    append("</tbody>")
-                }
-                append("</table>")
-            }
-        }
-
-        private fun looksLikeHtml(content: String): Boolean =
-            content.contains("<table", ignoreCase = true) ||
-                content.contains("<h1", ignoreCase = true) ||
-                content.contains("<p", ignoreCase = true)
-
         /**
          * Sanitizes untrusted HTML fragments before they are assigned to
          * [com.nus.folio.domain.model.SourceDetail.htmlContent] / sheet tables.
@@ -887,13 +674,6 @@ class SourcesApiClient(
             }
         }
 
-        private fun escapeHtml(value: String): String =
-            value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-
         /**
          * Tags that must never appear in source preview HTML (removed with body when present).
          */
@@ -936,191 +716,5 @@ class SourcesApiClient(
             """(?i)\bhref\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""",
         )
 
-        internal fun parseSheets(json: JSONObject, fallbackContent: String): List<SourceSheetTab> {
-            val sheetsArray = json.optJSONArray("sheets")
-            if (sheetsArray != null && sheetsArray.length() > 0) {
-                return buildList {
-                    for (index in 0 until sheetsArray.length()) {
-                        val item = sheetsArray.optJSONObject(index) ?: continue
-                        val name = item.optString("name")
-                            .ifBlank { item.optString("title") }
-                            .ifBlank { "Sheet ${index + 1}" }
-                        val tableHtml = sequenceOf("htmlTable", "content", "html")
-                            .map { key -> item.optString(key) }
-                            .firstOrNull { it.isNotBlank() }
-                            .orEmpty()
-                            .let(::sheetContentToHtml)
-                        if (tableHtml.isBlank()) continue
-                        add(
-                            SourceSheetTab(
-                                id = item.optString("id").ifBlank { "sheet-$index" },
-                                name = name,
-                                htmlTable = tableHtml,
-                            ),
-                        )
-                    }
-                }
-            }
-            val tableHtml = sheetContentToHtml(fallbackContent)
-            if (tableHtml.isBlank()) return emptyList()
-            return listOf(
-                SourceSheetTab(
-                    id = "sheet-1",
-                    name = "Sheet 1",
-                    htmlTable = tableHtml,
-                ),
-            )
-        }
-
-        internal fun parsePreviewUrl(responseBody: String): String? {
-            if (responseBody.isBlank()) return null
-            return matchJsonString(responseBody, "previewUrl")?.trim()?.takeIf { it.isNotBlank() }
-        }
-
-        internal fun parseSourceDetailResponse(
-            responseBody: String,
-            nowMillis: Long = System.currentTimeMillis(),
-        ): SourceDetail {
-            if (responseBody.isBlank()) {
-                throw IOException("Get source failed: empty response")
-            }
-            val root = JSONObject(responseBody)
-            val sourceJson = root.optJSONObject("data")?.optJSONObject("source")
-                ?: root.optJSONObject("source")
-                ?: throw IOException("Get source failed: missing source payload")
-            return parseSourceDetail(sourceJson, nowMillis)
-        }
-
-        internal fun parseSource(json: JSONObject, nowMillis: Long): Source {
-            val id = json.optString("id").takeIf { it.isNotBlank() }
-                ?: throw IOException("Source payload missing id")
-            val spaceId = sequenceOf("researchSpaceId", "spaceId")
-                .map { json.optString(it) }
-                .firstOrNull { it.isNotBlank() }
-                .orEmpty()
-            val title = json.optString("title").takeIf { it.isNotBlank() } ?: "Untitled source"
-            val author = json.optString("author").orEmpty()
-            val createdAt = json.optString("createdAt").orEmpty()
-            val type = mapSourceType(json.optString("sourceType"))
-            val fileName = json.optString("fileName").orEmpty()
-            val fileType = json.optString("fileType").orEmpty()
-            val fileExtension = when (type) {
-                SourceType.TEXT, SourceType.WEB -> ""
-                else -> fileExtensionFrom(fileName = fileName, fileType = fileType)
-            }
-
-            return Source(
-                id = id,
-                title = title,
-                type = type,
-                author = author,
-                addedLabel = formatAddedLabel(createdAt, nowMillis),
-                status = mapProcessingState(json.optString("processingState")),
-                spaceId = spaceId,
-                fileExtension = fileExtension,
-            )
-        }
-
-        private fun parseSourceDetail(json: JSONObject, nowMillis: Long): SourceDetail {
-            val listSource = parseSource(json, nowMillis)
-            val fileName = json.optString("fileName").orEmpty()
-            val extension = listSource.fileExtension
-            val rawContent = json.optString("content").orEmpty()
-            val structuredContent = parseStructuredContent(json)
-            val contentFormat = structuredContent?.let(StructuredContentHtml::contentFormat)
-                ?: contentFormatFrom(extension)
-            val sheets = when (structuredContent) {
-                is StructuredContent.Sheets ->
-                    StructuredContentHtml.toSheetTabs(structuredContent.sheets)
-                else -> if (contentFormat == SourceContentFormat.SHEET) {
-                    parseSheets(json, rawContent)
-                } else {
-                    emptyList()
-                }
-            }
-            val htmlContent = when (structuredContent) {
-                is StructuredContent.Document -> structuredContent.html
-                is StructuredContent.Slides ->
-                    StructuredContentHtml.slidesToHtml(structuredContent.slides)
-                        .takeIf { it.isNotBlank() }
-                is StructuredContent.Sheets -> null
-                null -> when {
-                    contentFormat == SourceContentFormat.SHEET -> null
-                    else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
-                }
-            }
-            val plainContent = rawContent.takeIf {
-                listSource.type == SourceType.TEXT && it.isNotBlank()
-            }
-            return SourceDetail(
-                id = listSource.id,
-                title = listSource.title,
-                author = listSource.author,
-                addedLabel = listSource.addedLabel,
-                type = listSource.type,
-                status = listSource.status,
-                spaceId = listSource.spaceId,
-                fileExtension = extension,
-                contentFormat = contentFormat,
-                originalFileName = fileName.ifBlank {
-                    if (extension.isNotBlank()) "${listSource.title}.$extension" else listSource.title
-                },
-                htmlContent = htmlContent,
-                sheets = sheets,
-                plainContent = plainContent,
-                structuredContent = structuredContent,
-            )
-        }
-
-        internal fun formatAddedLabel(isoInstant: String, nowMillis: Long): String {
-            val millis = parseIsoToMillis(isoInstant) ?: return "Added just now"
-            val delta = (nowMillis - millis).coerceAtLeast(0L)
-            val minutes = delta / 60_000L
-            val hours = delta / 3_600_000L
-            val days = delta / 86_400_000L
-            return when {
-                minutes < 1L -> "Added just now"
-                minutes < 60L -> "Added ${minutes}m ago"
-                hours < 24L -> "Added ${hours}h ago"
-                days < 7L -> "Added ${days}d ago"
-                else -> "Added ${days / 7L}w ago"
-            }
-        }
-
-        private fun parseIsoToMillis(isoInstant: String): Long? {
-            val value = normalizeIsoTimestamp(isoInstant.trim())
-            if (value.isEmpty()) return null
-            val patterns = listOf(
-                "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-                "yyyy-MM-dd'T'HH:mm:ssXXX",
-                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-                "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            )
-            for (pattern in patterns) {
-                val parsed = runCatching {
-                    SimpleDateFormat(pattern, Locale.US).apply {
-                        timeZone = TimeZone.getTimeZone("UTC")
-                        isLenient = false
-                    }.parse(value)?.time
-                }.getOrNull()
-                if (parsed != null) return parsed
-            }
-            return null
-        }
-
-        internal fun normalizeIsoTimestamp(isoInstant: String): String {
-            val value = isoInstant.trim()
-            val dotIndex = value.indexOf('.')
-            if (dotIndex < 0) return value
-
-            var end = dotIndex + 1
-            while (end < value.length && value[end].isDigit()) {
-                end++
-            }
-            if (end == dotIndex + 1) return value
-
-            val millis = value.substring(dotIndex + 1, end).padEnd(3, '0').take(3)
-            return value.substring(0, dotIndex + 1) + millis + value.substring(end)
-        }
     }
 }

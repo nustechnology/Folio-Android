@@ -1,8 +1,15 @@
 package com.nus.folio.presentation.home.pane
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -196,7 +204,7 @@ internal fun AskAssistantMessageCard(
 ) {
     val showThinkingRow = message.isStreaming
     val showContent = message.content.isNotBlank()
-    val showToolbar = !message.isStreaming && message.content.isNotBlank()
+    val showToolbar = !message.isStreaming && !message.isFailed && message.content.isNotBlank()
     val showLimitation = !message.isStreaming && message.limitation != null
 
     Row(
@@ -343,6 +351,9 @@ internal fun AskLimitationBanner(
     )
 }
 
+private const val AskFeedbackEnterMillis = 220
+private const val AskFeedbackExitMillis = 140
+
 @Composable
 internal fun AskResponseToolbar(
     messageId: String,
@@ -353,6 +364,8 @@ internal fun AskResponseToolbar(
     onFeedback: (messageId: String, useful: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showFeedbackChoices by rememberSaveable(messageId) { mutableStateOf(false) }
+    val showFeedbackPrompt = feedback == AskFeedback.NONE
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -370,21 +383,88 @@ internal fun AskResponseToolbar(
             selected = isSavedAsNote,
             onClick = { onSaveAsNote(messageId) },
         )
-        Text(
-            text = stringResource(R.string.home_ask_useful_label),
-            modifier = Modifier
-                .clip(AskSourceChipShape)
-                .clickable { onFeedback(messageId, true) }
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (feedback == AskFeedback.USEFUL) {
-                AskButtonBackground
-            } else {
-                HomeTextSecondary
-            },
-        )
+        AnimatedVisibility(
+            visible = showFeedbackPrompt,
+            enter = fadeIn(animationSpec = tween(AskFeedbackEnterMillis)) +
+                slideInHorizontally(
+                    animationSpec = tween(AskFeedbackEnterMillis),
+                    initialOffsetX = { it / 2 },
+                ),
+            exit = fadeOut(animationSpec = tween(AskFeedbackExitMillis)) +
+                slideOutHorizontally(
+                    animationSpec = tween(AskFeedbackExitMillis),
+                    targetOffsetX = { it / 2 },
+                ),
+        ) {
+            AnimatedContent(
+                targetState = showFeedbackChoices,
+                transitionSpec = {
+                    (
+                        fadeIn(animationSpec = tween(AskFeedbackEnterMillis)) +
+                            slideInHorizontally(
+                                animationSpec = tween(AskFeedbackEnterMillis),
+                                initialOffsetX = { it / 2 },
+                            )
+                        ) togetherWith (
+                        fadeOut(animationSpec = tween(AskFeedbackExitMillis)) +
+                            slideOutHorizontally(
+                                animationSpec = tween(AskFeedbackExitMillis),
+                                targetOffsetX = { -it / 3 },
+                            )
+                        )
+                },
+                label = "askFeedbackChoices",
+            ) { showChoices ->
+                if (showChoices) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        AskFeedbackChoice(
+                            text = stringResource(R.string.home_ask_feedback_yes),
+                            color = AskButtonBackground,
+                            onClick = { onFeedback(messageId, true) },
+                        )
+                        AskFeedbackChoice(
+                            text = stringResource(R.string.home_ask_feedback_no),
+                            color = HomeTextSecondary,
+                            onClick = { onFeedback(messageId, false) },
+                        )
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.home_ask_useful_label),
+                        modifier = Modifier
+                            .clip(AskSourceChipShape)
+                            .clickable { showFeedbackChoices = true }
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = HomeTextSecondary,
+                    )
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun AskFeedbackChoice(
+    text: String,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        modifier = modifier
+            .clip(AskSourceChipShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        color = color,
+    )
 }
 
 @Composable

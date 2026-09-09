@@ -1,6 +1,7 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
@@ -34,6 +35,7 @@ import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
+import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.model.CreateSourceRequest
@@ -97,6 +99,7 @@ class HomeViewModelTest {
             getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
             streamAskAnswerUseCase = StreamAskAnswerUseCase(askRepository),
+            submitAskFeedbackUseCase = SubmitAskFeedbackUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
             getNoteDetailUseCase = GetNoteDetailUseCase(noteRepository),
             createNoteUseCase = CreateNoteUseCase(noteRepository),
@@ -967,7 +970,109 @@ class HomeViewModelTest {
         assertFalse(messages[1].isStreaming)
         assertTrue(messages[1].content.isNotBlank())
         assertEquals(1, askRepository.streamAnswerCallCount)
+        assertNull(askRepository.lastStreamConversationId)
         assertNull(viewModel.uiState.value.userMessage)
+    }
+
+    @Test
+    fun `onAskSubmit SSE error marks assistant failed`() = runTest {
+        askRepository.streamEvents = listOf(AskStreamEvent.Delta("Partial "))
+        askRepository.streamThrow = java.io.IOException("Ask generation failed")
+        val viewModel = createViewModel()
+
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertTrue(assistant.isFailed)
+        assertFalse(assistant.isStreaming)
+        assertEquals("Partial ", assistant.content)
+        assertEquals(HomeActionError.NETWORK, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onAskSubmit replaces streamed tokens with done content`() = runTest {
+        askRepository.streamEvents = listOf(
+            AskStreamEvent.Delta("draft "),
+            AskStreamEvent.Delta("tokens"),
+            AskStreamEvent.Completed(
+                content = "Canonical answer [1].",
+                citations = listOf(
+                    AskCitation(
+                        index = 1,
+                        sourceId = "1",
+                        sourceTitle = "Paper",
+                        sourceType = SourceType.FILE,
+                        evidenceText = "Canonical answer",
+                    ),
+                ),
+                limitation = "Limited coverage",
+            ),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertEquals("Canonical answer [1].", assistant.content)
+        assertEquals(1, assistant.citations.size)
+        assertEquals("Limited coverage", assistant.limitation)
+        assertFalse(assistant.isStreaming)
+        assertFalse(assistant.wasStopped)
+    }
+
+    @Test
+    fun `onAskSubmit applies citations before done`() = runTest {
+        askRepository.streamEvents = listOf(
+            AskStreamEvent.Delta("Answer [1]."),
+            AskStreamEvent.Citations(
+                listOf(
+                    AskCitation(
+                        index = 1,
+                        sourceId = "5",
+                        sourceTitle = "Attention Is All You Need",
+                    ),
+                ),
+            ),
+            AskStreamEvent.Completed(content = "Answer [1]."),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertEquals("5", assistant.citations.single().sourceId)
+    }
+
+    @Test
+    fun `onAskSubmit passes conversationId on follow-up question`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("First question")
+        advanceUntilIdle()
+
+        viewModel.onAskSubmit("Follow-up")
+        advanceUntilIdle()
+
+        assertEquals(2, askRepository.streamAnswerCallCount)
+        assertEquals("conv-1", askRepository.lastStreamConversationId)
+        assertEquals("Follow-up", askRepository.lastStreamQuestion)
+    }
+
+    @Test
+    fun `onNewConversation clears conversationId for next ask`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("First question")
+        advanceUntilIdle()
+
+        viewModel.onNewConversation()
+        viewModel.onAskSubmit("New thread")
+        advanceUntilIdle()
+
+        assertEquals(2, askRepository.streamAnswerCallCount)
+        assertNull(askRepository.lastStreamConversationId)
+        assertEquals("New thread", askRepository.lastStreamQuestion)
     }
 
     @Test
@@ -998,9 +1103,74 @@ class HomeViewModelTest {
             .first { it.role == AskMessageRole.ASSISTANT }.id
 
         viewModel.onAskFeedback(assistantId, useful = true)
+        advanceUntilIdle()
 
         val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
         assertEquals(AskFeedback.USEFUL, assistant.feedback)
+        assertEquals(HomeUserMessage.ASK_FEEDBACK_RECORDED, viewModel.uiState.value.userMessage)
+        assertEquals(1, askRepository.submitFeedbackCallCount)
+        assertEquals("1", askRepository.lastFeedbackSpaceId)
+        assertEquals("conv-1", askRepository.lastFeedbackConversationId)
+        assertEquals("msg-1", askRepository.lastFeedbackMessageId)
+        assertEquals(AskFeedbackRating.USEFUL, askRepository.lastFeedbackRating)
+    }
+
+    @Test
+    fun `onAskFeedback records not useful and toast`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskFeedback(assistantId, useful = false)
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertEquals(AskFeedback.NOT_USEFUL, assistant.feedback)
+        assertEquals(HomeUserMessage.ASK_FEEDBACK_RECORDED, viewModel.uiState.value.userMessage)
+        assertEquals(AskFeedbackRating.NOT_USEFUL, askRepository.lastFeedbackRating)
+    }
+
+    @Test
+    fun `onAskFeedback failure reverts optimistic rating and shows error`() = runTest {
+        askRepository.submitFeedbackResult = Result.failure(IllegalStateException("offline"))
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskFeedback(assistantId, useful = true)
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertEquals(AskFeedback.NONE, assistant.feedback)
+        assertNull(viewModel.uiState.value.userMessage)
+        assertEquals(HomeActionError.GENERIC, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onAskFeedback applies rating before request completes`() = runTest {
+        val releaseFeedback = CompletableDeferred<Unit>()
+        askRepository.submitFeedbackGate = releaseFeedback
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskFeedback(assistantId, useful = true)
+        advanceUntilIdle()
+
+        val pending = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertEquals(AskFeedback.USEFUL, pending.feedback)
+        assertNull(viewModel.uiState.value.userMessage)
+
+        releaseFeedback.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(AskFeedback.USEFUL, viewModel.uiState.value.askMessages.first { it.id == assistantId }.feedback)
         assertEquals(HomeUserMessage.ASK_FEEDBACK_RECORDED, viewModel.uiState.value.userMessage)
     }
 
@@ -1178,6 +1348,7 @@ class HomeViewModelTest {
             viewModel.uiState.value.askSuggestions.first(),
         )
         assertEquals(1, askRepository.getSuggestedQuestionsCallCount)
+        assertEquals("1", askRepository.lastSuggestedSpaceId)
         assertEquals("1", askRepository.lastSuggestedSourceId)
     }
 
@@ -1190,6 +1361,7 @@ class HomeViewModelTest {
         viewModel.onAskScopeOptionSelected(null)
 
         assertTrue(viewModel.uiState.value.askSuggestions.isEmpty())
+        assertEquals(null, askRepository.lastSuggestedSourceId)
     }
 
     @Test
@@ -1952,6 +2124,40 @@ class HomeViewModelTest {
         assertFalse(viewModel.uiState.value.isLoadingNotebook)
         assertEquals("Saved content", viewModel.uiState.value.notebookContent)
         assertTrue(notebookRepository.getNotebookCallCount >= 1)
+    }
+
+    @Test
+    fun `loadNotebook shows cached content with STALE status when notebook is stale`() = runTest {
+        notebookRepository.seed("1", "Cached content", isStale = true)
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoadingNotebook)
+        assertEquals("Cached content", viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.STALE, viewModel.uiState.value.notebookSaveStatus)
+    }
+
+    @Test
+    fun `loadNotebook shows READ_ONLY status and ignores edits when conversion is lossy`() = runTest {
+        notebookRepository.seed("1", "# T\n\nSub", isReadOnly = true)
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertEquals("# T\n\nSub", viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.READ_ONLY, viewModel.uiState.value.notebookSaveStatus)
+
+        viewModel.onNotebookContentChange("should not save")
+        advanceUntilIdle()
+
+        assertEquals("# T\n\nSub", viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.READ_ONLY, viewModel.uiState.value.notebookSaveStatus)
+        assertEquals(0, notebookRepository.saveNotebookCallCount)
     }
 
     @Test

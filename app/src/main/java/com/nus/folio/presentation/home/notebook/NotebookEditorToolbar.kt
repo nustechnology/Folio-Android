@@ -52,6 +52,7 @@ internal fun NotebookEditorToolbar(
     onRetrySaveClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val editable = saveStatus != NotebookSaveStatus.READ_ONLY
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -64,70 +65,120 @@ internal fun NotebookEditorToolbar(
     ) {
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_bold),
-            enabled = true,
+            enabled = editable,
             onClick = onBoldClick,
         ) {
-            Text(text = "B", fontWeight = FontWeight.Bold, color = HomeTextPrimary, fontSize = 16.sp)
+            Text(
+                text = stringResource(R.string.notebook_toolbar_bold_symbol),
+                fontWeight = FontWeight.Bold,
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 16.sp,
+            )
         }
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_italic),
-            enabled = true,
+            enabled = editable,
             onClick = onItalicClick,
         ) {
-            Text(text = "I", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = HomeTextPrimary, fontSize = 16.sp)
+            Text(
+                text = stringResource(R.string.notebook_toolbar_italic_symbol),
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 16.sp,
+            )
         }
         NotebookToolbarDivider()
-        NotebookToolbarTextButton(label = stringResource(R.string.notebook_toolbar_h1), onClick = onHeading1Click) {
-            Text(text = "H1", color = HomeTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        NotebookToolbarTextButton(
+            label = stringResource(R.string.notebook_toolbar_h1),
+            enabled = editable,
+            onClick = onHeading1Click,
+        ) {
+            Text(
+                text = stringResource(R.string.notebook_toolbar_h1),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
-        NotebookToolbarTextButton(label = stringResource(R.string.notebook_toolbar_h2), onClick = onHeading2Click) {
-            Text(text = "H2", color = HomeTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        NotebookToolbarTextButton(
+            label = stringResource(R.string.notebook_toolbar_h2),
+            enabled = editable,
+            onClick = onHeading2Click,
+        ) {
+            Text(
+                text = stringResource(R.string.notebook_toolbar_h2),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
-        NotebookToolbarTextButton(label = stringResource(R.string.notebook_toolbar_h3), onClick = onHeading3Click) {
-            Text(text = "H3", color = HomeTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        NotebookToolbarTextButton(
+            label = stringResource(R.string.notebook_toolbar_h3),
+            enabled = editable,
+            onClick = onHeading3Click,
+        ) {
+            Text(
+                text = stringResource(R.string.notebook_toolbar_h3),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         NotebookToolbarDivider()
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_bullet_list),
-            enabled = true,
+            enabled = editable,
             onClick = onBulletListClick,
         ) {
-            Text(text = "•", color = HomeTextPrimary, fontSize = 18.sp)
+            Text(
+                text = stringResource(R.string.notebook_toolbar_bullet_symbol),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 18.sp,
+            )
         }
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_ordered_list),
-            enabled = true,
+            enabled = editable,
             onClick = onOrderedListClick,
         ) {
-            Text(text = "1.", color = HomeTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = stringResource(R.string.notebook_toolbar_ordered_symbol),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_blockquote),
-            enabled = true,
+            enabled = editable,
             onClick = onBlockquoteClick,
         ) {
-            Text(text = "❝", color = HomeTextPrimary, fontSize = 16.sp)
+            Text(
+                text = stringResource(R.string.notebook_toolbar_blockquote_symbol),
+                color = if (editable) HomeTextPrimary else HomeTextSecondary,
+                fontSize = 16.sp,
+            )
         }
         NotebookToolbarDivider()
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_undo),
-            enabled = canUndo,
+            enabled = editable && canUndo,
             onClick = onUndoClick,
         ) {
             Text(
-                text = "↶",
-                color = if (canUndo) HomeTextPrimary else HomeTextSecondary,
+                text = stringResource(R.string.notebook_toolbar_undo_symbol),
+                color = if (editable && canUndo) HomeTextPrimary else HomeTextSecondary,
                 fontSize = 18.sp,
             )
         }
         NotebookToolbarIconButton(
             label = stringResource(R.string.notebook_toolbar_redo),
-            enabled = canRedo,
+            enabled = editable && canRedo,
             onClick = onRedoClick,
         ) {
             Text(
-                text = "↷",
-                color = if (canRedo) HomeTextPrimary else HomeTextSecondary,
+                text = stringResource(R.string.notebook_toolbar_redo_symbol),
+                color = if (editable && canRedo) HomeTextPrimary else HomeTextSecondary,
                 fontSize = 18.sp,
             )
         }
@@ -171,6 +222,20 @@ internal fun NotebookEditorToolbar(
                     )
                 }
             }
+            NotebookSaveStatus.STALE -> {
+                Text(
+                    text = stringResource(R.string.notebook_save_status_offline),
+                    color = HomeTextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+            NotebookSaveStatus.READ_ONLY -> {
+                Text(
+                    text = stringResource(R.string.notebook_save_status_read_only),
+                    color = HomeTextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
             NotebookSaveStatus.IDLE -> Unit
         }
     }
@@ -206,11 +271,13 @@ private fun NotebookToolbarIconButton(
 @Composable
 private fun NotebookToolbarTextButton(
     label: String,
+    enabled: Boolean,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     IconButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.semantics { contentDescription = label },
     ) {
         content()

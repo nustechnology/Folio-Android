@@ -72,6 +72,22 @@ class FolioApiPathsTest {
             "${FolioApiPaths.BASE_URL}/api/v1/sources/status",
             FolioApiPaths.sourcesStatus(),
         )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/ask",
+            FolioApiPaths.spaceAsk("space/id"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/ask/suggestions",
+            FolioApiPaths.spaceAskSuggestions("space/id"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/abc/ask/suggestions?scope=source&sourceId=1",
+            FolioApiPaths.spaceAskSuggestions("abc", query = "scope=source&sourceId=1"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/notebook",
+            FolioApiPaths.spaceNotebook("space/id"),
+        )
     }
 
     @Test

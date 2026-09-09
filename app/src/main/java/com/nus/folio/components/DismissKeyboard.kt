@@ -9,19 +9,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 
-/** Returns a callback that clears focus and hides the IME. Safe to invoke from event handlers. */
-@Composable
-fun rememberDismissKeyboard(): () -> Unit {
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-    return remember(focusManager, keyboardController) {
-        {
-            focusManager.clearFocus()
-            keyboardController?.hide()
-        }
-    }
-}
-
 /**
  * Returns [action] wrapped so the keyboard is dismissed immediately before it runs.
  * Use when opening a bottom sheet or other overlay that should not compete with the IME.
@@ -35,19 +22,6 @@ fun rememberDismissKeyboardThen(action: () -> Unit): () -> Unit {
             focusManager.clearFocus()
             keyboardController?.hide()
             action()
-        }
-    }
-}
-
-@Composable
-fun <T> rememberDismissKeyboardThen(action: (T) -> Unit): (T) -> Unit {
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-    return remember(focusManager, keyboardController, action) {
-        { value ->
-            focusManager.clearFocus()
-            keyboardController?.hide()
-            action(value)
         }
     }
 }

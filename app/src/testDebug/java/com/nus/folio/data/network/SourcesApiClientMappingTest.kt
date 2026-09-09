@@ -16,18 +16,18 @@ class SourcesApiClientMappingTest {
 
     @Test
     fun `mapSourceType maps API values`() {
-        assertEquals(SourceType.WEB, SourcesApiClient.mapSourceType("Web"))
-        assertEquals(SourceType.TEXT, SourcesApiClient.mapSourceType("Manual"))
-        assertEquals(SourceType.FILE, SourcesApiClient.mapSourceType("File"))
-        assertEquals(SourceType.BOOK, SourcesApiClient.mapSourceType("Book"))
+        assertEquals(SourceType.WEB, SourcesJsonParsers.mapSourceType("Web"))
+        assertEquals(SourceType.TEXT, SourcesJsonParsers.mapSourceType("Manual"))
+        assertEquals(SourceType.FILE, SourcesJsonParsers.mapSourceType("File"))
+        assertEquals(SourceType.BOOK, SourcesJsonParsers.mapSourceType("Book"))
     }
 
     @Test
     fun `mapProcessingState maps API values`() {
-        assertEquals(SourceStatus.PROCESSING, SourcesApiClient.mapProcessingState("added"))
-        assertEquals(SourceStatus.PROCESSING, SourcesApiClient.mapProcessingState("processing"))
-        assertEquals(SourceStatus.READY, SourcesApiClient.mapProcessingState("ready"))
-        assertEquals(SourceStatus.FAILED, SourcesApiClient.mapProcessingState("failed"))
+        assertEquals(SourceStatus.PROCESSING, SourcesJsonParsers.mapProcessingState("added"))
+        assertEquals(SourceStatus.PROCESSING, SourcesJsonParsers.mapProcessingState("processing"))
+        assertEquals(SourceStatus.READY, SourcesJsonParsers.mapProcessingState("ready"))
+        assertEquals(SourceStatus.FAILED, SourcesJsonParsers.mapProcessingState("failed"))
     }
 
     @Test
@@ -35,17 +35,17 @@ class SourcesApiClientMappingTest {
         val now = 1_700_000_000_000L
         assertEquals(
             "Added just now",
-            SourcesApiClient.formatAddedLabel("2023-11-14T22:13:20.000Z", now),
+            SourcesJsonParsers.formatAddedLabel("2023-11-14T22:13:20.000Z", now),
         )
         assertEquals(
             "Added 2d ago",
-            SourcesApiClient.formatAddedLabel("2023-11-12T22:13:20.000Z", now),
+            SourcesJsonParsers.formatAddedLabel("2023-11-12T22:13:20.000Z", now),
         )
     }
 
     @Test
     fun `parseSseDataPayload maps state and progress`() {
-        val event = SourcesApiClient.parseSseDataPayload(
+        val event = SourcesSseClient.parseSseDataPayload(
             """{"sourceId":"532a3be6-cd85-48ef-aa28-8d2ba8bb5eb0","state":"extracting_text","progress":25}""",
         )
 
@@ -56,25 +56,16 @@ class SourcesApiClientMappingTest {
     }
 
     @Test
-    fun `parseSseIdFieldValue updates last event id buffer`() {
-        assertEquals("evt-42", SourcesApiClient.parseSseIdFieldValue("id: evt-42"))
-        assertEquals("evt-42", SourcesApiClient.parseSseIdFieldValue("id:evt-42"))
-        assertEquals("", SourcesApiClient.parseSseIdFieldValue("id:"))
-        assertEquals("", SourcesApiClient.parseSseIdFieldValue("id: "))
-        assertEquals(null, SourcesApiClient.parseSseIdFieldValue("id: bad\u0000id"))
-    }
-
-    @Test
     fun `contentToHtml escapes and wraps paragraphs`() {
         assertEquals(
             "<p>Hello<br/>world</p><p>Next</p>",
-            SourcesApiClient.contentToHtml("Hello\nworld\n\nNext"),
+            SourcesJsonParsers.contentToHtml("Hello\nworld\n\nNext"),
         )
         assertEquals(
             "<p>A &amp; B &lt;C&gt;</p>",
-            SourcesApiClient.contentToHtml("A & B <C>"),
+            SourcesJsonParsers.contentToHtml("A & B <C>"),
         )
-        assertEquals("", SourcesApiClient.contentToHtml("  "))
+        assertEquals("", SourcesJsonParsers.contentToHtml("  "))
     }
 
     @Test
@@ -87,7 +78,7 @@ class SourcesApiClientMappingTest {
             <iframe src="https://evil.example"></iframe>
         """.trimIndent()
 
-        val sanitized = SourcesApiClient.contentToHtml(dirty)
+        val sanitized = SourcesJsonParsers.contentToHtml(dirty)
 
         assertTrue(sanitized.contains("<h1>Title</h1>"))
         assertTrue(sanitized.contains("Hello"))
@@ -129,7 +120,7 @@ class SourcesApiClientMappingTest {
     @Test
     fun `sheetContentToHtml sanitizes embedded table html`() {
         val dirty = "<table><tr><td onclick=evil()>x</td></tr></table><script>steal()</script>"
-        val sanitized = SourcesApiClient.sheetContentToHtml(dirty)
+        val sanitized = SourcesJsonParsers.sheetContentToHtml(dirty)
         assertTrue(sanitized.contains("<table>"))
         assertTrue(sanitized.contains("<td>x</td>") || sanitized.contains(">x</td>"))
         assertTrue(!sanitized.contains("onclick", ignoreCase = true))
@@ -292,68 +283,39 @@ class SourcesApiClientMappingTest {
 
     @Test
     fun `sseBackoffMillis grows exponentially and caps`() {
-        assertEquals(1_000L, SourcesApiClient.sseBackoffMillis(1))
-        assertEquals(2_000L, SourcesApiClient.sseBackoffMillis(2))
-        assertEquals(4_000L, SourcesApiClient.sseBackoffMillis(3))
-        assertEquals(8_000L, SourcesApiClient.sseBackoffMillis(4))
-        assertEquals(16_000L, SourcesApiClient.sseBackoffMillis(5))
-        assertEquals(16_000L, SourcesApiClient.sseBackoffMillis(6))
-        assertEquals(5, SourcesApiClient.MAX_SSE_RECONNECT_ATTEMPTS)
-    }
-
-    @Test
-    fun `nextSseReconnectAttempt keeps counting for short flaps`() {
-        val openedAt = 1_000L
-        assertEquals(
-            3,
-            SourcesApiClient.nextSseReconnectAttempt(
-                currentAttempt = 2,
-                openedAtMs = openedAt,
-                nowMs = openedAt + 500L,
-            ),
-        )
-        assertEquals(
-            1,
-            SourcesApiClient.nextSseReconnectAttempt(
-                currentAttempt = 4,
-                openedAtMs = openedAt,
-                nowMs = openedAt + SourcesApiClient.MIN_SSE_STABLE_OPEN_MS,
-            ),
-        )
-        assertEquals(
-            5,
-            SourcesApiClient.nextSseReconnectAttempt(
-                currentAttempt = 4,
-                openedAtMs = null,
-                nowMs = openedAt,
-            ),
-        )
+        assertEquals(1_000L, SourcesSseClient.sseBackoffMillis(1))
+        assertEquals(2_000L, SourcesSseClient.sseBackoffMillis(2))
+        assertEquals(4_000L, SourcesSseClient.sseBackoffMillis(3))
+        assertEquals(8_000L, SourcesSseClient.sseBackoffMillis(4))
+        assertEquals(16_000L, SourcesSseClient.sseBackoffMillis(5))
+        assertEquals(16_000L, SourcesSseClient.sseBackoffMillis(6))
+        assertEquals(5, SourcesSseClient.MAX_SSE_RECONNECT_ATTEMPTS)
     }
 
     @Test
     fun `fileExtensionFrom prefers fileName then fileType`() {
-        assertEquals("pdf", SourcesApiClient.fileExtensionFrom("paper.PDF", ""))
-        assertEquals("pdf", SourcesApiClient.fileExtensionFrom("", "application/pdf"))
-        assertEquals("md", SourcesApiClient.fileExtensionFrom("", "text/markdown"))
+        assertEquals("pdf", SourcesJsonParsers.fileExtensionFrom("paper.PDF", ""))
+        assertEquals("pdf", SourcesJsonParsers.fileExtensionFrom("", "application/pdf"))
+        assertEquals("md", SourcesJsonParsers.fileExtensionFrom("", "text/markdown"))
     }
 
     @Test
     fun `fileExtensionFrom ignores null fileType`() {
-        assertEquals("", SourcesApiClient.fileExtensionFrom("", "null"))
-        assertEquals("", SourcesApiClient.fileExtensionFrom("null", "null"))
+        assertEquals("", SourcesJsonParsers.fileExtensionFrom("", "null"))
+        assertEquals("", SourcesJsonParsers.fileExtensionFrom("null", "null"))
     }
 
     @Test
     fun `contentFormatFrom maps spreadsheet extensions to SHEET`() {
-        assertEquals(SourceContentFormat.SHEET, SourcesApiClient.contentFormatFrom("xlsx"))
-        assertEquals(SourceContentFormat.SHEET, SourcesApiClient.contentFormatFrom("csv"))
-        assertEquals(SourceContentFormat.SLIDES, SourcesApiClient.contentFormatFrom("pptx"))
-        assertEquals(SourceContentFormat.DOCUMENT, SourcesApiClient.contentFormatFrom("pdf"))
+        assertEquals(SourceContentFormat.SHEET, SourcesJsonParsers.contentFormatFrom("xlsx"))
+        assertEquals(SourceContentFormat.SHEET, SourcesJsonParsers.contentFormatFrom("csv"))
+        assertEquals(SourceContentFormat.SLIDES, SourcesJsonParsers.contentFormatFrom("pptx"))
+        assertEquals(SourceContentFormat.DOCUMENT, SourcesJsonParsers.contentFormatFrom("pdf"))
     }
 
     @Test
     fun `sheetContentToHtml builds table from TSV`() {
-        val html = SourcesApiClient.sheetContentToHtml("Metric\tQ1\tQ2\nSources\t10\t12")
+        val html = SourcesJsonParsers.sheetContentToHtml("Metric\tQ1\tQ2\nSources\t10\t12")
         assertTrue(html.contains("<table>"))
         assertTrue(html.contains("<th>Metric</th>"))
         assertTrue(html.contains("<td>Sources</td>"))
@@ -362,7 +324,7 @@ class SourcesApiClientMappingTest {
 
     @Test
     fun `parsePreviewUrl reads data previewUrl`() {
-        val url = SourcesApiClient.parsePreviewUrl(
+        val url = SourcesJsonParsers.parsePreviewUrl(
             """
             {
               "status": "success",
@@ -381,7 +343,7 @@ class SourcesApiClientMappingTest {
 
     @Test
     fun `parseStructuredContent accepts legacy html fragment`() {
-        val structured = SourcesApiClient.parseStructuredContent(
+        val structured = SourcesJsonParsers.parseStructuredContent(
             """<h1 onclick="alert(1)">Neural Networks</h1><p>Article body.</p><script>evil()</script>""",
         ) as StructuredContent.Document
 
@@ -392,19 +354,19 @@ class SourcesApiClientMappingTest {
 
     @Test
     fun `parseStructuredContent returns null for blank html`() {
-        assertNull(SourcesApiClient.parseStructuredContent("   "))
-        assertNull(SourcesApiClient.parseStructuredContent(null))
+        assertNull(SourcesJsonParsers.parseStructuredContent("   "))
+        assertNull(SourcesJsonParsers.parseStructuredContent(null))
     }
 
     @Test
     fun `parsePreviewUrl returns null when missing`() {
-        assertNull(SourcesApiClient.parsePreviewUrl("""{"status":"success","data":{}}"""))
-        assertNull(SourcesApiClient.parsePreviewUrl(""))
+        assertNull(SourcesJsonParsers.parsePreviewUrl("""{"status":"success","data":{}}"""))
+        assertNull(SourcesJsonParsers.parsePreviewUrl(""))
     }
 
     @Test
     fun `sheetContentToHtml keeps existing html table`() {
         val table = "<table><tr><td>A</td></tr></table>"
-        assertEquals(table, SourcesApiClient.sheetContentToHtml(table))
+        assertEquals(table, SourcesJsonParsers.sheetContentToHtml(table))
     }
 }

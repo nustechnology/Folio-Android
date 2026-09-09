@@ -1,6 +1,7 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.CreateNoteRequest
 import com.nus.folio.domain.model.NoteOrigin
@@ -8,6 +9,7 @@ import com.nus.folio.domain.model.SourceStatus
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
+import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
 import com.nus.folio.domain.util.AskSavedNoteFormatter
 import com.nus.folio.domain.util.NoteInputRules
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +30,7 @@ internal class HomeAskDelegate(
     private val scope: CoroutineScope,
     private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
+    private val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase,
     private val createNoteUseCase: CreateNoteUseCase,
 ) {
 
@@ -35,6 +38,8 @@ internal class HomeAskDelegate(
     private var askStreamJob: Job? = null
     private var nextAskMessageId: Long = 0L
     private var streamingAssistantId: String? = null
+    /** Backend thread id from the last `start` frame; omitted on the first question. */
+    private var askConversationId: String? = null
 
     fun onAskSubmit(question: String) {
         val trimmed = question.trim()
@@ -108,7 +113,7 @@ internal class HomeAskDelegate(
         }
         if (messageIndex < 0) return
         val message = current.askMessages[messageIndex]
-        if (message.isSavedAsNote || message.isStreaming || message.content.isBlank()) return
+        if (message.isSavedAsNote || message.isStreaming || message.isFailed || message.content.isBlank()) return
 
         val question = current.askMessages
             .take(messageIndex)
@@ -193,18 +198,56 @@ internal class HomeAskDelegate(
     }
 
     fun onAskFeedback(messageId: String, useful: Boolean) {
+        val rating = if (useful) AskFeedbackRating.USEFUL else AskFeedbackRating.NOT_USEFUL
         val feedback = if (useful) AskFeedback.USEFUL else AskFeedback.NOT_USEFUL
-        state.update { current ->
-            current.copy(
-                askMessages = current.askMessages.map { message ->
-                    if (message.id == messageId && message.role == AskMessageRole.ASSISTANT) {
-                        message.copy(feedback = feedback)
+        val current = state.value
+        val message = current.askMessages.firstOrNull {
+            it.id == messageId && it.role == AskMessageRole.ASSISTANT
+        } ?: return
+        if (message.isStreaming || message.isFailed || message.feedback == feedback) return
+        val conversationId = message.conversationId ?: askConversationId
+        val backendMessageId = message.backendMessageId
+        if (conversationId.isNullOrBlank() || backendMessageId.isNullOrBlank()) {
+            state.update { it.copy(actionError = HomeActionError.GENERIC) }
+            return
+        }
+        val previousFeedback = message.feedback
+        // Optimistic: hide the prompt immediately; revert if the request fails.
+        state.update { ui ->
+            ui.copy(
+                askMessages = ui.askMessages.map { existing ->
+                    if (existing.id == messageId && existing.role == AskMessageRole.ASSISTANT) {
+                        existing.copy(feedback = feedback)
                     } else {
-                        message
+                        existing
                     }
                 },
-                userMessage = HomeUserMessage.ASK_FEEDBACK_RECORDED,
             )
+        }
+        scope.launch {
+            submitAskFeedbackUseCase(
+                spaceId = spaceId,
+                conversationId = conversationId,
+                messageId = backendMessageId,
+                rating = rating,
+            ).onSuccess {
+                state.update { ui ->
+                    ui.copy(userMessage = HomeUserMessage.ASK_FEEDBACK_RECORDED)
+                }
+            }.onFailure { throwable ->
+                state.update { ui ->
+                    ui.copy(
+                        askMessages = ui.askMessages.map { existing ->
+                            if (existing.id == messageId && existing.role == AskMessageRole.ASSISTANT) {
+                                existing.copy(feedback = previousFeedback)
+                            } else {
+                                existing
+                            }
+                        },
+                        actionError = throwable.toHomeActionError(),
+                    )
+                }
+            }
         }
     }
 
@@ -242,20 +285,41 @@ internal class HomeAskDelegate(
                     spaceId = spaceId,
                     question = question,
                     sourceId = sourceId,
+                    conversationId = askConversationId,
                 ).collect { event ->
                     coroutineContext.ensureActive()
                     when (event) {
+                        is AskStreamEvent.Started -> {
+                            askConversationId = event.conversationId
+                            updateAssistantMessage(assistantId) { message ->
+                                message.copy(
+                                    conversationId = event.conversationId,
+                                    backendMessageId = event.messageId.takeIf { it.isNotBlank() }
+                                        ?: message.backendMessageId,
+                                )
+                            }
+                        }
                         is AskStreamEvent.Delta -> {
                             updateAssistantMessage(assistantId) { message ->
                                 message.copy(content = message.content + event.text)
+                            }
+                        }
+                        is AskStreamEvent.Citations -> {
+                            updateAssistantMessage(assistantId) { message ->
+                                message.copy(citations = event.citations)
                             }
                         }
                         is AskStreamEvent.Completed -> {
                             updateAssistantMessage(assistantId) { message ->
                                 message.copy(
                                     isStreaming = false,
-                                    citations = event.citations,
+                                    content = event.content ?: message.content,
+                                    citations = event.citations.ifEmpty { message.citations },
                                     limitation = event.limitation,
+                                    wasStopped = message.wasStopped || event.stopped,
+                                    conversationId = message.conversationId ?: askConversationId,
+                                    backendMessageId = event.messageId.takeIf { it.isNotBlank() }
+                                        ?: message.backendMessageId,
                                 )
                             }
                             streamingAssistantId = null
@@ -268,6 +332,7 @@ internal class HomeAskDelegate(
                 updateAssistantMessage(assistantId) { message ->
                     message.copy(
                         isStreaming = false,
+                        isFailed = true,
                         content = message.content.ifBlank {
                             ASK_STREAM_FALLBACK_ERROR
                         },
@@ -314,6 +379,7 @@ internal class HomeAskDelegate(
         askStreamJob?.cancel()
         askStreamJob = null
         streamingAssistantId = null
+        askConversationId = null
         state.update {
             it.copy(
                 askMessages = emptyList(),
@@ -340,6 +406,7 @@ internal class HomeAskDelegate(
         askStreamJob?.cancel()
         askStreamJob = null
         streamingAssistantId = null
+        askConversationId = null
         state.update {
             it.copy(
                 askScope = newScope,
@@ -356,20 +423,35 @@ internal class HomeAskDelegate(
     private fun refreshAskSuggestions() {
         askSuggestionsJob?.cancel()
         val current = state.value
-        val sourceId = current.askSourceId
-        if (current.askScope != AskScope.CURRENT_SOURCE || sourceId == null) {
+        if (!current.hasAskEvidence()) {
             state.update { it.copy(askSuggestions = emptyList()) }
             return
         }
-        val source = current.allSources.find { it.id == sourceId }
-        if (source?.status != SourceStatus.READY) {
-            state.update { it.copy(askSuggestions = emptyList()) }
-            return
+        val sourceId = when (current.askScope) {
+            AskScope.ENTIRE_SPACE -> null
+            AskScope.CURRENT_SOURCE -> {
+                val selectedId = current.askSourceId
+                val source = selectedId?.let { id -> current.allSources.find { it.id == id } }
+                if (selectedId == null || source?.status != SourceStatus.READY) {
+                    state.update { it.copy(askSuggestions = emptyList()) }
+                    return
+                }
+                selectedId
+            }
         }
         askSuggestionsJob = scope.launch {
-            getAskSuggestionsUseCase(sourceId)
+            getAskSuggestionsUseCase(spaceId = spaceId, sourceId = sourceId)
                 .onSuccess { suggestions ->
-                    state.update { it.copy(askSuggestions = suggestions.take(3)) }
+                    val questions = suggestions.questions.take(3)
+                    state.update {
+                        it.copy(
+                            askSuggestions = if (suggestions.isDynamic) {
+                                questions
+                            } else {
+                                emptyList()
+                            },
+                        )
+                    }
                 }
                 .onFailure {
                     state.update { it.copy(askSuggestions = emptyList()) }
