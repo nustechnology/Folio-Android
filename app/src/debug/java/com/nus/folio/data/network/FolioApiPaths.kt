@@ -65,6 +65,28 @@ internal object FolioApiPaths {
         "$SPACES/${encode(spaceId)}/notes/${encode(noteId)}/convert-to-source",
     )
 
+    fun spaceAsk(spaceId: String, baseUrl: String = BASE_URL): String =
+        url(baseUrl, "$SPACES/${encode(spaceId)}/ask")
+
+    fun spaceAskSuggestions(
+        spaceId: String,
+        baseUrl: String = BASE_URL,
+        query: String? = null,
+    ): String = urlWithQuery(baseUrl, "$SPACES/${encode(spaceId)}/ask/suggestions", query)
+
+    fun spaceAskMessageFeedback(
+        spaceId: String,
+        conversationId: String,
+        messageId: String,
+        baseUrl: String = BASE_URL,
+    ): String = url(
+        baseUrl,
+        "$SPACES/${encode(spaceId)}/conversations/${encode(conversationId)}/messages/${encode(messageId)}/feedback",
+    )
+
+    fun spaceNotebook(spaceId: String, baseUrl: String = BASE_URL): String =
+        url(baseUrl, "$SPACES/${encode(spaceId)}/notebook")
+
     fun sources(baseUrl: String = BASE_URL, query: String? = null): String =
         urlWithQuery(baseUrl, SOURCES, query)
 

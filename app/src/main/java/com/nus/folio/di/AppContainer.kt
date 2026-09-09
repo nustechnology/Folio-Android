@@ -53,6 +53,7 @@ import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
+import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
 import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
@@ -137,7 +138,14 @@ class AppContainer(
         GetSourcePreviewUrlUseCase(sourceRepository)
     }
 
-    private val askDataSource: AskDataSource by lazy { AskDataSource() }
+    private val askDataSource: AskDataSource by lazy {
+        AskDataSource(
+            accessTokenProvider = { authRepository.getCurrentSession()?.accessToken },
+            refreshAccessToken = {
+                authRepository.refreshSession().getOrNull()?.accessToken
+            },
+        )
+    }
 
     private val askRepository: AskRepository by lazy {
         AskRepositoryImpl(askDataSource)
@@ -149,6 +157,10 @@ class AppContainer(
 
     val streamAskAnswerUseCase: StreamAskAnswerUseCase by lazy {
         StreamAskAnswerUseCase(askRepository)
+    }
+
+    val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase by lazy {
+        SubmitAskFeedbackUseCase(askRepository)
     }
 
     private val noteDataSource: NoteDataSource by lazy {
@@ -193,7 +205,13 @@ class AppContainer(
     }
 
     private val notebookDataSource: NotebookDataSource by lazy {
-        NotebookDataSource(notebookStore)
+        NotebookDataSource(
+            store = notebookStore,
+            accessTokenProvider = { authRepository.getCurrentSession()?.accessToken },
+            refreshAccessToken = {
+                authRepository.refreshSession().getOrNull()?.accessToken
+            },
+        )
     }
 
     private val notebookRepository: NotebookRepository by lazy {

@@ -33,8 +33,12 @@ internal class HomeNotebookDelegate(
             getNotebookUseCase(spaceId)
                 .onSuccess { notebook ->
                     hasLoadedNotebook = true
-                    val resolvedContent = notebook.content.ifBlank {
-                        defaultNotebookTemplate(state.value.spaceTitle)
+                    val resolvedContent = if (notebook.isReadOnly) {
+                        notebook.content
+                    } else {
+                        notebook.content.ifBlank {
+                            defaultNotebookTemplate(state.value.spaceTitle)
+                        }
                     }
                     state.update { current ->
                         // Keep in-progress edits (debounce may still be pending) instead of
@@ -44,7 +48,11 @@ internal class HomeNotebookDelegate(
                         } else {
                             current.copy(
                                 notebookContent = resolvedContent,
-                                notebookSaveStatus = NotebookSaveStatus.IDLE,
+                                notebookSaveStatus = when {
+                                    notebook.isReadOnly -> NotebookSaveStatus.READ_ONLY
+                                    notebook.isStale -> NotebookSaveStatus.STALE
+                                    else -> NotebookSaveStatus.IDLE
+                                },
                                 isLoadingNotebook = false,
                             )
                         }
@@ -57,6 +65,7 @@ internal class HomeNotebookDelegate(
     }
 
     fun onNotebookContentChange(content: String) {
+        if (state.value.notebookSaveStatus == NotebookSaveStatus.READ_ONLY) return
         val clamped = NotebookInputRules.clampContent(content)
         state.update {
             it.copy(

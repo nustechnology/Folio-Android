@@ -88,6 +88,7 @@ internal fun SourceProcessingBottomSheet(
             onOpenSourceClick = { requestDismiss { onOpenSource() } },
             onAskClick = { requestDismiss { onAsk() } },
             onRetryClick = onRetry,
+            onCloseClick = { requestDismiss() },
         )
     }
 }
@@ -100,6 +101,7 @@ private fun SourceProcessingSheetContent(
     onOpenSourceClick: () -> Unit,
     onAskClick: () -> Unit,
     onRetryClick: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
     val steps = listOf(
         stringResource(R.string.source_processing_step_added),
@@ -129,13 +131,21 @@ private fun SourceProcessingSheetContent(
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.source_processing_title),
-            fontFamily = CormorantGaramond,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = HomeTextPrimary,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                text = stringResource(R.string.source_processing_title),
+                fontFamily = CormorantGaramond,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            SheetCloseIconButton(onClick = onCloseClick)
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = sourceTitle,
@@ -438,6 +448,7 @@ private fun SourceProcessingSheetContentPreview() {
                     onOpenSourceClick = {},
                     onAskClick = {},
                     onRetryClick = {},
+                    onCloseClick = {},
                 )
             }
         }
@@ -465,6 +476,7 @@ private fun SourceProcessingSheetFailedPreview() {
                     onOpenSourceClick = {},
                     onAskClick = {},
                     onRetryClick = {},
+                    onCloseClick = {},
                 )
             }
         }

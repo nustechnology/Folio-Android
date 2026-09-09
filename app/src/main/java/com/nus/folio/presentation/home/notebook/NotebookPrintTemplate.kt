@@ -1,5 +1,7 @@
 package com.nus.folio.presentation.home.notebook
 
+import com.nus.folio.domain.util.NotebookHtml
+
 internal object NotebookPrintTemplate {
     fun wrap(title: String, bodyHtml: String): String = """
         <!DOCTYPE html>
@@ -34,89 +36,8 @@ internal object NotebookPrintTemplate {
         </html>
     """.trimIndent()
 
-    fun markdownToHtml(markdown: String): String {
-        if (markdown.isBlank()) return "<p></p>"
-        val blocks = markdown.replace("\r\n", "\n").split("\n\n")
-        return blocks.joinToString("\n") { block -> renderBlock(block) }
-    }
-
-    private fun renderBlock(block: String): String {
-        val lines = block.split('\n')
-        if (lines.isEmpty()) return ""
-
-        val segments = mutableListOf<String>()
-        var index = 0
-        while (index < lines.size) {
-            val line = lines[index]
-            when {
-                isBlockquoteLine(line) -> {
-                    val quoteLines = mutableListOf<String>()
-                    while (index < lines.size && isBlockquoteLine(lines[index])) {
-                        quoteLines += lines[index]
-                        index++
-                    }
-                    segments += renderBlockquote(quoteLines)
-                }
-                line.matches(BULLET_ITEM) || (line.isBlank() && index + 1 < lines.size && lines[index + 1].matches(BULLET_ITEM)) -> {
-                    val listLines = mutableListOf<String>()
-                    while (index < lines.size && (lines[index].matches(BULLET_ITEM) || lines[index].isBlank())) {
-                        if (lines[index].isNotBlank()) listLines += lines[index]
-                        index++
-                    }
-                    val items = listLines.joinToString("") { itemLine ->
-                        val item = itemLine.replace(BULLET_ITEM, "")
-                        "<li>${inlineMarkdown(escapeHtml(item))}</li>"
-                    }
-                    segments += "<ul>$items</ul>"
-                }
-                line.matches(ORDERED_ITEM) || (line.isBlank() && index + 1 < lines.size && lines[index + 1].matches(ORDERED_ITEM)) -> {
-                    val listLines = mutableListOf<String>()
-                    while (index < lines.size && (lines[index].matches(ORDERED_ITEM) || lines[index].isBlank())) {
-                        if (lines[index].isNotBlank()) listLines += lines[index]
-                        index++
-                    }
-                    val items = listLines.joinToString("") { itemLine ->
-                        val item = itemLine.replace(ORDERED_ITEM, "")
-                        "<li>${inlineMarkdown(escapeHtml(item))}</li>"
-                    }
-                    segments += "<ol>$items</ol>"
-                }
-                else -> {
-                    segments += renderTextLine(line)
-                    index++
-                }
-            }
-        }
-        return segments.joinToString("\n")
-    }
-
-    private fun renderBlockquote(lines: List<String>): String {
-        val quote = lines.joinToString("\n") { blockquoteContent(it).trimEnd() }
-        return "<blockquote>${inlineMarkdown(escapeHtml(quote).replace("\n", "<br/>"))}</blockquote>"
-    }
-
-    private fun renderTextLine(line: String): String =
-        when {
-            line.startsWith("### ") -> "<h3>${inlineMarkdown(escapeHtml(line.removePrefix("### ")))}</h3>"
-            line.startsWith("## ") -> "<h2>${inlineMarkdown(escapeHtml(line.removePrefix("## ")))}</h2>"
-            line.startsWith("# ") -> "<h1>${inlineMarkdown(escapeHtml(line.removePrefix("# ")))}</h1>"
-            line.isBlank() -> ""
-            else -> "<p>${inlineMarkdown(escapeHtml(line))}</p>"
-        }
-
-    private fun isBlockquoteLine(line: String): Boolean =
-        line.startsWith(">")
-
-    private fun blockquoteContent(line: String): String =
-        line.removePrefix(">").trimStart()
-
-    private val BULLET_ITEM = Regex("^[-*]\\s+")
-    private val ORDERED_ITEM = Regex("^\\d+\\.\\s+")
-
-    private fun inlineMarkdown(text: String): String =
-        text
-            .replace(Regex("\\*\\*(.+?)\\*\\*")) { "<strong>${it.groupValues[1]}</strong>" }
-            .replace(Regex("_(.+?)_")) { "<em>${it.groupValues[1]}</em>" }
+    fun markdownToHtml(markdown: String): String =
+        NotebookHtml.markdownToHtml(markdown).ifBlank { "<p></p>" }
 
     private fun escapeHtml(value: String): String =
         value

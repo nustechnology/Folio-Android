@@ -98,8 +98,8 @@ data class HomeUiState(
     /** Messages in the active Ask conversation; cleared when scope changes. */
     val askMessages: List<AskMessage> = emptyList(),
     /**
-     * Dynamic suggested questions for the selected Ready source.
-     * Empty means the UI should show the static Entire-Space fallback chips.
+     * Dynamic suggested questions for a ready source (`isDynamic: true`).
+     * Empty means the UI should show the static fallback chips.
      */
     val askSuggestions: List<String> = emptyList(),
     /** Bumped when Ask chat context resets so the input field can clear. */
@@ -134,10 +134,15 @@ data class AskMessage(
     val content: String,
     val isStreaming: Boolean = false,
     val wasStopped: Boolean = false,
+    val isFailed: Boolean = false,
     val citations: List<AskCitation> = emptyList(),
     val limitation: String? = null,
     val feedback: AskFeedback = AskFeedback.NONE,
     val isSavedAsNote: Boolean = false,
+    /** Backend conversation id from the Ask SSE `start` frame. */
+    val conversationId: String? = null,
+    /** Backend assistant message id from the Ask SSE `start` / `done` frames. */
+    val backendMessageId: String? = null,
 )
 
 /** Prefill state for the Save Ask Answer as Note sheet (AC2). */
@@ -185,6 +190,10 @@ enum class NotebookSaveStatus {
     SAVING,
     SAVED,
     FAILED,
+    /** Local cache shown after the remote GET failed. */
+    STALE,
+    /** HTML contained unsupported tags; editing would overwrite the server document. */
+    READ_ONLY,
 }
 
 data class NotebookExportRequest(
@@ -206,9 +215,6 @@ enum class HomeUserMessage {
     SOURCE_DELETED,
     SOURCE_CREATED,
     SOURCE_FILE_SELECTED,
-    SOURCE_DELETE_FAILED,
-    SOURCE_CREATE_FAILED,
-    SOURCE_RETRY_FAILED,
     NOTE_UPDATED,
     NOTE_DELETED,
     NOTE_SAVED,

@@ -24,7 +24,7 @@ app/src/
 │   ├── components/       # Shared UI: sheets, toast, skeleton, search, empty state, bouncing dots
 │   ├── data/
 │   │   ├── auth/         # AuthSessionStore (+ cipher); AuthCapabilities is variant-only
-│   │   ├── datasource/   # Ask + Notebook (+ shared sample data); Auth/Space/Source/Note are variant-only
+│   │   ├── datasource/   # Shared sample data; Auth/Space/Source/Note/Ask/Notebook are variant-only
 │   │   ├── network/      # UnauthorizedException (shared); API clients live in debug/
 │   │   ├── notebook/     # NotebookStore (local DataStore persistence)
 │   │   ├── repository/   # *RepositoryImpl
@@ -44,8 +44,8 @@ app/src/
 │   │   ├── account/      # AccountSettingsScreen (nav route from Spaces)
 │   │   └── navigation/   # FolioNavHost, FolioDestination
 │   └── ui/theme/         # Color, Type, Theme
-├── debug/                # AuthCapabilities + Auth/Space/Source/Note DataSources + HTTP API clients
-├── release/              # AuthCapabilities + Auth/Space/Source/Note DataSources (stubs / local mocks)
+├── debug/                # AuthCapabilities + Auth/Space/Source/Note/Ask/Notebook DataSources + HTTP API clients
+├── release/              # AuthCapabilities + Auth/Space/Source/Note/Ask/Notebook DataSources (stubs / local mocks)
 ├── test/                 # Shared unit tests + testing/ fakes
 ├── testDebug/            # Variant tests against debug DataSources / network clients
 ├── testRelease/          # Variant tests against release DataSources
@@ -71,7 +71,7 @@ Repository **interfaces** live in `domain`; **implementations** live in `data`.
 - ViewModels receive use cases through `ViewModel.Factory`
 - `AppContainer.isAuthAvailable` mirrors `AuthCapabilities.isBackendAvailable` (true in debug, false in release until a real backend is wired)
 - On init, `AppContainer` restores the encrypted session off the main thread, refreshes the access token if present, then sets `isSessionRestored`
-- Token-aware data sources (Space / Source / Note) receive `accessTokenProvider` + `refreshAccessToken` from `AppContainer`
+- Token-aware data sources (Space / Source / Note / Ask / Notebook) receive `accessTokenProvider` + `refreshAccessToken` from `AppContainer`
 
 ### Build variants (debug vs release)
 
@@ -84,10 +84,11 @@ These types are **not** in `main` — they live in `debug/` and `release/`:
 | `SpaceDataSource` | Real spaces API via `SpacesApiClient` (401 → refresh once + retry) | Local stub / mock |
 | `SourceDataSource` | Real sources API via `SourcesApiClient` for list/create/detail/retry/delete; update + some processing still local | Local sample / mock |
 | `NoteDataSource` | Real notes API via `NotesApiClient` (list/create/detail/update/delete/convert; 401 → refresh once + retry) | Local sample / mock |
+| `AskDataSource` | Real ask SSE + suggestions via `AskApiClient` (`POST .../ask`, `GET .../ask/suggestions`); 401 → refresh once + retry | Local sample / mock |
+| `NotebookDataSource` | Real notebook GET/PUT via `NotebookApiClient` (`GET/PUT .../notebook`); HTML is converted to/from markdown for the editor; write-through to local DataStore; 401 → refresh once + retry; GET 404 is an empty notebook | Local DataStore (`NotebookStore`) |
 | Network stack | `FolioHttp`, `FolioApiPaths`, `*ApiClient`, `HttpDebugLogger` | Absent — release data sources do not call HTTP |
 
-- Ask data source remains in **main** (local / in-memory for now)
-- Notebook data source + `NotebookStore` remain in **main** (local DataStore per space)
+- `NotebookStore` remains in **main** (local DataStore cache per space)
 - Put variant implementation + network tests in `testDebug` / `testRelease`; keep use-case and ViewModel tests in shared `test/` with fakes
 - Keep backend-specific HTTP clients in `debug/` (and eventually `release/` when shipping) — not in `main`
 - Launcher label: debug overrides `app_name` to **Folio Debug**; release/main uses **Folio** (`debug/res/values/strings.xml`)
@@ -217,8 +218,8 @@ Follow dependency direction: define contracts in `domain` first, implement in `d
 | Repository | `domain/repository/`, `data/repository/` |
 | Session store | `data/auth/AuthSessionStore.kt` |
 | Notebook store | `data/notebook/NotebookStore.kt` |
-| Debug HTTP | `debug/.../network/FolioHttp.kt`, `FolioApiPaths.kt`, `AuthApiClient.kt`, `SpacesApiClient.kt`, `SourcesApiClient.kt`, `NotesApiClient.kt` |
-| Auth / Space / Source / Note variants | `debug\|release/.../AuthDataSource.kt`, `SpaceDataSource.kt`, `SourceDataSource.kt`, `NoteDataSource.kt`, `AuthCapabilities.kt` |
+| Debug HTTP | `debug/.../network/FolioHttp.kt`, `FolioApiPaths.kt`, `AuthApiClient.kt`, `SpacesApiClient.kt`, `SourcesApiClient.kt`, `NotesApiClient.kt`, `AskApiClient.kt`, `NotebookApiClient.kt` |
+| Auth / Space / Source / Note / Ask / Notebook variants | `debug\|release/.../AuthDataSource.kt`, `SpaceDataSource.kt`, `SourceDataSource.kt`, `NoteDataSource.kt`, `AskDataSource.kt`, `NotebookDataSource.kt`, `AuthCapabilities.kt` |
 | DI wiring | `di/AppContainer.kt` |
 | Navigation | `presentation/navigation/FolioNavHost.kt` |
 | Test fakes | `test/.../testing/FakeAuthRepository.kt`, `FakeSpaceRepository.kt`, `FakeSourceRepository.kt`, `FakeNotebookRepository.kt`, … |

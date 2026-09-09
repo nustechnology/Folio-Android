@@ -17,11 +17,18 @@ class FakeNotebookRepository : NotebookRepository {
     var saveError: Throwable? = null
     var getError: Throwable? = null
 
-    fun seed(spaceId: String, content: String) {
+    fun seed(
+        spaceId: String,
+        content: String,
+        isStale: Boolean = false,
+        isReadOnly: Boolean = false,
+    ) {
         notebooks[spaceId] = Notebook(
             spaceId = spaceId,
             content = content,
             updatedAtMillis = 1L,
+            isStale = isStale,
+            isReadOnly = isReadOnly,
         )
     }
 

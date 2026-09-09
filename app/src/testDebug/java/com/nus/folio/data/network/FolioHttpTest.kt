@@ -106,6 +106,17 @@ class FolioHttpTest {
     }
 
     @Test
+    fun `unauthorizedOrIo maps 413 to IOException`() {
+        val error = FolioHttp.unauthorizedOrIo(
+            responseBody = "",
+            code = HttpURLConnection.HTTP_ENTITY_TOO_LARGE,
+            failureLabel = "Save notebook",
+        )
+        assertEquals(IOException::class.java, error::class.java)
+        assertEquals("Save notebook failed (HTTP 413)", error.message)
+    }
+
+    @Test
     fun `jsonAcceptHeaders includes bearer when token present`() {
         val headers = FolioHttp.jsonAcceptHeaders("token-123")
         assertEquals("application/json", headers["Accept"])

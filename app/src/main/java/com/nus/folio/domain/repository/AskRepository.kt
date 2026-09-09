@@ -1,22 +1,42 @@
 package com.nus.folio.domain.repository
 
+import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
+import com.nus.folio.domain.model.AskSuggestions
 import kotlinx.coroutines.flow.Flow
 
 interface AskRepository {
     /**
-     * Context-aware suggested questions for a Ready source with metadata/summary.
-     * Returns an empty list when suggestions are unavailable (caller should use fallbacks).
+     * Three suggested questions for [spaceId].
+     * When [sourceId] is non-null, scopes to that source (`scope=source`); otherwise the space.
+     * Dynamic questions are drafted from a ready source's text; other cases return generics
+     * with [AskSuggestions.isDynamic] false (caller may show localized fallbacks).
      */
-    suspend fun getSuggestedQuestions(sourceId: String): Result<List<String>>
+    suspend fun getSuggestedQuestions(
+        spaceId: String,
+        sourceId: String?,
+    ): Result<AskSuggestions>
 
     /**
      * Streams a grounded answer for [question] within [spaceId].
      * When [sourceId] is non-null, grounds on that source; otherwise the entire space.
+     * Pass [conversationId] from the previous [AskStreamEvent.Started] to continue the thread.
      */
     fun streamAnswer(
         spaceId: String,
         question: String,
         sourceId: String?,
+        conversationId: String? = null,
     ): Flow<AskStreamEvent>
+
+    /**
+     * Records thumbs-up / thumbs-down for an assistant [messageId] in [conversationId].
+     * [AskFeedbackRating.USEFUL] maps to `"useful"`; [AskFeedbackRating.NOT_USEFUL] to `"not_useful"`.
+     */
+    suspend fun submitFeedback(
+        spaceId: String,
+        conversationId: String,
+        messageId: String,
+        rating: AskFeedbackRating,
+    ): Result<Unit>
 }

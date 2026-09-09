@@ -16,17 +16,19 @@ class StreamAskAnswerUseCaseTest {
     private val useCase = StreamAskAnswerUseCase(repository)
 
     @Test
-    fun `invoke forwards space question and sourceId to repository`() = runTest {
+    fun `invoke forwards space question sourceId and conversationId to repository`() = runTest {
         val events = useCase(
             spaceId = "space-1",
             question = "What is the claim?",
             sourceId = "src-9",
+            conversationId = "conv-2",
         ).toList()
 
         assertEquals(1, repository.streamAnswerCallCount)
         assertEquals("space-1", repository.lastSpaceId)
         assertEquals("What is the claim?", repository.lastStreamQuestion)
         assertEquals("src-9", repository.lastStreamSourceId)
+        assertEquals("conv-2", repository.lastStreamConversationId)
         assertTrue(events.isNotEmpty())
         assertTrue(events.last() is AskStreamEvent.Completed)
     }
@@ -65,5 +67,6 @@ class StreamAskAnswerUseCaseTest {
         assertEquals(1, completed.citations.size)
         assertEquals("Limited corpus", completed.limitation)
         assertEquals(null, repository.lastStreamSourceId)
+        assertEquals(null, repository.lastStreamConversationId)
     }
 }

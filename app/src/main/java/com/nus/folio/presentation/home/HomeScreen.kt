@@ -91,6 +91,7 @@ fun HomeScreen(
             getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
             getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
             streamAskAnswerUseCase = LocalAppContainer.current.streamAskAnswerUseCase,
+            submitAskFeedbackUseCase = LocalAppContainer.current.submitAskFeedbackUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
             getNoteDetailUseCase = LocalAppContainer.current.getNoteDetailUseCase,
             createNoteUseCase = LocalAppContainer.current.createNoteUseCase,

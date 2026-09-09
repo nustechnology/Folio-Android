@@ -72,7 +72,10 @@ internal fun NotebookEditor(
         isInternalUpdate = false
     }
 
+    val readOnly = saveStatus == NotebookSaveStatus.READ_ONLY
+
     fun applyTransform(transform: (TextFieldValue) -> TextFieldValue) {
+        if (readOnly) return
         undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
         val next = transform(fieldValue)
         fieldValue = next
@@ -122,14 +125,17 @@ internal fun NotebookEditor(
         ) {
             BasicTextField(
                 value = fieldValue,
+                enabled = !readOnly,
                 onValueChange = { next ->
-                    val resolved = NotebookMarkdownActions.continueListOnEnter(fieldValue, next) ?: next
-                    if (resolved.text != fieldValue.text) {
-                        undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
+                    if (!readOnly) {
+                        val resolved = NotebookMarkdownActions.continueListOnEnter(fieldValue, next) ?: next
+                        if (resolved.text != fieldValue.text) {
+                            undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
+                        }
+                        fieldValue = resolved
+                        isInternalUpdate = true
+                        onContentChange(resolved.text)
                     }
-                    fieldValue = resolved
-                    isInternalUpdate = true
-                    onContentChange(resolved.text)
                 },
                 onTextLayout = ::scrollToCursorIfNeeded,
                 textStyle = TextStyle(

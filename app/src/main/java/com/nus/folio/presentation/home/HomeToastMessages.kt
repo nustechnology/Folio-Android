@@ -11,9 +11,6 @@ internal fun HomeUserMessage.toHomeToastVisuals(context: Context): FolioToastVis
         HomeUserMessage.SOURCE_DELETED -> R.string.toast_source_deleted
         HomeUserMessage.SOURCE_CREATED -> R.string.toast_source_created
         HomeUserMessage.SOURCE_FILE_SELECTED -> R.string.toast_source_file_selected
-        HomeUserMessage.SOURCE_DELETE_FAILED -> R.string.toast_source_delete_failed
-        HomeUserMessage.SOURCE_CREATE_FAILED -> R.string.toast_source_create_failed
-        HomeUserMessage.SOURCE_RETRY_FAILED -> R.string.toast_source_retry_failed
         HomeUserMessage.NOTE_UPDATED -> R.string.toast_note_updated
         HomeUserMessage.NOTE_DELETED -> R.string.toast_note_deleted
         HomeUserMessage.NOTE_SAVED -> R.string.toast_note_saved
@@ -42,10 +39,6 @@ internal fun HomeUserMessage.toHomeToastVisuals(context: Context): FolioToastVis
         -> FolioToastStyle.Success
         HomeUserMessage.ASK_FEEDBACK_RECORDED,
         -> FolioToastStyle.Info
-        HomeUserMessage.SOURCE_DELETE_FAILED,
-        HomeUserMessage.SOURCE_CREATE_FAILED,
-        HomeUserMessage.SOURCE_RETRY_FAILED,
-        -> FolioToastStyle.Error
     }
     return FolioToastVisuals(
         title = context.getString(messageRes),

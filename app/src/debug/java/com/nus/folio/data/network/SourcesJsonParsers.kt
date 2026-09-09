@@ -130,10 +130,6 @@ internal object SourcesJsonParsers {
         )
     }
 
-    /** @deprecated Prefer [parseSourcesPage] for paged list responses. */
-    fun parseSourcesList(responseBody: String, nowMillis: Long): List<Source> =
-        parseSourcesPage(responseBody, nowMillis).sources
-
     private fun firstAvailableCount(
         containers: List<JSONObject>,
         keys: List<String>,

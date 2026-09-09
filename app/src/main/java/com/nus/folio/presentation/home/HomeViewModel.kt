@@ -32,6 +32,7 @@ import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
+import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.util.AddSourceInputRules
@@ -60,6 +61,7 @@ class HomeViewModel(
     private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
     private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
+    private val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase,
     private val getNotesUseCase: GetNotesUseCase,
     private val getNoteDetailUseCase: GetNoteDetailUseCase,
     private val createNoteUseCase: CreateNoteUseCase,
@@ -96,6 +98,7 @@ class HomeViewModel(
         scope = viewModelScope,
         streamAskAnswerUseCase = streamAskAnswerUseCase,
         getAskSuggestionsUseCase = getAskSuggestionsUseCase,
+        submitAskFeedbackUseCase = submitAskFeedbackUseCase,
         createNoteUseCase = createNoteUseCase,
     )
 
@@ -516,6 +519,7 @@ class HomeViewModel(
         private val getSourceDetailUseCase: GetSourceDetailUseCase,
         private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
         private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
+        private val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase,
         private val getNotesUseCase: GetNotesUseCase,
         private val getNoteDetailUseCase: GetNoteDetailUseCase,
         private val createNoteUseCase: CreateNoteUseCase,
@@ -542,6 +546,7 @@ class HomeViewModel(
                 getSourceDetailUseCase = getSourceDetailUseCase,
                 getAskSuggestionsUseCase = getAskSuggestionsUseCase,
                 streamAskAnswerUseCase = streamAskAnswerUseCase,
+                submitAskFeedbackUseCase = submitAskFeedbackUseCase,
                 getNotesUseCase = getNotesUseCase,
                 getNoteDetailUseCase = getNoteDetailUseCase,
                 createNoteUseCase = createNoteUseCase,
