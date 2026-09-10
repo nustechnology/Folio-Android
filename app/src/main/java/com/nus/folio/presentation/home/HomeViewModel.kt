@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskConversation
+import com.nus.folio.domain.model.AskConversationPaging
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NotePaging
@@ -12,19 +14,24 @@ import com.nus.folio.domain.model.Source
 import com.nus.folio.domain.model.SourceFilter
 import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceSort
+import com.nus.folio.domain.model.SpacePaging
 import com.nus.folio.domain.model.toApiOrigin
 import com.nus.folio.domain.model.toApiSourceType
 import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
+import com.nus.folio.domain.usecase.DeleteAskConversationUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.GetAskConversationUseCase
+import com.nus.folio.domain.usecase.GetAskConversationsUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
@@ -33,6 +40,7 @@ import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
+import com.nus.folio.domain.usecase.UpdateAskConversationUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.util.AddSourceInputRules
@@ -53,6 +61,7 @@ import kotlinx.coroutines.launch
 class HomeViewModel(
     private val spaceId: String,
     spaceTitle: String,
+    researchObjective: String = "",
     private val getSourcesUseCase: GetSourcesUseCase,
     private val createSourceUseCase: CreateSourceUseCase,
     private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
@@ -60,6 +69,10 @@ class HomeViewModel(
     private val deleteSourceUseCase: DeleteSourceUseCase,
     private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
+    private val getAskConversationsUseCase: GetAskConversationsUseCase,
+    private val getAskConversationUseCase: GetAskConversationUseCase,
+    private val updateAskConversationUseCase: UpdateAskConversationUseCase,
+    private val deleteAskConversationUseCase: DeleteAskConversationUseCase,
     private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
     private val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase,
     private val getNotesUseCase: GetNotesUseCase,
@@ -70,6 +83,7 @@ class HomeViewModel(
     private val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase,
     private val getNotebookUseCase: GetNotebookUseCase,
     private val saveNotebookUseCase: SaveNotebookUseCase,
+    private val getSpacesUseCase: GetSpacesUseCase,
     private val sourceFileBytesReader: SourceFileBytesReader,
     private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
     private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
@@ -87,6 +101,7 @@ class HomeViewModel(
         HomeUiState(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
+            spaceResearchObjective = researchObjective,
             isLoading = true,
         ).withCurrentUser(getCurrentSessionUseCase()),
     )
@@ -98,8 +113,13 @@ class HomeViewModel(
         scope = viewModelScope,
         streamAskAnswerUseCase = streamAskAnswerUseCase,
         getAskSuggestionsUseCase = getAskSuggestionsUseCase,
+        getAskConversationsUseCase = getAskConversationsUseCase,
+        getAskConversationUseCase = getAskConversationUseCase,
+        updateAskConversationUseCase = updateAskConversationUseCase,
+        deleteAskConversationUseCase = deleteAskConversationUseCase,
         submitAskFeedbackUseCase = submitAskFeedbackUseCase,
         createNoteUseCase = createNoteUseCase,
+        searchDebounceMs = searchDebounceMs,
     )
 
     private val sources = HomeSourcesDelegate(
@@ -162,6 +182,8 @@ class HomeViewModel(
                     isLoading = true,
                     sourcesError = null,
                     notesError = null,
+                    askConversationsError = null,
+                    notebookError = null,
                 )
             }
             val refresh = refreshAuthSessionUseCase()
@@ -179,7 +201,13 @@ class HomeViewModel(
     fun loadHome() {
         viewModelScope.launch {
             _uiState.update {
-                it.copy(isLoading = true, sourcesError = null, notesError = null)
+                it.copy(
+                    isLoading = true,
+                    sourcesError = null,
+                    notesError = null,
+                    askConversationsError = null,
+                    notebookError = null,
+                )
             }
 
             val loadingStartedAt = System.currentTimeMillis()
@@ -204,9 +232,22 @@ class HomeViewModel(
                     limit = NotePaging.DEFAULT_LIMIT,
                 )
             }
+            val conversationsDeferred = async {
+                getAskConversationsUseCase(
+                    spaceId = spaceId,
+                    search = state.searchQuery.trim().takeIf { it.isNotEmpty() },
+                    page = AskConversationPaging.DEFAULT_PAGE,
+                    limit = AskConversationPaging.DEFAULT_LIMIT,
+                )
+            }
+            val spaceDeferred = async {
+                resolveSpaceResearchObjective()
+            }
 
             val sourcesResult = sourcesDeferred.await()
             val notesResult = notesDeferred.await()
+            val conversationsResult = conversationsDeferred.await()
+            spaceDeferred.await()
 
             val elapsed = System.currentTimeMillis() - loadingStartedAt
             delay((loadMinDelayMs - elapsed).coerceAtLeast(0L))
@@ -248,6 +289,23 @@ class HomeViewModel(
                     },
                 )
 
+                next = conversationsResult.fold(
+                    onSuccess = { library ->
+                        next.copy(
+                            askConversationsError = null,
+                            askConversations = library.conversations,
+                            askConversationsCurrentPage = library.page,
+                            askConversationsHasMore = library.hasMore,
+                            isRefreshingAskConversations = false,
+                            isLoadingMoreAskConversations = false,
+                            isSearchingAskConversations = false,
+                        )
+                    },
+                    onFailure = {
+                        next.copy(askConversationsError = "")
+                    },
+                )
+
                 next.copy(
                     visibleSources = next.allSources,
                     visibleNotes = filterNotes(next),
@@ -257,11 +315,46 @@ class HomeViewModel(
         }
     }
 
+    private suspend fun resolveSpaceResearchObjective() {
+        if (_uiState.value.spaceResearchObjective.isNotBlank()) return
+        val titleQuery = _uiState.value.spaceTitle.trim().takeIf { it.isNotEmpty() }
+        val space = getSpacesUseCase(
+            searchQuery = null,
+            page = SpacePaging.DEFAULT_PAGE,
+            limit = SpacePaging.DEFAULT_LIMIT,
+        ).getOrNull()?.spaces?.firstOrNull { it.id == spaceId }
+            ?: titleQuery?.let { query ->
+                getSpacesUseCase(
+                    searchQuery = query,
+                    page = SpacePaging.DEFAULT_PAGE,
+                    limit = SpacePaging.DEFAULT_LIMIT,
+                ).getOrNull()?.spaces?.firstOrNull { it.id == spaceId }
+            }
+            ?: return
+        val objective = space.description.trim()
+        if (objective.isEmpty()) return
+        _uiState.update { current ->
+            current.copy(
+                spaceResearchObjective = objective,
+                spaceTitle = current.spaceTitle.ifBlank { space.title },
+            )
+        }
+    }
+
+    fun onResearchObjectiveAvailable(researchObjective: String) {
+        val trimmed = researchObjective.trim()
+        if (trimmed.isEmpty()) return
+        if (_uiState.value.spaceResearchObjective == trimmed) return
+        _uiState.update { it.copy(spaceResearchObjective = trimmed) }
+        notebook.ensureDefaultContent()
+    }
+
     fun onSearchQueryChange(query: String) {
         _uiState.update { state ->
             val next = state.copy(
                 searchQuery = query,
                 isSearchingNotes = state.selectedTab == HomeTab.NOTES,
+                isSearchingAskConversations = state.selectedTab == HomeTab.ASK,
             )
             next.copy(
                 visibleNotes = filterNotes(next),
@@ -271,7 +364,8 @@ class HomeViewModel(
         when (_uiState.value.selectedTab) {
             HomeTab.SOURCES -> sources.scheduleSearchReload()
             HomeTab.NOTES -> notes.scheduleSearchReload()
-            HomeTab.ASK, HomeTab.NOTEBOOK -> Unit
+            HomeTab.ASK -> ask.scheduleSearchReload()
+            HomeTab.NOTEBOOK -> Unit
         }
     }
 
@@ -279,6 +373,7 @@ class HomeViewModel(
     fun clearSearch() {
         sources.cancelSearchJob()
         notes.cancelSearchJob()
+        ask.cancelSearchJob()
         val previousQuery = _uiState.value.searchQuery
         if (previousQuery.isBlank()) return
         val previousTab = _uiState.value.selectedTab
@@ -286,6 +381,7 @@ class HomeViewModel(
             val next = state.copy(
                 searchQuery = "",
                 isSearchingNotes = false,
+                isSearchingAskConversations = false,
             )
             next.copy(
                 visibleSources = next.allSources,
@@ -295,7 +391,8 @@ class HomeViewModel(
         when (previousTab) {
             HomeTab.SOURCES -> sources.loadSourcesOnly()
             HomeTab.NOTES -> notes.loadNotesOnly()
-            HomeTab.ASK, HomeTab.NOTEBOOK -> Unit
+            HomeTab.ASK -> ask.loadConversationsOnly()
+            HomeTab.NOTEBOOK -> Unit
         }
     }
 
@@ -324,22 +421,32 @@ class HomeViewModel(
 
     fun onLoadMoreSources() = sources.onLoadMore()
 
+    fun onLoadMoreConversations() = ask.onLoadMore()
+
     fun onRefreshNotes() = notes.onRefreshNotes()
 
     fun onTabSelected(tab: HomeTab) {
         sources.cancelSearchJob()
         notes.cancelSearchJob()
+        ask.cancelSearchJob()
         val previousQuery = _uiState.value.searchQuery
         val previousTab = _uiState.value.selectedTab
+        val wasAskChatOpen = _uiState.value.isAskChatOpen
         _uiState.update { state ->
             val next = state.copy(
                 selectedTab = tab,
                 searchQuery = "",
+                isSearchingAskConversations = false,
             )
             next.copy(
                 visibleSources = next.allSources,
                 visibleNotes = filterNotes(next),
             )
+        }
+        // Exit open Ask chat when leaving or selecting Ask so header matches the tab.
+        // Do this before search-clear reloads: onAskChatBack already loads conversations.
+        if (previousTab == HomeTab.ASK || tab == HomeTab.ASK) {
+            ask.onAskChatBack()
         }
         if (previousQuery.isNotBlank()) {
             // Search was cleared — reload the tab that owned the query.
@@ -349,9 +456,14 @@ class HomeViewModel(
             if (previousTab == HomeTab.NOTES) {
                 notes.loadNotesOnly()
             }
+            // Ask chat-open path already reloaded via onAskChatBack; avoid a second job.
+            if (previousTab == HomeTab.ASK && !wasAskChatOpen) {
+                ask.loadConversationsOnly()
+            }
         }
         if (tab == HomeTab.NOTEBOOK) {
             notebook.loadNotebook()
+            notebook.ensureDefaultContent()
         }
     }
 
@@ -394,7 +506,8 @@ class HomeViewModel(
 
     fun onAskSaveAsNoteDismiss() = ask.onAskSaveAsNoteDismiss()
 
-    fun onAskSaveAsNoteConfirm(title: String) = ask.onAskSaveAsNoteConfirm(title)
+    fun onAskSaveAsNoteConfirm(title: String, content: String) =
+        ask.onAskSaveAsNoteConfirm(title, content)
 
     fun onAskFeedback(messageId: String, useful: Boolean) = ask.onAskFeedback(messageId, useful)
 
@@ -411,6 +524,29 @@ class HomeViewModel(
     fun onAskScopeOptionSelected(sourceId: String?) = ask.onAskScopeOptionSelected(sourceId)
 
     fun onNewConversation() = ask.onNewConversation()
+
+    fun onAskChatBack() = ask.onAskChatBack()
+
+    fun onRefreshConversations() = ask.onRefreshConversations()
+
+    fun onConversationClick(conversation: AskConversation) = ask.onConversationClick(conversation)
+
+    fun onConversationOptionsClick(conversation: AskConversation) =
+        ask.onConversationOptionsClick(conversation)
+
+    fun onConversationOptionsDismiss() = ask.onConversationOptionsDismiss()
+
+    fun onRenameConversationClick() = ask.onRenameConversationClick()
+
+    fun onRenameConversationDismiss() = ask.onRenameConversationDismiss()
+
+    fun onRenameConversationSave(title: String) = ask.onRenameConversationSave(title)
+
+    fun onDeleteConversationClick() = ask.onDeleteConversationClick()
+
+    fun onDeleteConversationDismiss() = ask.onDeleteConversationDismiss()
+
+    fun onDeleteConversationConfirm() = ask.onDeleteConversationConfirm()
 
     fun onAskSourceSelected(sourceId: String) = ask.onAskSourceSelected(sourceId)
 
@@ -431,6 +567,8 @@ class HomeViewModel(
     fun onNotebookContentChange(content: String) = notebook.onNotebookContentChange(content)
 
     fun onRetryNotebookSave() = notebook.retryNotebookSave()
+
+    fun onRetryNotebookLoad() = notebook.loadNotebook()
 
     fun onPendingNotebookCopyHandled() = notebook.onPendingNotebookCopyHandled()
 
@@ -511,6 +649,7 @@ class HomeViewModel(
     class Factory(
         private val spaceId: String,
         private val spaceTitle: String,
+        private val researchObjective: String = "",
         private val getSourcesUseCase: GetSourcesUseCase,
         private val createSourceUseCase: CreateSourceUseCase,
         private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
@@ -518,6 +657,10 @@ class HomeViewModel(
         private val deleteSourceUseCase: DeleteSourceUseCase,
         private val getSourceDetailUseCase: GetSourceDetailUseCase,
         private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
+        private val getAskConversationsUseCase: GetAskConversationsUseCase,
+        private val getAskConversationUseCase: GetAskConversationUseCase,
+        private val updateAskConversationUseCase: UpdateAskConversationUseCase,
+        private val deleteAskConversationUseCase: DeleteAskConversationUseCase,
         private val streamAskAnswerUseCase: StreamAskAnswerUseCase,
         private val submitAskFeedbackUseCase: SubmitAskFeedbackUseCase,
         private val getNotesUseCase: GetNotesUseCase,
@@ -528,6 +671,7 @@ class HomeViewModel(
         private val convertNoteToSourceUseCase: ConvertNoteToSourceUseCase,
         private val getNotebookUseCase: GetNotebookUseCase,
         private val saveNotebookUseCase: SaveNotebookUseCase,
+        private val getSpacesUseCase: GetSpacesUseCase,
         private val sourceFileBytesReader: SourceFileBytesReader,
         private val refreshAuthSessionUseCase: RefreshAuthSessionUseCase,
         private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
@@ -538,6 +682,7 @@ class HomeViewModel(
             return HomeViewModel(
                 spaceId = spaceId,
                 spaceTitle = spaceTitle,
+                researchObjective = researchObjective,
                 getSourcesUseCase = getSourcesUseCase,
                 createSourceUseCase = createSourceUseCase,
                 observeSourceProcessingUseCase = observeSourceProcessingUseCase,
@@ -545,6 +690,10 @@ class HomeViewModel(
                 deleteSourceUseCase = deleteSourceUseCase,
                 getSourceDetailUseCase = getSourceDetailUseCase,
                 getAskSuggestionsUseCase = getAskSuggestionsUseCase,
+                getAskConversationsUseCase = getAskConversationsUseCase,
+                getAskConversationUseCase = getAskConversationUseCase,
+                updateAskConversationUseCase = updateAskConversationUseCase,
+                deleteAskConversationUseCase = deleteAskConversationUseCase,
                 streamAskAnswerUseCase = streamAskAnswerUseCase,
                 submitAskFeedbackUseCase = submitAskFeedbackUseCase,
                 getNotesUseCase = getNotesUseCase,
@@ -555,6 +704,7 @@ class HomeViewModel(
                 convertNoteToSourceUseCase = convertNoteToSourceUseCase,
                 getNotebookUseCase = getNotebookUseCase,
                 saveNotebookUseCase = saveNotebookUseCase,
+                getSpacesUseCase = getSpacesUseCase,
                 sourceFileBytesReader = sourceFileBytesReader,
                 refreshAuthSessionUseCase = refreshAuthSessionUseCase,
                 getCurrentSessionUseCase = getCurrentSessionUseCase,

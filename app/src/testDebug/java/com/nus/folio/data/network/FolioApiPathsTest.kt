@@ -7,6 +7,11 @@ import org.junit.Test
 class FolioApiPathsTest {
 
     @Test
+    fun `debug base url is the production Folio host`() {
+        assertEquals("https://folio.nustechnology.com", FolioApiPaths.BASE_URL)
+    }
+
+    @Test
     fun `auth paths resolve against base url`() {
         assertEquals(
             "${FolioApiPaths.BASE_URL}/api/v1/auth/login",
@@ -87,6 +92,18 @@ class FolioApiPathsTest {
         assertEquals(
             "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/notebook",
             FolioApiPaths.spaceNotebook("space/id"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/conversations",
+            FolioApiPaths.spaceConversations("space/id"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/conversations?page=2&limit=10&search=q4",
+            FolioApiPaths.spaceConversations("space/id", query = "page=2&limit=10&search=q4"),
+        )
+        assertEquals(
+            "${FolioApiPaths.BASE_URL}/api/v1/spaces/space%2Fid/conversations/conv%2F1",
+            FolioApiPaths.spaceConversation("space/id", "conv/1"),
         )
     }
 

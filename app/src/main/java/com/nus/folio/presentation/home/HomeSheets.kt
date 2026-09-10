@@ -22,6 +22,7 @@ import com.nus.folio.presentation.home.bottomsheet.DeleteConfirmationBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditNoteBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.EditSourceBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.ExportNotebookBottomSheet
+import com.nus.folio.presentation.home.bottomsheet.RenameAskConversationBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SaveAskNoteBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SortNotesBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.SortSourcesBottomSheet
@@ -48,10 +49,17 @@ internal fun HomeOverlaySheets(
     onAddNoteSheetDismiss: () -> Unit,
     onAddNoteSubmit: (String, String) -> Unit,
     onAskSaveAsNoteDismiss: () -> Unit,
-    onAskSaveAsNoteConfirm: (String) -> Unit,
+    onAskSaveAsNoteConfirm: (String, String) -> Unit,
     onAskCitationClick: (AskCitation) -> Unit,
     onConversationSheetDismiss: () -> Unit,
     onNewConversation: () -> Unit,
+    onConversationOptionsDismiss: () -> Unit = {},
+    onRenameConversationClick: () -> Unit = {},
+    onRenameConversationDismiss: () -> Unit = {},
+    onRenameConversationSave: (String) -> Unit = {},
+    onDeleteConversationClick: () -> Unit = {},
+    onDeleteConversationDismiss: () -> Unit = {},
+    onDeleteConversationConfirm: () -> Unit = {},
     onAskScopeOptionSelected: (String?) -> Unit,
     onAnswerScopeSheetDismiss: () -> Unit,
     onCitationPreviewDismiss: () -> Unit,
@@ -138,7 +146,6 @@ internal fun HomeOverlaySheets(
             draft = draft,
             onDismiss = onAskSaveAsNoteDismiss,
             onSubmit = onAskSaveAsNoteConfirm,
-            onCitationClick = onAskCitationClick,
         )
     }
 
@@ -250,6 +257,42 @@ internal fun HomeOverlaySheets(
                 ),
             ),
             onDismiss = onSourceOptionsDismiss,
+        )
+    }
+
+    uiState.optionsConversation?.let { conversation ->
+        ItemOptionsBottomSheet(
+            title = conversation.title,
+            actions = listOf(
+                ItemOptionAction(
+                    label = stringResource(R.string.conversation_options_rename),
+                    onClick = onRenameConversationClick,
+                ),
+                ItemOptionAction(
+                    label = stringResource(R.string.conversation_options_delete),
+                    style = ItemOptionStyle.Destructive,
+                    onClick = onDeleteConversationClick,
+                ),
+            ),
+            onDismiss = onConversationOptionsDismiss,
+        )
+    }
+
+    uiState.renamingConversation?.let { conversation ->
+        RenameAskConversationBottomSheet(
+            conversation = conversation,
+            onDismiss = onRenameConversationDismiss,
+            onSave = onRenameConversationSave,
+            isSubmitting = uiState.isRenamingConversation,
+        )
+    }
+
+    uiState.deletingConversation?.let {
+        DeleteConfirmationBottomSheet(
+            titleRes = R.string.conversation_delete_title,
+            messageRes = R.string.conversation_delete_message,
+            onDismiss = onDeleteConversationDismiss,
+            onConfirm = onDeleteConversationConfirm,
         )
     }
 

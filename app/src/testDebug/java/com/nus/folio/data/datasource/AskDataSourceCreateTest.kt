@@ -3,6 +3,9 @@ package com.nus.folio.data.datasource
 import com.nus.folio.data.network.AskApi
 import com.nus.folio.data.network.UnauthorizedException
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskConversation
+import com.nus.folio.domain.model.AskConversationDetail
+import com.nus.folio.domain.model.AskConversationLibrary
 import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AskSuggestions
@@ -23,6 +26,10 @@ class AskDataSourceCreateTest {
         var lastQuestion: String? = null
         var lastSourceId: String? = null
         var lastConversationId: String? = null
+        var lastUpdatedTitle: String? = null
+        var lastListSearch: String? = null
+        var lastListPage: Int? = null
+        var lastListLimit: Int? = null
         var lastSuggestionsSpaceId: String? = null
         var lastSuggestionsSourceId: String? = null
         var lastFeedbackSpaceId: String? = null
@@ -112,6 +119,88 @@ class AskDataSourceCreateTest {
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
                 throw UnauthorizedException("Submit ask feedback failed (HTTP 401)")
+            }
+        }
+
+        override suspend fun listConversations(
+            accessToken: String,
+            spaceId: String,
+            search: String?,
+            page: Int,
+            limit: Int,
+        ): AskConversationLibrary {
+            lastAccessToken = accessToken
+            lastSpaceId = spaceId
+            lastListSearch = search
+            lastListPage = page
+            lastListLimit = limit
+            if (failUnauthorizedOnce && accessToken == "expired-token") {
+                failUnauthorizedOnce = false
+                throw UnauthorizedException("Get conversations failed (HTTP 401)")
+            }
+            return AskConversationLibrary(
+                conversations = emptyList(),
+                page = page,
+                limit = limit,
+            )
+        }
+
+        override suspend fun getConversation(
+            accessToken: String,
+            spaceId: String,
+            conversationId: String,
+        ): AskConversationDetail {
+            lastAccessToken = accessToken
+            lastSpaceId = spaceId
+            lastConversationId = conversationId
+            if (failUnauthorizedOnce && accessToken == "expired-token") {
+                failUnauthorizedOnce = false
+                throw UnauthorizedException("Get conversation failed (HTTP 401)")
+            }
+            return AskConversationDetail(
+                conversation = AskConversation(
+                    id = conversationId,
+                    title = "Conversation",
+                    dateLabel = "Aug 20, 07:54",
+                    spaceId = spaceId,
+                ),
+                messages = emptyList(),
+            )
+        }
+
+        override suspend fun updateConversation(
+            accessToken: String,
+            spaceId: String,
+            conversationId: String,
+            title: String,
+        ): AskConversation {
+            lastAccessToken = accessToken
+            lastSpaceId = spaceId
+            lastConversationId = conversationId
+            lastUpdatedTitle = title
+            if (failUnauthorizedOnce && accessToken == "expired-token") {
+                failUnauthorizedOnce = false
+                throw UnauthorizedException("Update conversation failed (HTTP 401)")
+            }
+            return AskConversation(
+                id = conversationId,
+                title = title,
+                dateLabel = "Aug 20, 07:54",
+                spaceId = spaceId,
+            )
+        }
+
+        override suspend fun deleteConversation(
+            accessToken: String,
+            spaceId: String,
+            conversationId: String,
+        ) {
+            lastAccessToken = accessToken
+            lastSpaceId = spaceId
+            lastConversationId = conversationId
+            if (failUnauthorizedOnce && accessToken == "expired-token") {
+                failUnauthorizedOnce = false
+                throw UnauthorizedException("Delete conversation failed (HTTP 401)")
             }
         }
     }
@@ -319,5 +408,48 @@ class AskDataSourceCreateTest {
         assertEquals(2, api.feedbackCallCount)
         assertEquals("fresh-token", api.lastAccessToken)
         assertEquals("not_useful", api.lastFeedbackRating)
+    }
+
+    @Test
+    fun `updateConversation forwards title to API`() = runTest {
+        val api = FakeAskApi()
+        val dataSource = AskDataSource(
+            accessTokenProvider = { "access-token" },
+            askApi = api,
+        )
+
+        val updated = dataSource.updateConversation(
+            spaceId = "space-1",
+            conversationId = "conv-1",
+            title = "Q4 operating costs",
+        )
+
+        assertEquals("access-token", api.lastAccessToken)
+        assertEquals("space-1", api.lastSpaceId)
+        assertEquals("conv-1", api.lastConversationId)
+        assertEquals("Q4 operating costs", api.lastUpdatedTitle)
+        assertEquals("Q4 operating costs", updated.title)
+    }
+
+    @Test
+    fun `fetchConversations forwards search page and limit`() = runTest {
+        val api = FakeAskApi()
+        val dataSource = AskDataSource(
+            accessTokenProvider = { "access-token" },
+            askApi = api,
+        )
+
+        dataSource.fetchConversations(
+            spaceId = "space-1",
+            search = "operating",
+            page = 2,
+            limit = 10,
+        )
+
+        assertEquals("access-token", api.lastAccessToken)
+        assertEquals("space-1", api.lastSpaceId)
+        assertEquals("operating", api.lastListSearch)
+        assertEquals(2, api.lastListPage)
+        assertEquals(10, api.lastListLimit)
     }
 }

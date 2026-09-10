@@ -10,6 +10,7 @@ import com.nus.folio.presentation.home.NoteIconBadgeColors
 import com.nus.folio.presentation.home.SourceTypeBadgeColors
 import com.nus.folio.presentation.home.noteFilterBadgeColors
 import com.nus.folio.presentation.home.noteOriginBadgeColors
+import com.nus.folio.presentation.home.notebook.NotebookMarkdownVisuals
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -408,7 +409,9 @@ private fun NoteCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = note.content,
+                text = remember(note.content) {
+                    NotebookMarkdownVisuals.visualize(note.content).text
+                },
                 fontSize = 13.sp,
                 color = HomeTextSecondary,
                 maxLines = 2,

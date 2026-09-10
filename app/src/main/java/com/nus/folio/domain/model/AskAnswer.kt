@@ -59,4 +59,8 @@ data class CreateNoteRequest(
     val citationCount: Int = 0,
     val citations: List<AskCitation> = emptyList(),
     val project: String? = null,
+    /** Ask conversation id sent as `origin.conversationId` when saving an assistant answer. */
+    val conversationId: String? = null,
+    /** Ask message id sent as `origin.messageId` when saving an assistant answer. */
+    val messageId: String? = null,
 )

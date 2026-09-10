@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.nus.folio.ui.theme.FolioSheetShape
 import com.nus.folio.ui.theme.HomeSheetBackground
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -75,8 +76,8 @@ fun interface ModalSheetDismiss {
  * Call [ModalSheetDismiss] to animate out, optionally running an action once the exit
  * finishes, then [onDismiss] so the parent can remove the sheet from composition.
  *
- * Drag the sheet downward to dismiss; scrollable content can still scroll when the sheet
- * is fully expanded.
+ * Drag the sheet downward to dismiss. Nested scrollables (inputs, lists) keep
+ * the gesture while scrolling so they do not close the sheet.
  */
 @Composable
 internal fun AnimatedModalSheet(
@@ -123,10 +124,10 @@ internal fun AnimatedModalSheet(
         visibleState.targetState = false
     }
 
-    suspend fun settleDragDismiss() {
-        if (dragOffsetY.value >= dismissThresholdPx) {
-            requestDismiss()
-        } else {
+    val nestedScrollActive = remember { AtomicBoolean(false) }
+
+    suspend fun snapSheetBack() {
+        if (dragOffsetY.value > 0f) {
             dragOffsetY.animateTo(
                 targetValue = 0f,
                 animationSpec = spring(),
@@ -134,9 +135,24 @@ internal fun AnimatedModalSheet(
         }
     }
 
+    suspend fun settleDragDismiss() {
+        if (nestedScrollActive.get()) {
+            snapSheetBack()
+            return
+        }
+        if (dragOffsetY.value >= dismissThresholdPx) {
+            requestDismiss()
+        } else {
+            snapSheetBack()
+        }
+    }
+
     val dragConnection = remember(dismissThresholdPx) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source.isUserDrag()) {
+                    nestedScrollActive.set(true)
+                }
                 val delta = available.y
                 if (delta < 0 && dragOffsetY.value > 0f) {
                     val previousOffset = dragOffsetY.value
@@ -153,30 +169,29 @@ internal fun AnimatedModalSheet(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                val delta = available.y
-                if (delta > 0) {
-                    val previousOffset = dragOffsetY.value
-                    scope.launch { dragOffsetY.snapTo(previousOffset + delta) }
-                    return Offset(0f, delta)
+                if (source.isUserDrag()) {
+                    nestedScrollActive.set(true)
                 }
+                // Nested children (text fields, lists) keep leftover scroll instead of
+                // dragging the sheet closed.
                 return Offset.Zero
             }
 
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                nestedScrollActive.set(true)
+                return Velocity.Zero
+            }
+
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (dragOffsetY.value >= dismissThresholdPx || available.y > ModalSheetDismissFlingVelocity) {
-                    requestDismiss()
-                } else if (dragOffsetY.value > 0f) {
-                    dragOffsetY.animateTo(
-                        targetValue = 0f,
-                        animationSpec = spring(),
-                    )
-                }
-                return available
+                nestedScrollActive.set(false)
+                snapSheetBack()
+                return Velocity.Zero
             }
         }
     }
 
     val draggableState = rememberDraggableState { delta ->
+        if (nestedScrollActive.get()) return@rememberDraggableState
         scope.launch {
             dragOffsetY.snapTo((dragOffsetY.value + delta).coerceAtLeast(0f))
         }
@@ -256,8 +271,16 @@ internal fun AnimatedModalSheet(
                     .draggable(
                         state = draggableState,
                         orientation = Orientation.Vertical,
+                        onDragStarted = {
+                            // Child drag without fling never hits onPostFling.
+                            nestedScrollActive.set(false)
+                        },
                         onDragStopped = { velocity ->
                             scope.launch {
+                                if (nestedScrollActive.get()) {
+                                    snapSheetBack()
+                                    return@launch
+                                }
                                 if (
                                     dragOffsetY.value >= dismissThresholdPx ||
                                     velocity > ModalSheetDismissFlingVelocity
@@ -279,3 +302,8 @@ internal fun AnimatedModalSheet(
         }
     }
 }
+
+@Suppress("DEPRECATION")
+private fun NestedScrollSource.isUserDrag(): Boolean =
+    this == NestedScrollSource.UserInput || this == NestedScrollSource.Drag
+

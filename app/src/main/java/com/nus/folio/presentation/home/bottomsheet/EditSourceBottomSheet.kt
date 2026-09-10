@@ -1,8 +1,5 @@
 package com.nus.folio.presentation.home.bottomsheet
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -169,6 +166,13 @@ internal fun EditSourceSheetContent(
             fontWeight = FontWeight.SemiBold,
             color = HomeTextPrimary,
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.edit_source_description),
+            fontSize = 14.sp,
+            color = HomeTextPrimary,
+            lineHeight = 20.sp,
+        )
         Spacer(modifier = Modifier.height(24.dp))
         AddSourceLabeledField(
             label = stringResource(R.string.edit_source_title_label),
@@ -176,17 +180,17 @@ internal fun EditSourceSheetContent(
             onValueChange = { title = AddSourceInputRules.limitTitle(it) },
             placeholder = stringResource(R.string.edit_source_title_placeholder),
             singleLine = true,
+            characterLimit = AddSourceInputRules.MAX_TITLE_LENGTH,
         )
-        Spacer(modifier = Modifier.height(16.dp))
         AddSourceLabeledField(
             label = stringResource(R.string.edit_source_author_label),
             value = author,
             onValueChange = { author = AddSourceInputRules.limitAuthor(it) },
             placeholder = stringResource(R.string.edit_source_author_placeholder),
             singleLine = true,
+            characterLimit = AddSourceInputRules.MAX_AUTHOR_LENGTH,
         )
         if (isTextSource) {
-            Spacer(modifier = Modifier.height(16.dp))
             Column(modifier = Modifier.fillMaxWidth()) {
                 AddSourceLabeledField(
                     label = stringResource(R.string.add_source_text_content_label),

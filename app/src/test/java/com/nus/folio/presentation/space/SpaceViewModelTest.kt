@@ -74,11 +74,11 @@ class SpaceViewModelTest {
             createMinDelayMs = 0L,
             loadMinDelayMs = 0L,
             pageLimit = pageLimit,
-        )
+        ).also { it.onScreenFocused() }
     }
 
     @Test
-    fun `init loads spaces successfully`() {
+    fun `onScreenFocused loads spaces successfully`() {
         val viewModel = createViewModel()
 
         assertFalse(viewModel.uiState.value.isLoading)
@@ -89,6 +89,18 @@ class SpaceViewModelTest {
         assertFalse(viewModel.uiState.value.hasMore)
         assertNull(spaceRepository.lastSearchQuery)
         assertEquals(1, spaceRepository.lastPage)
+    }
+
+    @Test
+    fun `onScreenFocused refreshes spaces when list already loaded`() {
+        val viewModel = createViewModel()
+        val callsBefore = spaceRepository.getSpacesCallCount
+
+        viewModel.onScreenFocused()
+
+        assertEquals(callsBefore + 1, spaceRepository.getSpacesCallCount)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(2, viewModel.uiState.value.visibleSpaces.size)
     }
 
     @Test

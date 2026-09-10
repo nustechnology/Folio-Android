@@ -120,7 +120,6 @@ class FolioHttpTest {
     fun `jsonAcceptHeaders includes bearer when token present`() {
         val headers = FolioHttp.jsonAcceptHeaders("token-123")
         assertEquals("application/json", headers["Accept"])
-        assertEquals("true", headers["ngrok-skip-browser-warning"])
         assertEquals("Bearer token-123", headers["Authorization"])
     }
 

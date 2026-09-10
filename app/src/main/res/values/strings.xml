@@ -30,7 +30,6 @@
     <string name="signup_confirm_password_label">Confirm password</string>
     <string name="signup_confirm_password_hint">••••••••••</string>
     <string name="signup_create_account">Create account</string>
-    <string name="signup_continue_with_apple">Continue with Apple</string>
     <string name="signup_already_have_account">Already have an account?</string>
     <string name="signup_sign_in">Sign in</string>
     <string name="signup_error_name_required">Enter your name.</string>
@@ -73,6 +72,7 @@
     <string name="home_notebook_subtitle">Research workspace</string>
     <string name="home_search_sources">Search sources</string>
     <string name="home_search_notes">Search notes</string>
+    <string name="home_search_conversations">Search conversations</string>
     <string name="home_search">Search</string>
     <string name="search_clear">Clear search</string>
     <string name="search_empty_title">No results found</string>
@@ -112,6 +112,9 @@
     <string name="home_ask_suggestion_3">Where do the sources disagree?</string>
     <string name="home_ask_thinking">Thinking…</string>
     <string name="home_ask_stop">Stop</string>
+    <string name="home_ask_limitation_label">Limitation:</string>
+    <string name="home_ask_evidence_show_more">Show more</string>
+    <string name="home_ask_evidence_show_less">Show less</string>
     <string name="home_ask_no_evidence">No evidence available. Add a source before asking this question.</string>
     <string name="home_ask_no_evidence_cta">Add source</string>
     <string name="home_ask_save_as_note">Save as note</string>
@@ -136,6 +139,19 @@
     <string name="citation_preview_open_in_source">Open in source</string>
     <string name="conversation_title">Conversation</string>
     <string name="conversation_new">New conversation</string>
+    <string name="home_ask_conversation_more">More options</string>
+    <string name="home_empty_conversations">No conversations yet</string>
+    <string name="home_empty_conversations_subtitle">Ask a question to start a grounded conversation.</string>
+    <string name="conversation_options_rename">Rename</string>
+    <string name="conversation_options_delete">Delete</string>
+    <string name="rename_conversation_title">Rename conversation</string>
+    <string name="rename_conversation_description">Conversations are titled with their opening question. Give this one a name that will be easier to find.</string>
+    <string name="rename_conversation_name_label">Title</string>
+    <string name="rename_conversation_name_placeholder">Name this conversation</string>
+    <string name="conversation_delete_title">Delete conversation?</string>
+    <string name="conversation_delete_message">This permanently removes the conversation and its messages.</string>
+    <string name="toast_conversation_renamed">Conversation renamed</string>
+    <string name="toast_conversation_deleted">Conversation deleted</string>
     <string name="answer_scope_title">Answer scope</string>
     <string name="answer_scope_entire_space">Entire space</string>
     <string name="answer_scope_entire_space_subtitle">%1$d ready sources</string>
@@ -157,17 +173,17 @@
     <string name="add_source_upload_hint">Tap to upload a file or drag and drop</string>
     <string name="add_source_upload_types">PDF, DOCX, EPUB, MD, TXT, PPTX, XLSX, CSV</string>
     <string name="add_source_upload_limit">Max 50 MB per file</string>
-    <string name="add_source_web_url_label">Article URL</string>
+    <string name="add_source_web_url_label">Article URL (required)</string>
     <string name="add_source_web_url_placeholder">https://example.org/care-technology-adoption</string>
-    <string name="add_source_web_title_label">Title</string>
+    <string name="add_source_web_title_label">Title (optional)</string>
     <string name="add_source_web_title_placeholder">Care Technology Adoption Survey 2026</string>
-    <string name="add_source_web_author_label">Author</string>
+    <string name="add_source_web_author_label">Author (optional)</string>
     <string name="add_source_web_author_placeholder">Care Systems Association</string>
-    <string name="add_source_text_title_label">Title</string>
+    <string name="add_source_text_title_label">Title (optional)</string>
     <string name="add_source_text_title_placeholder">Provider workshop evidence</string>
-    <string name="add_source_text_author_label">Author</string>
+    <string name="add_source_text_author_label">Author (optional)</string>
     <string name="add_source_text_author_placeholder">Internal research</string>
-    <string name="add_source_text_content_label">Content</string>
+    <string name="add_source_text_content_label">Content (required)</string>
     <string name="add_source_text_content_placeholder">Frontline coordinators described repeated entry across scheduling, incident, and compliance systems.</string>
     <string name="add_source_text_content_counter">%1$s / %2$s</string>
     <string name="add_source_submit">Add source</string>
@@ -199,9 +215,10 @@
     <string name="add_source_text_content_too_short">Content must be at least 10 characters long.</string>
     <string name="add_source_text_content_too_long">Content exceeds maximum limit of %1$s characters.</string>
     <string name="edit_source_title">Edit source</string>
+    <string name="edit_source_description">Update details for this source document.</string>
     <string name="edit_source_title_label">Title</string>
     <string name="edit_source_title_placeholder">Source title</string>
-    <string name="edit_source_author_label">Author</string>
+    <string name="edit_source_author_label">Author (optional)</string>
     <string name="edit_source_author_placeholder">Author name</string>
     <string name="edit_source_save">Save</string>
 
@@ -223,7 +240,9 @@
     <string name="add_note_content_too_long">Content exceeds maximum length of 20,000 characters</string>
     <string name="add_note_submit">Save note</string>
     <string name="add_note_discard_title">Discard unsaved note?</string>
-    <string name="add_note_discard_message">Your unsaved note will be lost.</string>
+    <string name="add_note_discard_message">Your note has not been saved. Closing now discards it.</string>
+    <string name="add_note_discard_keep_editing">No, keep editing</string>
+    <string name="add_note_discard_confirm">Yes, discard</string>
     <string name="sheet_discard_unsaved_title">Discard unsaved changes?</string>
     <string name="sheet_discard_unsaved_message">Your unsaved edits will be lost.</string>
     <string name="sheet_discard_confirm">Discard</string>
@@ -235,7 +254,6 @@
     <string name="home_empty_notes_action">Add note</string>
     <string name="notebook_save_status_saving">Saving…</string>
     <string name="notebook_save_status_saved">Saved</string>
-    <string name="notebook_save_status_failed">Couldn\'t save</string>
     <string name="notebook_save_status_retry">Retry</string>
     <string name="notebook_save_status_offline">Offline</string>
     <string name="notebook_save_status_read_only">Read-only</string>
@@ -251,6 +269,7 @@
     <string name="notebook_toolbar_bullet_list">Bulleted list</string>
     <string name="notebook_toolbar_ordered_list">Numbered list</string>
     <string name="notebook_toolbar_blockquote">Blockquote</string>
+    <string name="notebook_toolbar_link">Link</string>
     <string name="notebook_toolbar_undo">Undo</string>
     <string name="notebook_toolbar_redo">Redo</string>
     <string name="notebook_toolbar_bold_symbol" translatable="false">B</string>
@@ -277,7 +296,7 @@
     <string name="note_view_close">Close</string>
     <string name="note_convert_title">Convert to source</string>
     <string name="note_convert_banner_lead">A fixed snapshot will be created.</string>
-    <string name="note_convert_banner_rest">Later note edits will not change the source.</string>
+    <string name="note_convert_banner_rest">Later note edits will not change the source, and deleting the note leaves the source in place.</string>
     <string name="note_convert_source_title">Source title</string>
     <string name="note_convert_snapshot">Snapshot</string>
     <string name="note_convert_create">Create source</string>
@@ -287,20 +306,10 @@
     <string name="home_note_badge_saved_answer">Saved answer</string>
     <string name="home_note_badge_citations">%d citations</string>
 
-    <string name="account_subtitle">Account settings</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_sign_out_title">Sign out?</string>
     <string name="account_sign_out_message">You will need to sign in again to access your spaces.</string>
     <string name="account_signed_out">Signed out successfully.</string>
-    <string name="account_profile_settings">Profile settings</string>
-    <string name="account_security">Security</string>
-    <string name="account_privacy_data">Privacy &amp; data</string>
-    <string name="account_export_data">Export account data</string>
-    <string name="account_profile_settings_not_supported">Profile settings are not supported yet.</string>
-    <string name="account_security_not_supported">Security settings are not supported yet.</string>
-    <string name="account_privacy_data_not_supported">Privacy &amp; data settings are not supported yet.</string>
-    <string name="account_export_data_not_supported">Exporting account data is not supported yet.</string>
-    <string name="account_navigate">Navigate</string>
 
     <string name="home_sources_more">More options</string>
     <string name="source_options_edit">Edit details</string>
@@ -319,7 +328,9 @@
     <string name="source_detail_open_original">Open original ↗</string>
     <string name="source_detail_open_sheet_title">Open source?</string>
     <string name="source_detail_open_sheet_message">Opens the original uploaded file in another app on your device.</string>
+    <string name="source_detail_open_sheet_message_web">Opens the original web page in another app on your device.</string>
     <string name="source_detail_open_sheet_file">File: %1$s</string>
+    <string name="source_detail_open_sheet_link">Link: %1$s</string>
     <string name="source_detail_open_original_no_app">No app found to open this file.</string>
     <string name="source_detail_open_original_failed">Could not open the original file.</string>
 
@@ -352,9 +363,10 @@
     <string name="space_account_sign_out">Sign out</string>
     <string name="space_meta">%1$d sources · %2$d notes</string>
     <string name="space_more">More options</string>
-    <string name="space_options_rename">Rename</string>
+    <string name="space_options_rename">Edit</string>
     <string name="space_options_delete">Delete space</string>
-    <string name="rename_space_title">Rename space</string>
+    <string name="rename_space_title">Edit space</string>
+    <string name="edit_space_description">Update the name and research objective for this space.</string>
     <string name="space_delete_title">Delete space?</string>
     <string name="space_delete_message">This permanently removes the space and its sources, notes, and answers.</string>
     <string name="space_delete_confirm">Delete</string>

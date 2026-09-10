@@ -1,6 +1,8 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskConversation
+import com.nus.folio.domain.model.AskConversationDetail
 import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AuthApiException
@@ -21,13 +23,17 @@ import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
+import com.nus.folio.domain.usecase.DeleteAskConversationUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.GetAskConversationUseCase
+import com.nus.folio.domain.usecase.GetAskConversationsUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
+import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
 import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
@@ -36,6 +42,7 @@ import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
+import com.nus.folio.domain.usecase.UpdateAskConversationUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.model.CreateSourceRequest
@@ -48,6 +55,7 @@ import com.nus.folio.testing.FakeAuthRepository
 import com.nus.folio.testing.FakeNotebookRepository
 import com.nus.folio.testing.FakeNoteRepository
 import com.nus.folio.testing.FakeSourceRepository
+import com.nus.folio.testing.FakeSpaceRepository
 import com.nus.folio.testing.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,6 +80,7 @@ class HomeViewModelTest {
     private val askRepository = FakeAskRepository()
     private val noteRepository = FakeNoteRepository()
     private val notebookRepository = FakeNotebookRepository()
+    private val spaceRepository = FakeSpaceRepository()
     private val authRepository = FakeAuthRepository()
     private val sourceFileBytesReader = SourceFileBytesReader { uriString ->
         SourceFileBytes(
@@ -84,6 +93,7 @@ class HomeViewModelTest {
     private fun createViewModel(
         spaceId: String = "1",
         spaceTitle: String = "Dissertation Research",
+        researchObjective: String = "Primary research archive for doctoral thesis",
         openSourceDelayMs: Long = 0L,
         searchDebounceMs: Long = 0L,
         notebookSaveDebounceMs: Long = 0L,
@@ -91,6 +101,7 @@ class HomeViewModelTest {
         HomeViewModel(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
+            researchObjective = researchObjective,
             getSourcesUseCase = GetSourcesUseCase(sourceRepository),
             createSourceUseCase = CreateSourceUseCase(sourceRepository),
             observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(sourceRepository),
@@ -98,6 +109,10 @@ class HomeViewModelTest {
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
             getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
+            getAskConversationsUseCase = GetAskConversationsUseCase(askRepository),
+            getAskConversationUseCase = GetAskConversationUseCase(askRepository),
+            updateAskConversationUseCase = UpdateAskConversationUseCase(askRepository),
+            deleteAskConversationUseCase = DeleteAskConversationUseCase(askRepository),
             streamAskAnswerUseCase = StreamAskAnswerUseCase(askRepository),
             submitAskFeedbackUseCase = SubmitAskFeedbackUseCase(askRepository),
             getNotesUseCase = GetNotesUseCase(noteRepository),
@@ -108,6 +123,7 @@ class HomeViewModelTest {
             convertNoteToSourceUseCase = ConvertNoteToSourceUseCase(noteRepository),
             getNotebookUseCase = GetNotebookUseCase(notebookRepository),
             saveNotebookUseCase = SaveNotebookUseCase(notebookRepository),
+            getSpacesUseCase = GetSpacesUseCase(spaceRepository),
             sourceFileBytesReader = sourceFileBytesReader,
             refreshAuthSessionUseCase = RefreshAuthSessionUseCase(authRepository),
             getCurrentSessionUseCase = GetCurrentSessionUseCase(authRepository),
@@ -138,6 +154,56 @@ class HomeViewModelTest {
         assertEquals(2, viewModel.uiState.value.notesAllCount)
         assertEquals(1, noteRepository.getNotesCallCount)
         assertEquals("1", noteRepository.lastSpaceId)
+        assertEquals(2, viewModel.uiState.value.askConversations.size)
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+        assertEquals(1, askRepository.getConversationsCallCount)
+        assertEquals("1", askRepository.lastConversationsSpaceId)
+    }
+
+    @Test
+    fun `onSearchQueryChange searches conversations via API`() = runTest {
+        val viewModel = createViewModel(searchDebounceMs = 0L)
+        viewModel.onTabSelected(HomeTab.ASK)
+        val loadsBefore = askRepository.getConversationsCallCount
+
+        viewModel.onSearchQueryChange("operating")
+        advanceUntilIdle()
+
+        assertEquals("operating", askRepository.lastConversationsSearch)
+        assertEquals(1, askRepository.lastConversationsPage)
+        assertEquals(loadsBefore + 1, askRepository.getConversationsCallCount)
+        assertEquals(1, viewModel.uiState.value.askConversations.size)
+        assertEquals(
+            "What were the operating costs in Q4?",
+            viewModel.uiState.value.askConversations.first().title,
+        )
+        assertFalse(viewModel.uiState.value.isSearchingAskConversations)
+    }
+
+    @Test
+    fun `onLoadMoreConversations appends next page`() = runTest {
+        askRepository.conversationsBySpace = mapOf(
+            "1" to             (1..12).map { index ->
+                AskConversation(
+                    id = "conv-$index",
+                    title = "Conversation $index",
+                    dateLabel = "Aug 20, 07:54",
+                    spaceId = "1",
+                )
+            },
+        )
+        val viewModel = createViewModel()
+        assertEquals(10, viewModel.uiState.value.askConversations.size)
+        assertTrue(viewModel.uiState.value.askConversationsHasMore)
+
+        viewModel.onTabSelected(HomeTab.ASK)
+        viewModel.onLoadMoreConversations()
+        advanceUntilIdle()
+
+        assertEquals(12, viewModel.uiState.value.askConversations.size)
+        assertEquals(2, askRepository.lastConversationsPage)
+        assertFalse(viewModel.uiState.value.askConversationsHasMore)
+        assertFalse(viewModel.uiState.value.isLoadingMoreAskConversations)
     }
 
     @Test
@@ -419,6 +485,58 @@ class HomeViewModelTest {
         viewModel.onTabSelected(HomeTab.ASK)
 
         assertEquals(HomeTab.ASK, viewModel.uiState.value.selectedTab)
+    }
+
+    @Test
+    fun `onTabSelected Ask returns to conversation list`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onTabSelected(HomeTab.ASK)
+        viewModel.onConversationClick(viewModel.uiState.value.askConversations.first())
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+
+        viewModel.onTabSelected(HomeTab.ASK)
+        advanceUntilIdle()
+
+        assertEquals(HomeTab.ASK, viewModel.uiState.value.selectedTab)
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+    }
+
+    @Test
+    fun `onTabSelected leaving Ask with search and open chat reloads conversations once`() = runTest {
+        val viewModel = createViewModel(searchDebounceMs = 0L)
+        viewModel.onTabSelected(HomeTab.ASK)
+        viewModel.onSearchQueryChange("operating")
+        advanceUntilIdle()
+        viewModel.onConversationClick(viewModel.uiState.value.askConversations.first())
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+        assertEquals("operating", viewModel.uiState.value.searchQuery)
+        val loadsBefore = askRepository.getConversationsCallCount
+
+        viewModel.onTabSelected(HomeTab.NOTES)
+        advanceUntilIdle()
+
+        assertEquals(loadsBefore + 1, askRepository.getConversationsCallCount)
+        assertNull(askRepository.lastConversationsSearch)
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+    }
+
+    @Test
+    fun `onTabSelected leaving Ask with search and closed chat reloads conversations`() = runTest {
+        val viewModel = createViewModel(searchDebounceMs = 0L)
+        viewModel.onTabSelected(HomeTab.ASK)
+        viewModel.onSearchQueryChange("operating")
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+        val loadsBefore = askRepository.getConversationsCallCount
+
+        viewModel.onTabSelected(HomeTab.NOTES)
+        advanceUntilIdle()
+
+        assertEquals(loadsBefore + 1, askRepository.getConversationsCallCount)
+        assertNull(askRepository.lastConversationsSearch)
     }
 
     @Test
@@ -883,12 +1001,182 @@ class HomeViewModelTest {
         viewModel.onNewConversation()
 
         assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
         assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
         assertEquals(sourceId, viewModel.uiState.value.askSourceId)
         assertEquals(epochBefore + 1, viewModel.uiState.value.askConversationEpoch)
         assertNull(viewModel.uiState.value.saveAskNoteDraft)
         assertNull(viewModel.uiState.value.savingAskMessageId)
         assertNull(viewModel.uiState.value.previewCitation)
+    }
+
+    @Test
+    fun `onConversationClick opens chat with messages`() = runTest {
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+
+        viewModel.onConversationClick(conversation)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+        assertFalse(viewModel.uiState.value.isLoadingAskConversation)
+        assertEquals(2, viewModel.uiState.value.askMessages.size)
+        assertEquals("conv-1", askRepository.lastConversationId)
+        assertEquals("1", askRepository.lastConversationSpaceId)
+        assertEquals(AskFeedback.USEFUL, viewModel.uiState.value.askMessages.last().feedback)
+        assertEquals("user-1", viewModel.uiState.value.askMessages.first().id)
+        assertEquals(
+            "What were the operating costs in Q4?",
+            viewModel.uiState.value.askConversationTitle,
+        )
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+        assertEquals("1", viewModel.uiState.value.askSourceId)
+        assertEquals("1", askRepository.lastSuggestedSourceId)
+    }
+
+    @Test
+    fun `onConversationClick restores entire space when conversation has no sourceId`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskScopeOptionSelected("1")
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+
+        viewModel.onConversationClick(viewModel.uiState.value.askConversations[1])
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+        assertEquals(AskScope.ENTIRE_SPACE, viewModel.uiState.value.askScope)
+        assertNull(viewModel.uiState.value.askSourceId)
+        assertNull(askRepository.lastSuggestedSourceId)
+    }
+
+    @Test
+    fun `onConversationClick falls back to entire space when sourceId is missing from sources`() = runTest {
+        val missingSourceConversation = AskConversation(
+            id = "conv-missing-source",
+            title = "Scoped to deleted source",
+            dateLabel = "Aug 21, 08:00",
+            spaceId = "1",
+            sourceId = "missing-source-id",
+        )
+        askRepository.conversationsBySpace = askRepository.conversationsBySpace + mapOf(
+            "1" to askRepository.conversationsBySpace.getValue("1") + missingSourceConversation,
+        )
+        askRepository.conversationDetails = askRepository.conversationDetails + mapOf(
+            "conv-missing-source" to AskConversationDetail(
+                conversation = missingSourceConversation,
+                messages = emptyList(),
+            ),
+        )
+        val viewModel = createViewModel()
+        viewModel.onAskScopeOptionSelected("1")
+        assertEquals(AskScope.CURRENT_SOURCE, viewModel.uiState.value.askScope)
+
+        viewModel.onConversationClick(missingSourceConversation)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+        assertEquals(AskScope.ENTIRE_SPACE, viewModel.uiState.value.askScope)
+        assertNull(viewModel.uiState.value.askSourceId)
+        assertNull(askRepository.lastSuggestedSourceId)
+    }
+
+    @Test
+    fun `onConversationClick failure returns to list`() = runTest {
+        askRepository.getConversationResult = Result.failure(java.io.IOException("offline"))
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+
+        viewModel.onConversationClick(conversation)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertEquals(HomeActionError.NETWORK, viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `onAskChatBack returns to conversation list`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onConversationClick(viewModel.uiState.value.askConversations.first())
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAskChatOpen)
+        val conversationsBeforeBack = askRepository.getConversationsCallCount
+
+        viewModel.onAskChatBack()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isAskChatOpen)
+        assertTrue(viewModel.uiState.value.askMessages.isEmpty())
+        assertTrue(askRepository.getConversationsCallCount > conversationsBeforeBack)
+        assertEquals("", viewModel.uiState.value.askConversationTitle)
+    }
+
+    @Test
+    fun `onDeleteConversationConfirm removes conversation`() = runTest {
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+        viewModel.onConversationOptionsClick(conversation)
+        viewModel.onDeleteConversationClick()
+        viewModel.onDeleteConversationConfirm()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.askConversations.any { it.id == conversation.id })
+        assertNull(viewModel.uiState.value.deletingConversation)
+        assertEquals(HomeUserMessage.CONVERSATION_DELETED, viewModel.uiState.value.userMessage)
+        assertEquals(1, askRepository.deleteConversationCallCount)
+        assertEquals(conversation.id, askRepository.lastDeletedConversationId)
+    }
+
+    @Test
+    fun `onRenameConversationClick opens rename sheet`() = runTest {
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+        viewModel.onConversationOptionsClick(conversation)
+
+        viewModel.onRenameConversationClick()
+
+        assertNull(viewModel.uiState.value.optionsConversation)
+        assertEquals(conversation.id, viewModel.uiState.value.renamingConversation?.id)
+    }
+
+    @Test
+    fun `onRenameConversationSave updates conversation title`() = runTest {
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+        viewModel.onConversationOptionsClick(conversation)
+        viewModel.onRenameConversationClick()
+
+        viewModel.onRenameConversationSave("Q4 operating costs")
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.renamingConversation)
+        assertFalse(viewModel.uiState.value.isRenamingConversation)
+        assertEquals(
+            "Q4 operating costs",
+            viewModel.uiState.value.askConversations.first { it.id == conversation.id }.title,
+        )
+        assertEquals(HomeUserMessage.CONVERSATION_RENAMED, viewModel.uiState.value.userMessage)
+        assertEquals(1, askRepository.updateConversationCallCount)
+        assertEquals(conversation.id, askRepository.lastUpdatedConversationId)
+        assertEquals("Q4 operating costs", askRepository.lastUpdatedConversationTitle)
+        assertEquals("1", askRepository.lastConversationSpaceId)
+    }
+
+    @Test
+    fun `onRenameConversationSave failure keeps rename sheet`() = runTest {
+        askRepository.updateConversationResult = Result.failure(java.io.IOException("offline"))
+        val viewModel = createViewModel()
+        val conversation = viewModel.uiState.value.askConversations.first()
+        viewModel.onConversationOptionsClick(conversation)
+        viewModel.onRenameConversationClick()
+
+        viewModel.onRenameConversationSave("Q4 operating costs")
+        advanceUntilIdle()
+
+        assertEquals(conversation.id, viewModel.uiState.value.renamingConversation?.id)
+        assertFalse(viewModel.uiState.value.isRenamingConversation)
+        assertEquals(conversation.title, viewModel.uiState.value.askConversations.first().title)
+        assertEquals(HomeActionError.NETWORK, viewModel.uiState.value.actionError)
     }
 
     @Test
@@ -1133,6 +1421,25 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onAskFeedback can change from useful to not useful`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskFeedback(assistantId, useful = true)
+        advanceUntilIdle()
+        viewModel.onAskFeedback(assistantId, useful = false)
+        advanceUntilIdle()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
+        assertEquals(AskFeedback.NOT_USEFUL, assistant.feedback)
+        assertEquals(AskFeedbackRating.NOT_USEFUL, askRepository.lastFeedbackRating)
+        assertEquals(2, askRepository.submitFeedbackCallCount)
+    }
+
+    @Test
     fun `onAskFeedback failure reverts optimistic rating and shows error`() = runTest {
         askRepository.submitFeedbackResult = Result.failure(IllegalStateException("offline"))
         val viewModel = createViewModel()
@@ -1187,6 +1494,8 @@ class HomeViewModelTest {
         val draft = viewModel.uiState.value.saveAskNoteDraft
         assertEquals(assistantId, draft?.messageId)
         assertEquals("What is the imitation game?", draft?.initialTitle)
+        assertTrue(draft?.content.orEmpty().contains("[1] Sample source — Page 1"))
+        assertTrue(draft?.content.orEmpty().contains("Grounded answer"))
         assertEquals(0, noteRepository.createNoteCallCount)
         assertNull(viewModel.uiState.value.savingAskMessageId)
     }
@@ -1200,7 +1509,8 @@ class HomeViewModelTest {
             .first { it.role == AskMessageRole.ASSISTANT }.id
 
         viewModel.onAskSaveAsNote(assistantId)
-        viewModel.onAskSaveAsNoteConfirm("Custom title")
+        val draftContent = viewModel.uiState.value.saveAskNoteDraft!!.content
+        viewModel.onAskSaveAsNoteConfirm("Custom title", draftContent)
         advanceUntilIdle()
 
         val assistant = viewModel.uiState.value.askMessages.first { it.id == assistantId }
@@ -1210,13 +1520,49 @@ class HomeViewModelTest {
         assertEquals(1, noteRepository.createNoteCallCount)
         assertEquals("Custom title", noteRepository.lastCreatedRequest?.title)
         assertEquals(NoteOrigin.SAVED_ANSWER, noteRepository.lastCreatedRequest?.origin)
+        assertEquals("conv-1", noteRepository.lastCreatedRequest?.conversationId)
+        assertEquals("msg-1", noteRepository.lastCreatedRequest?.messageId)
         assertEquals(1, noteRepository.lastCreatedRequest?.citationCount)
         assertEquals(1, noteRepository.lastCreatedRequest?.citations?.size)
+        assertTrue(noteRepository.lastCreatedRequest?.content.orEmpty().contains("[1] Sample source — Page 1"))
         assertFalse(noteRepository.lastCreatedRequest?.content.orEmpty().contains("Citations"))
         assertEquals(HomeUserMessage.NOTE_SAVED_FROM_ASK, viewModel.uiState.value.userMessage)
         assertTrue(
             viewModel.uiState.value.allNotes.any { it.origin == NoteOrigin.SAVED_ANSWER },
         )
+    }
+
+    @Test
+    fun `onAskSaveAsNoteConfirm saves edited answer content`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("What is the imitation game?")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+
+        viewModel.onAskSaveAsNote(assistantId)
+        viewModel.onAskSaveAsNoteConfirm("Custom title", "Edited answer body")
+        advanceUntilIdle()
+
+        assertEquals("Edited answer body", noteRepository.lastCreatedRequest?.content)
+        assertEquals("Custom title", noteRepository.lastCreatedRequest?.title)
+        assertEquals(1, noteRepository.createNoteCallCount)
+    }
+
+    @Test
+    fun `onAskSaveAsNoteConfirm ignored when content is blank`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Q")
+        advanceUntilIdle()
+        val assistantId = viewModel.uiState.value.askMessages
+            .first { it.role == AskMessageRole.ASSISTANT }.id
+        viewModel.onAskSaveAsNote(assistantId)
+
+        viewModel.onAskSaveAsNoteConfirm("Title", "   ")
+        advanceUntilIdle()
+
+        assertEquals(0, noteRepository.createNoteCallCount)
+        assertNotNull(viewModel.uiState.value.saveAskNoteDraft)
     }
 
     @Test
@@ -1227,7 +1573,8 @@ class HomeViewModelTest {
         val assistantId = viewModel.uiState.value.askMessages
             .first { it.role == AskMessageRole.ASSISTANT }.id
         viewModel.onAskSaveAsNote(assistantId)
-        viewModel.onAskSaveAsNoteConfirm("Title")
+        val draftContent = viewModel.uiState.value.saveAskNoteDraft!!.content
+        viewModel.onAskSaveAsNoteConfirm("Title", draftContent)
         advanceUntilIdle()
 
         viewModel.onAskSaveAsNote(assistantId)
@@ -2158,6 +2505,204 @@ class HomeViewModelTest {
         assertEquals("# T\n\nSub", viewModel.uiState.value.notebookContent)
         assertEquals(NotebookSaveStatus.READ_ONLY, viewModel.uiState.value.notebookSaveStatus)
         assertEquals(0, notebookRepository.saveNotebookCallCount)
+    }
+
+    @Test
+    fun `loadNotebook keeps READ_ONLY blank content without seeding template`() = runTest {
+        notebookRepository.seed("1", "", isReadOnly = true)
+        val viewModel = createViewModel(
+            spaceTitle = "Dissertation Research",
+            researchObjective = "Primary research archive for doctoral thesis",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertEquals("", viewModel.uiState.value.notebookContent)
+        assertEquals(NotebookSaveStatus.READ_ONLY, viewModel.uiState.value.notebookSaveStatus)
+    }
+
+    @Test
+    fun `loadNotebook failure leaves content unchanged and exposes error for retry`() = runTest {
+        notebookRepository.getError = IllegalStateException("offline")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+        val loadsAfterInit = notebookRepository.getNotebookCallCount
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoadingNotebook)
+        assertEquals("", viewModel.uiState.value.notebookContent)
+        assertEquals("offline", viewModel.uiState.value.notebookError)
+        assertEquals(0, notebookRepository.saveNotebookCallCount)
+
+        notebookRepository.getError = null
+        notebookRepository.seed("1", "Saved content")
+        viewModel.onRetryNotebookLoad()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.notebookError)
+        assertEquals("Saved content", viewModel.uiState.value.notebookContent)
+        assertTrue(notebookRepository.getNotebookCallCount > loadsAfterInit)
+    }
+
+    @Test
+    fun `loadNotebook failure can retry when Notebook tab is selected again`() = runTest {
+        notebookRepository.getError = IllegalStateException("offline")
+        val viewModel = createViewModel(notebookSaveDebounceMs = 0L)
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+        assertEquals("offline", viewModel.uiState.value.notebookError)
+
+        notebookRepository.getError = null
+        notebookRepository.seed("1", "Recovered content")
+        viewModel.onTabSelected(HomeTab.NOTES)
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.notebookError)
+        assertEquals("Recovered content", viewModel.uiState.value.notebookContent)
+    }
+
+    @Test
+    fun `empty notebook loads default template with space title and objective`() = runTest {
+        val viewModel = createViewModel(
+            spaceTitle = "Dissertation Research",
+            researchObjective = "Primary research archive for doctoral thesis",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        val content = viewModel.uiState.value.notebookContent
+        assertTrue(content.contains("# Title"))
+        assertTrue(content.contains("Dissertation Research"))
+        assertTrue(content.contains("## Research Objective"))
+        assertTrue(content.contains("Primary research archive for doctoral thesis"))
+    }
+
+    @Test
+    fun `empty notebook default template keeps Research Objective heading when objective blank`() = runTest {
+        val viewModel = createViewModel(
+            spaceTitle = "Teaching Prep",
+            researchObjective = "",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        val content = viewModel.uiState.value.notebookContent
+        assertTrue(content.contains("# Title"))
+        assertTrue(content.contains("Teaching Prep"))
+        assertTrue(content.contains("## Research Objective"))
+    }
+
+    @Test
+    fun `pristine notebook scaffold is reseeded with research objective`() = runTest {
+        notebookRepository.seed(
+            "1",
+            """
+            # Title
+            Dissertation Research
+
+            ## Research Objective
+
+            """.trimIndent(),
+        )
+        val viewModel = createViewModel(
+            spaceTitle = "Dissertation Research",
+            researchObjective = "Primary research archive for doctoral thesis",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        val content = viewModel.uiState.value.notebookContent
+        assertTrue(content.contains("Primary research archive for doctoral thesis"))
+    }
+
+    @Test
+    fun `onResearchObjectiveAvailable reseeds pristine notebook`() = runTest {
+        spaceRepository.spacesResult = Result.success(
+            com.nus.folio.domain.model.SpacePage(
+                spaces = listOf(
+                    com.nus.folio.domain.model.Space(
+                        id = "1",
+                        title = "Dissertation Research",
+                        description = "",
+                        sourceCount = 0,
+                        noteCount = 0,
+                        updatedLabel = "Updated just now",
+                    ),
+                ),
+                page = 1,
+                limit = 20,
+                hasMore = false,
+            ),
+        )
+        val viewModel = createViewModel(
+            spaceTitle = "Dissertation Research",
+            researchObjective = "",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+        assertFalse(
+            viewModel.uiState.value.notebookContent.contains(
+                "Primary research archive for doctoral thesis",
+            ),
+        )
+
+        viewModel.onResearchObjectiveAvailable("Primary research archive for doctoral thesis")
+        advanceUntilIdle()
+
+        assertEquals(
+            "Primary research archive for doctoral thesis",
+            viewModel.uiState.value.spaceResearchObjective,
+        )
+        assertTrue(
+            viewModel.uiState.value.notebookContent.contains(
+                "Primary research archive for doctoral thesis",
+            ),
+        )
+    }
+
+    @Test
+    fun `loadHome resolves research objective from spaces when nav objective blank`() = runTest {
+        val viewModel = createViewModel(
+            spaceId = "1",
+            spaceTitle = "Dissertation Research",
+            researchObjective = "",
+            notebookSaveDebounceMs = 0L,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            "Primary research archive for doctoral thesis",
+            viewModel.uiState.value.spaceResearchObjective,
+        )
+        assertTrue(spaceRepository.getSpacesCallCount >= 1)
+
+        viewModel.onTabSelected(HomeTab.NOTEBOOK)
+        advanceUntilIdle()
+
+        assertTrue(
+            viewModel.uiState.value.notebookContent.contains(
+                "Primary research archive for doctoral thesis",
+            ),
+        )
     }
 
     @Test

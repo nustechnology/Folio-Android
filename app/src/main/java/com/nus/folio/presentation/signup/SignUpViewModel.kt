@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nus.folio.domain.model.AuthApiException
-import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
 import com.nus.folio.domain.util.AuthInputRules
 import java.io.InterruptedIOException
@@ -19,7 +18,6 @@ import kotlinx.coroutines.launch
 
 class SignUpViewModel(
     private val signUpUseCase: SignUpUseCase,
-    private val signInWithAppleUseCase: SignInWithAppleUseCase,
     isAuthAvailable: Boolean,
 ) : ViewModel() {
 
@@ -96,32 +94,6 @@ class SignUpViewModel(
         }
 
         performSignUp(name, email, password, confirmPassword)
-    }
-
-    fun onContinueWithAppleClick() {
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    nameError = null,
-                    emailError = null,
-                    passwordError = null,
-                    confirmPasswordError = null,
-                    formError = null,
-                    toastError = null,
-                    toastMessage = null,
-                    shouldNavigateToHome = false,
-                )
-            }
-
-            signInWithAppleUseCase()
-                .onSuccess {
-                    _uiState.update { it.copy(shouldNavigateToHome = true) }
-                }
-                .onFailure { error ->
-                    applyFailure(error)
-                }
-        }
     }
 
     private fun performSignUp(
@@ -214,12 +186,11 @@ class SignUpViewModel(
 
     class Factory(
         private val signUpUseCase: SignUpUseCase,
-        private val signInWithAppleUseCase: SignInWithAppleUseCase,
         private val isAuthAvailable: Boolean,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SignUpViewModel(signUpUseCase, signInWithAppleUseCase, isAuthAvailable) as T
+            return SignUpViewModel(signUpUseCase, isAuthAvailable) as T
         }
     }
 }

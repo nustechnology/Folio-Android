@@ -31,9 +31,12 @@ import com.nus.folio.domain.usecase.ConvertNoteToSourceUseCase
 import com.nus.folio.domain.usecase.CreateNoteUseCase
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.CreateSpaceUseCase
+import com.nus.folio.domain.usecase.DeleteAskConversationUseCase
 import com.nus.folio.domain.usecase.DeleteNoteUseCase
 import com.nus.folio.domain.usecase.DeleteSpaceUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
+import com.nus.folio.domain.usecase.GetAskConversationUseCase
+import com.nus.folio.domain.usecase.GetAskConversationsUseCase
 import com.nus.folio.domain.usecase.GetAskSuggestionsUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
 import com.nus.folio.domain.usecase.GetNotebookUseCase
@@ -50,11 +53,11 @@ import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
 import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
-import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
 import com.nus.folio.domain.usecase.StreamAskAnswerUseCase
 import com.nus.folio.domain.usecase.SubmitAskFeedbackUseCase
 import com.nus.folio.domain.usecase.SyncCurrentUserUseCase
+import com.nus.folio.domain.usecase.UpdateAskConversationUseCase
 import com.nus.folio.domain.usecase.UpdateNoteUseCase
 import com.nus.folio.domain.usecase.UpdateSourceUseCase
 import com.nus.folio.domain.usecase.UpdateSpaceUseCase
@@ -73,7 +76,7 @@ class AppContainer(
 
     private val applicationContext = appContext.applicationContext
 
-    /** False in release until AuthDataSource is wired to a real backend. */
+    /** True when the variant is wired to a Folio API backend. */
     val isAuthAvailable: Boolean = AuthCapabilities.isBackendAvailable
 
     private val _isSessionRestored = MutableStateFlow(false)
@@ -153,6 +156,22 @@ class AppContainer(
 
     val getAskSuggestionsUseCase: GetAskSuggestionsUseCase by lazy {
         GetAskSuggestionsUseCase(askRepository)
+    }
+
+    val getAskConversationsUseCase: GetAskConversationsUseCase by lazy {
+        GetAskConversationsUseCase(askRepository)
+    }
+
+    val getAskConversationUseCase: GetAskConversationUseCase by lazy {
+        GetAskConversationUseCase(askRepository)
+    }
+
+    val updateAskConversationUseCase: UpdateAskConversationUseCase by lazy {
+        UpdateAskConversationUseCase(askRepository)
+    }
+
+    val deleteAskConversationUseCase: DeleteAskConversationUseCase by lazy {
+        DeleteAskConversationUseCase(askRepository)
     }
 
     val streamAskAnswerUseCase: StreamAskAnswerUseCase by lazy {
@@ -289,10 +308,6 @@ class AppContainer(
 
     val signInUseCase: SignInUseCase by lazy {
         SignInUseCase(authRepository)
-    }
-
-    val signInWithAppleUseCase: SignInWithAppleUseCase by lazy {
-        SignInWithAppleUseCase(authRepository)
     }
 
     val refreshAuthSessionUseCase: RefreshAuthSessionUseCase by lazy {

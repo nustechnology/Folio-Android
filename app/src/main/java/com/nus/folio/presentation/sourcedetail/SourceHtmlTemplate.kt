@@ -106,18 +106,102 @@ internal object SourceHtmlTemplate {
             border-radius: 2px;
             scroll-margin-top: 35vh;
         }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 12px 0 16px;
+            border-radius: 8px;
+        }
+        figure {
+            margin: 16px 0 20px;
+            padding: 0;
+        }
+        figcaption, caption {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #7A7164;
+            margin-top: 8px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0 20px;
+            background: #FFFBF5;
+        }
+        th, td {
+            border: 1px solid #E6DCCB;
+            padding: 10px 14px;
+            text-align: left;
+            vertical-align: top;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #1A1A1A;
+            white-space: normal;
+            word-break: break-word;
+        }
+        th {
+            background: #F0E6D6;
+            font-weight: 600;
+            color: #0B2A24;
+        }
+        tr:nth-child(even) td {
+            background: #FAF6EF;
+        }
+        pre {
+            margin: 16px 0;
+            padding: 14px 16px;
+            overflow-x: auto;
+            border-radius: 8px;
+            background: #F0E6D6;
+            border: 1px solid #E6DCCB;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #2E2A24;
+        }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.92em;
+            background: #F0E6D6;
+            padding: 1px 5px;
+            border-radius: 4px;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: inherit;
+        }
+        hr {
+            border: none;
+            border-top: 1px dashed #C9BBA3;
+            margin: 24px 0;
+        }
+        sub, sup {
+            font-size: 0.75em;
+            line-height: 0;
+        }
     """.trimIndent()
 
     private val documentStyles = """
         .pdf-page {
-            margin: 0 0 28px;
-            padding: 0 0 24px;
-            border-bottom: 1px solid #E6DCCB;
+            margin: 0 0 32px;
+            padding: 0 0 28px;
+            border-bottom: 1px dashed #C9BBA3;
         }
         .pdf-page:last-child {
             margin-bottom: 0;
             padding-bottom: 0;
             border-bottom: none;
+        }
+        .pdf-page table {
+            display: block;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            width: 100%;
         }
     """.trimIndent()
 

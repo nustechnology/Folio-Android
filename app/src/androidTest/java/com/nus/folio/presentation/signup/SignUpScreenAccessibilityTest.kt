@@ -6,7 +6,6 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -32,7 +31,6 @@ class SignUpScreenAccessibilityTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val loadingLabel = context.getString(R.string.signup_loading)
         val createAccountLabel = context.getString(R.string.signup_create_account)
-        val appleLabel = context.getString(R.string.signup_continue_with_apple)
 
         composeTestRule.setContent {
             FolioAndroidTheme(dynamicColor = false) {
@@ -45,7 +43,6 @@ class SignUpScreenAccessibilityTest {
                     onTogglePasswordVisibility = {},
                     onToggleConfirmPasswordVisibility = {},
                     onSignUpClick = { _, _, _, _ -> },
-                    onContinueWithAppleClick = {},
                     onSignInClick = {},
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -61,9 +58,6 @@ class SignUpScreenAccessibilityTest {
         composeTestRule
             .onNodeWithText(createAccountLabel)
             .assertDoesNotExist()
-        composeTestRule
-            .onNodeWithText(appleLabel)
-            .assertIsNotEnabled()
         composeTestRule
             .onAllNodes(hasSetTextAction() and isNotEnabled())
             .fetchSemanticsNodes()
