@@ -120,4 +120,39 @@ class NotesApiClientMappingTest {
             NotesApiClient.contentToApi("- First\n- [Second](https://example.com)"),
         )
     }
+
+    @Test
+    fun `parseNote maps citations from payload`() {
+        val note = NotesApiClient.parseNote(
+            org.json.JSONObject(
+                """
+                {
+                  "id": "note-1",
+                  "researchSpaceId": "space-1",
+                  "title": "Saved answer",
+                  "content": "<p>Answer [1]</p>",
+                  "originType": "SavedAnswer",
+                  "citationCount": 1,
+                  "citations": [
+                    {
+                      "sourceId": "src-1",
+                      "sourceTitle": "Computing Machinery",
+                      "sourceType": "file",
+                      "page": 14,
+                      "evidenceText": "imitation game"
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            ),
+            nowInstant = Instant.parse("2026-08-06T12:00:00Z"),
+        )
+
+        assertEquals(1, note.citationCount)
+        assertEquals(1, note.citations.size)
+        assertEquals("src-1", note.citations.single().sourceId)
+        assertEquals("Computing Machinery", note.citations.single().sourceTitle)
+        assertEquals("Page 14", note.citations.single().locationLabel)
+        assertEquals("imitation game", note.citations.single().evidenceText)
+    }
 }

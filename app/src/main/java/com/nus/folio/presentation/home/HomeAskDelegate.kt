@@ -239,7 +239,7 @@ internal class HomeAskDelegate(
             return
         }
         val previousFeedback = message.feedback
-        // Optimistic: hide the prompt immediately; revert if the request fails.
+        // Optimistic: apply the rating immediately; revert if the request fails.
         state.update { ui ->
             ui.copy(
                 askMessages = ui.askMessages.map { existing ->

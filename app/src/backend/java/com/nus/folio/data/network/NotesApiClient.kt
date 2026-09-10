@@ -349,6 +349,11 @@ class NotesApiClient(
                 .map { json.optString(it) }
                 .firstOrNull { it.isNotBlank() }
                 .orEmpty()
+            val citations = AskApiClient.parseCitations(json.toString())
+            val citationCount = json.optInt("citationCount", 0)
+                .coerceAtLeast(0)
+                .takeIf { it > 0 }
+                ?: citations.size
 
             return Note(
                 id = id,
@@ -359,7 +364,8 @@ class NotesApiClient(
                 isPinned = json.optBoolean("isPinned", false),
                 spaceId = spaceId,
                 origin = mapOriginType(json.optString("originType")),
-                citationCount = json.optInt("citationCount", 0).coerceAtLeast(0),
+                citationCount = citationCount,
+                citations = citations,
             )
         }
 

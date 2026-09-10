@@ -37,7 +37,7 @@ class AskSavedNoteFormatterTest {
     }
 
     @Test
-    fun `body appends evidence excerpts from citations`() {
+    fun `body appends bold evidence labels as a bullet list`() {
         val body = AskSavedNoteFormatter.body(
             content = "  Answer text [1].  ",
             citations = listOf(
@@ -52,19 +52,28 @@ class AskSavedNoteFormatterTest {
                 AskCitation(
                     index = 2,
                     sourceId = "2",
-                    sourceTitle = "Empty evidence",
-                    evidenceText = "  ",
+                    sourceTitle = "Attention Is All You Need",
+                    locationLabel = "Page 2",
+                    evidenceText = "self-attention",
+                ),
+                AskCitation(
+                    index = 3,
+                    sourceId = "3",
+                    sourceTitle = "",
+                    evidenceText = "orphan quote",
                 ),
             ),
         )
         assertEquals(
-            "Answer text [1].\n\nEvidence\n\n[1] Computing Machinery — Page 14\nThe imitation game.",
+            "Answer text [1].\n\n**Evidence**\n\n" +
+                "- [1] Computing Machinery — Page 14\n" +
+                "- [2] Attention Is All You Need — Page 2",
             body,
         )
     }
 
     @Test
-    fun `body appends limitation and evidence heading`() {
+    fun `body appends bold limitation and evidence heading`() {
         val body = AskSavedNoteFormatter.body(
             content = "Answer text [1].",
             citations = listOf(
@@ -79,7 +88,8 @@ class AskSavedNoteFormatterTest {
             limitation = "Limitation: Sparse coverage.",
         )
         assertEquals(
-            "Answer text [1].\n\nLimitation: Sparse coverage.\n\nEvidence\n\n[1] Computing Machinery — Page 14\nThe imitation game.",
+            "Answer text [1].\n\n**Limitation:** Sparse coverage.\n\n**Evidence**\n\n" +
+                "- [1] Computing Machinery — Page 14",
             body,
         )
     }
@@ -96,13 +106,13 @@ class AskSavedNoteFormatterTest {
     }
 
     @Test
-    fun `body skips citations without evidence`() {
+    fun `body skips citations without title or location`() {
         assertEquals(
             "Answer only.",
             AskSavedNoteFormatter.body(
                 content = "Answer only.",
                 citations = listOf(
-                    AskCitation(index = 1, sourceId = "1", sourceTitle = "Paper"),
+                    AskCitation(index = 1, sourceId = "1", sourceTitle = ""),
                 ),
             ),
         )

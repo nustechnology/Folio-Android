@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -239,6 +240,7 @@ internal fun AddNoteLabeledField(
     fillHeight: Boolean = true,
     showFormatToolbar: Boolean = false,
     formatToolbarEnabled: Boolean = true,
+    renderMarkdown: Boolean = false,
     fieldModifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
@@ -270,6 +272,7 @@ internal fun AddNoteLabeledField(
                 isError = errorMessage != null,
                 readOnly = readOnly,
                 fillHeight = fillHeight,
+                renderMarkdown = renderMarkdown && !singleLine,
                 modifier = fieldModifier,
             )
         }
@@ -473,9 +476,15 @@ internal fun AddNoteField(
     isError: Boolean = false,
     readOnly: Boolean = false,
     fillHeight: Boolean = true,
+    renderMarkdown: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val cursorScroller = rememberTextFieldCursorScroller()
+    val markdownVisuals = if (renderMarkdown) {
+        remember { NotebookMarkdownVisualTransformation() }
+    } else {
+        null
+    }
     var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
     var reconcileGeneration by remember { mutableIntStateOf(0) }
 
@@ -538,6 +547,7 @@ internal fun AddNoteField(
             },
             readOnly = readOnly,
             singleLine = singleLine,
+            visualTransformation = markdownVisuals ?: VisualTransformation.None,
             textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
             cursorBrush = SolidColor(HomeTextPrimary),
             onTextLayout = if (singleLine) {
