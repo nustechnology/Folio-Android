@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nus.folio.R
@@ -74,7 +77,6 @@ import kotlin.coroutines.cancellation.CancellationException
 @Composable
 fun SpaceScreen(
     onSpaceSelected: (Space) -> Unit,
-    onNavigateToAccount: () -> Unit,
     onSignOut: suspend () -> Result<Unit>,
     onRequiresReauth: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -104,6 +106,17 @@ fun SpaceScreen(
     val avatarInitial = selectedAccount?.let {
         initialsFromDisplayName(it.displayName, it.email)
     }.orEmpty()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onScreenFocused()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(uiState.requiresReauth) {
         if (uiState.requiresReauth) onRequiresReauth()
@@ -212,7 +225,6 @@ fun SpaceScreen(
             AccountListBottomSheet(
                 accounts = uiState.accounts,
                 onDismiss = viewModel::onAccountSheetDismiss,
-                onOpenAccountSettings = onNavigateToAccount,
                 onSignOutClick = onOpenSignOutConfirm,
             )
         }

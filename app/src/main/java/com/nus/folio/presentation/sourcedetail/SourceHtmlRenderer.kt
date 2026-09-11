@@ -2,12 +2,18 @@ package com.nus.folio.presentation.sourcedetail
 
 import android.content.Context
 import android.view.ViewGroup
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.nus.folio.BuildConfig
 import com.nus.folio.domain.model.SourceContentFormat
+import com.nus.folio.domain.util.SourceImageUrlRules
+import java.io.ByteArrayInputStream
 
 @Composable
 internal fun SourceHtmlRenderer(
@@ -18,7 +24,13 @@ internal fun SourceHtmlRenderer(
 ) {
     val passage = highlightText?.trim().orEmpty()
     val fullHtml = remember(htmlBody, contentFormat, passage) {
-        val highlightedBody = CitationHighlight.apply(htmlBody, passage)
+        // Keep document base as file:///android_res/ for bundled fonts; rewrite
+        // relative img src to the Folio API origin so PDF/doc images can load.
+        val safeBody = SourceImageUrlRules.prepareSources(
+            htmlBody,
+            BuildConfig.FOLIO_API_BASE_URL,
+        )
+        val highlightedBody = CitationHighlight.apply(safeBody, passage)
         val wrappedBody = if (contentFormat == SourceContentFormat.SHEET) {
             """<div class="table-scroll">$highlightedBody</div>"""
         } else {
@@ -37,6 +49,9 @@ internal fun SourceHtmlRenderer(
                 )
                 settings.javaScriptEnabled = false
                 settings.domStorageEnabled = false
+                settings.loadsImagesAutomatically = true
+                // Network images allowed for http(s); other schemes gated by [SourceHtmlWebViewClient].
+                settings.blockNetworkImage = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
                 isVerticalScrollBarEnabled = true
@@ -46,6 +61,7 @@ internal fun SourceHtmlRenderer(
                 isLongClickable = false
                 setOnLongClickListener { true }
                 setBackgroundColor(0x00000000)
+                webViewClient = SourceHtmlWebViewClient()
             }
         },
         update = { webView ->
@@ -123,6 +139,34 @@ internal object CitationHighlight {
     }
 
     private data class TextMatch(val value: String, val range: IntRange)
+}
+
+/**
+ * Allows normal document subresources (http(s), file, data, about) and blocks
+ * other schemes that should never load from source HTML.
+ */
+private class SourceHtmlWebViewClient : WebViewClient() {
+    override fun shouldInterceptRequest(
+        view: WebView,
+        request: WebResourceRequest,
+    ): WebResourceResponse? {
+        val scheme = request.url.scheme?.lowercase().orEmpty()
+        return when (scheme) {
+            "file", "data", "about", "http", "https" ->
+                super.shouldInterceptRequest(view, request)
+            else -> blockedResponse()
+        }
+    }
+
+    private fun blockedResponse(): WebResourceResponse =
+        WebResourceResponse(
+            "text/plain",
+            "utf-8",
+            403,
+            "Blocked",
+            emptyMap(),
+            ByteArrayInputStream(ByteArray(0)),
+        )
 }
 
 /**

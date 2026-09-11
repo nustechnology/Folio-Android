@@ -12,23 +12,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
+import com.nus.folio.components.rememberTextFieldCursorScroller
 import com.nus.folio.domain.util.AddSourceInputRules
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeUploadZoneShape
@@ -55,7 +60,6 @@ internal fun AddSourceWebFields(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             AddSourceLabeledField(
@@ -73,17 +77,20 @@ internal fun AddSourceWebFields(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
         AddSourceLabeledField(
             label = stringResource(R.string.add_source_web_title_label),
             value = title,
             onValueChange = onTitleChange,
             placeholder = stringResource(R.string.add_source_web_title_placeholder),
+            characterLimit = AddSourceInputRules.MAX_TITLE_LENGTH,
         )
         AddSourceLabeledField(
             label = stringResource(R.string.add_source_web_author_label),
             value = author,
             onValueChange = onAuthorChange,
             placeholder = stringResource(R.string.add_source_web_author_placeholder),
+            characterLimit = AddSourceInputRules.MAX_AUTHOR_LENGTH,
         )
     }
 }
@@ -102,19 +109,20 @@ internal fun AddSourceTextFields(
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         AddSourceLabeledField(
             label = stringResource(R.string.add_source_text_title_label),
             value = title,
             onValueChange = onTitleChange,
             placeholder = stringResource(R.string.add_source_text_title_placeholder),
+            characterLimit = AddSourceInputRules.MAX_TITLE_LENGTH,
         )
         AddSourceLabeledField(
             label = stringResource(R.string.add_source_text_author_label),
             value = author,
             onValueChange = onAuthorChange,
             placeholder = stringResource(R.string.add_source_text_author_placeholder),
+            characterLimit = AddSourceInputRules.MAX_AUTHOR_LENGTH,
         )
         Column(modifier = Modifier.fillMaxWidth()) {
             AddSourceLabeledField(
@@ -170,7 +178,9 @@ internal fun AddSourceLabeledField(
     singleLine: Boolean = true,
     fieldModifier: Modifier = Modifier.fillMaxWidth(),
     showResizeHint: Boolean = false,
+    characterLimit: Int? = null,
 ) {
+    val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -187,6 +197,24 @@ internal fun AddSourceLabeledField(
             showResizeHint = showResizeHint,
             modifier = fieldModifier,
         )
+        if (characterLimit != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.add_source_text_content_counter,
+                    numberFormat.format(value.length),
+                    numberFormat.format(characterLimit),
+                ),
+                fontSize = 12.sp,
+                color = if (value.length > characterLimit) {
+                    HomeStatusFailedText
+                } else {
+                    HomeTextSecondary
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.End,
+            )
+        }
     }
 }
 
@@ -199,7 +227,19 @@ internal fun AddSourceTextField(
     modifier: Modifier = Modifier,
     showResizeHint: Boolean = false,
 ) {
-    val scrollState = rememberScrollState()
+    val cursorScroller = rememberTextFieldCursorScroller()
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(
+                text = value,
+                selection = TextRange(
+                    fieldValue.selection.start.coerceAtMost(value.length),
+                    fieldValue.selection.end.coerceAtMost(value.length),
+                ),
+            )
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -216,11 +256,19 @@ internal fun AddSourceTextField(
             )
         }
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = fieldValue,
+            onValueChange = {
+                fieldValue = it
+                onValueChange(it.text)
+            },
             singleLine = singleLine,
             textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
             cursorBrush = SolidColor(HomeTextPrimary),
+            onTextLayout = if (singleLine) {
+                {}
+            } else {
+                cursorScroller.onTextLayout(fieldValue.selection.end)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
@@ -229,7 +277,7 @@ internal fun AddSourceTextField(
                     } else {
                         Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
+                            .then(cursorScroller.scrollModifier)
                     },
                 ),
         )

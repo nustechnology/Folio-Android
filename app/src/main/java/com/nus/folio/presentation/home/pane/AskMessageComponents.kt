@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -42,7 +43,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
@@ -206,6 +213,9 @@ internal fun AskAssistantMessageCard(
     val showContent = message.content.isNotBlank()
     val showToolbar = !message.isStreaming && !message.isFailed && message.content.isNotBlank()
     val showLimitation = !message.isStreaming && message.limitation != null
+    val showEvidence = message.citations.any { citation ->
+        citation.sourceTitle.isNotBlank() || citation.locationLabel.isNotBlank()
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -242,6 +252,21 @@ internal fun AskAssistantMessageCard(
             }
             if (showLimitation) {
                 AskLimitationBanner(text = message.limitation.orEmpty())
+            }
+            if (showEvidence) {
+                if (showContent || showLimitation) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(HomeCardBorder),
+                    )
+                }
+                AskMessageEvidenceList(
+                    messageId = message.id,
+                    citations = message.citations,
+                    onCitationClick = onCitationClick,
+                )
             }
             if (showToolbar) {
                 AskResponseToolbar(
@@ -294,6 +319,92 @@ internal fun AskAssistantContent(
     )
 }
 
+private const val AskEvidenceCollapsedCount = 2
+
+@Composable
+private fun AskMessageEvidenceList(
+    messageId: String,
+    citations: List<AskCitation>,
+    onCitationClick: (AskCitation) -> Unit,
+) {
+    val visibleCitations = citations
+        .sortedBy { it.index }
+        .filter { citation ->
+            citation.sourceTitle.isNotBlank() || citation.locationLabel.isNotBlank()
+        }
+    if (visibleCitations.isEmpty()) return
+    val canToggle = visibleCitations.size > AskEvidenceCollapsedCount
+    var expanded by rememberSaveable(messageId) { mutableStateOf(false) }
+    val shownCitations = if (canToggle && !expanded) {
+        visibleCitations.take(AskEvidenceCollapsedCount)
+    } else {
+        visibleCitations
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.citation_preview_evidence_label),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = HomeTextSecondary,
+        )
+        shownCitations.forEach { citation ->
+            Text(
+                text = formatAskEvidenceLabel(citation),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(AskSubmitShape)
+                    .clickable { onCitationClick(citation) }
+                    .background(HomeStatusProcessingBackground)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeHeader,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (canToggle) {
+            Text(
+                text = stringResource(
+                    if (expanded) {
+                        R.string.home_ask_evidence_show_less
+                    } else {
+                        R.string.home_ask_evidence_show_more
+                    },
+                ),
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .clip(AskSourceChipShape)
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                fontSize = 12.sp,
+                fontStyle = FontStyle.Italic,
+                textDecoration = TextDecoration.Underline,
+                color = HomeTextSecondary,
+            )
+        }
+    }
+}
+
+private fun formatAskEvidenceLabel(citation: AskCitation): String {
+    val title = citation.sourceTitle.trim()
+    val location = citation.locationLabel.trim()
+    return buildString {
+        append('[')
+        append(citation.index)
+        append(']')
+        if (title.isNotEmpty()) {
+            append(' ')
+            append(title)
+        }
+        if (location.isNotEmpty()) {
+            if (title.isNotEmpty()) append(" -- ") else append(' ')
+            append(location)
+        }
+    }
+}
+
 @Composable
 internal fun AskThinkingStopRow(
     onAskStop: () -> Unit,
@@ -308,7 +419,7 @@ internal fun AskThinkingStopRow(
             text = stringResource(R.string.home_ask_thinking),
             fontSize = 14.sp,
             color = HomeTextSecondary,
-            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            fontStyle = FontStyle.Italic,
         )
         AskStopButton(onClick = onAskStop)
     }
@@ -338,8 +449,18 @@ internal fun AskLimitationBanner(
     text: String,
     modifier: Modifier = Modifier,
 ) {
+    val label = stringResource(R.string.home_ask_limitation_label)
+    val detail = text.trim().removePrefix("Limitation:").trim()
     Text(
-        text = text,
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                append(label)
+            }
+            if (detail.isNotEmpty()) {
+                append(' ')
+                append(detail)
+            }
+        },
         modifier = modifier
             .fillMaxWidth()
             .clip(AskSubmitShape)

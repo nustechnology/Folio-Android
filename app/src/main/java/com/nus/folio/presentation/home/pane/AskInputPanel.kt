@@ -16,13 +16,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -31,12 +33,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
+import com.nus.folio.components.rememberTextFieldCursorScroller
 import com.nus.folio.presentation.home.AskButtonBackground
 import com.nus.folio.presentation.home.AskInputMaxHeight
 import com.nus.folio.presentation.home.AskInputMinHeight
@@ -61,7 +66,16 @@ internal fun AskInputPanel(
     modifier: Modifier = Modifier,
 ) {
     val canSubmit = inputEnabled && query.isNotBlank()
-    val inputScrollState = rememberScrollState()
+    val cursorScroller = rememberTextFieldCursorScroller()
+    var fieldValue by remember { mutableStateOf(TextFieldValue(query)) }
+    LaunchedEffect(query) {
+        if (query != fieldValue.text) {
+            fieldValue = TextFieldValue(
+                text = query,
+                selection = TextRange(query.length),
+            )
+        }
+    }
     val panelAlpha = if (inputEnabled) 1f else 0.55f
 
     Column(
@@ -88,8 +102,11 @@ internal fun AskInputPanel(
                 )
             }
             BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
+                value = fieldValue,
+                onValueChange = {
+                    fieldValue = it
+                    onQueryChange(it.text)
+                },
                 enabled = inputEnabled,
                 textStyle = TextStyle(
                     color = HomeTextPrimary,
@@ -97,10 +114,11 @@ internal fun AskInputPanel(
                     lineHeight = 22.sp,
                 ),
                 cursorBrush = SolidColor(HomeTextPrimary),
+                onTextLayout = cursorScroller.onTextLayout(fieldValue.selection.end),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = AskInputMinHeight, max = AskInputMaxHeight)
-                    .verticalScroll(inputScrollState),
+                    .then(cursorScroller.scrollModifier),
             )
             if (query.lines().size > 2 || query.length > 80) {
                 AskResizeHint(modifier = Modifier.align(Alignment.BottomEnd))

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -52,7 +53,6 @@ fun SignUpScreen(
     viewModel: SignUpViewModel = viewModel(
         factory = SignUpViewModel.Factory(
             signUpUseCase = LocalAppContainer.current.signUpUseCase,
-            signInWithAppleUseCase = LocalAppContainer.current.signInWithAppleUseCase,
             isAuthAvailable = LocalAppContainer.current.isAuthAvailable,
         ),
     ),
@@ -87,7 +87,6 @@ fun SignUpScreen(
             onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
             onToggleConfirmPasswordVisibility = viewModel::onToggleConfirmPasswordVisibility,
             onSignUpClick = viewModel::onSignUpClick,
-            onContinueWithAppleClick = viewModel::onContinueWithAppleClick,
             onSignInClick = onNavigateToLogin,
             modifier = Modifier.fillMaxSize(),
         )
@@ -112,7 +111,6 @@ internal fun SignUpContent(
     onTogglePasswordVisibility: () -> Unit,
     onToggleConfirmPasswordVisibility: () -> Unit,
     onSignUpClick: (name: String, email: String, password: String, confirmPassword: String) -> Unit,
-    onContinueWithAppleClick: () -> Unit,
     onSignInClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -128,6 +126,7 @@ internal fun SignUpContent(
             .background(LoginBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .dismissKeyboardOnTapOutside()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 28.dp)
@@ -212,13 +211,6 @@ internal fun SignUpContent(
             isLoading = uiState.isLoading,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SignUpAppleButton(
-            onClick = onContinueWithAppleClick,
-            enabled = inputsEnabled,
-        )
-
         Spacer(modifier = Modifier.height(28.dp))
 
         SignUpFooter(
@@ -287,7 +279,6 @@ private fun SignUpContentPreview() {
             onTogglePasswordVisibility = {},
             onToggleConfirmPasswordVisibility = {},
             onSignUpClick = { _, _, _, _ -> },
-            onContinueWithAppleClick = {},
             onSignInClick = {},
         )
     }
@@ -306,7 +297,6 @@ private fun SignUpLoadingPreview() {
             onTogglePasswordVisibility = {},
             onToggleConfirmPasswordVisibility = {},
             onSignUpClick = { _, _, _, _ -> },
-            onContinueWithAppleClick = {},
             onSignInClick = {},
         )
     }
@@ -330,7 +320,6 @@ private fun SignUpFieldErrorsPreview() {
             onTogglePasswordVisibility = {},
             onToggleConfirmPasswordVisibility = {},
             onSignUpClick = { _, _, _, _ -> },
-            onContinueWithAppleClick = {},
             onSignInClick = {},
         )
     }
@@ -351,7 +340,6 @@ private fun SignUpPasswordMismatchPreview() {
             onTogglePasswordVisibility = {},
             onToggleConfirmPasswordVisibility = {},
             onSignUpClick = { _, _, _, _ -> },
-            onContinueWithAppleClick = {},
             onSignInClick = {},
         )
     }
@@ -372,7 +360,6 @@ private fun SignUpFormErrorPreview() {
             onTogglePasswordVisibility = {},
             onToggleConfirmPasswordVisibility = {},
             onSignUpClick = { _, _, _, _ -> },
-            onContinueWithAppleClick = {},
             onSignInClick = {},
         )
     }

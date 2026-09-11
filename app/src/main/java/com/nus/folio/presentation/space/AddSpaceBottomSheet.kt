@@ -1,8 +1,5 @@
 package com.nus.folio.presentation.space
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,15 +16,15 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,18 +33,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
 import com.nus.folio.components.rememberSheetDiscardProtectionState
+import com.nus.folio.components.rememberTextFieldCursorScroller
+import com.nus.folio.domain.util.SpaceInputRules
 import com.nus.folio.presentation.home.bottomsheet.SheetDiscardConfirmBottomSheet
 import com.nus.folio.presentation.home.bottomsheet.AddSourceCancelButton
 import com.nus.folio.presentation.home.bottomsheet.AddSourceDragHandle
 import com.nus.folio.presentation.home.bottomsheet.AddSourceSubmitButton
+import com.nus.folio.presentation.home.bottomsheet.findActivityOrNull
 import com.nus.folio.presentation.home.HomeSheetInputBorder
 import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.ui.theme.CormorantGaramond
@@ -58,6 +61,8 @@ import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
+import java.text.NumberFormat
+import java.util.Locale
 
 private val AddSpaceObjectiveHeight = 160.dp
 
@@ -145,12 +150,11 @@ private fun AddSpaceSheetContent(
         Spacer(modifier = Modifier.height(24.dp))
         AddSpaceNameField(
             value = name,
-            onValueChange = { name = it },
+            onValueChange = { name = SpaceInputRules.limitTitle(it) },
         )
-        Spacer(modifier = Modifier.height(20.dp))
         AddSpaceObjectiveField(
             value = objective,
-            onValueChange = { objective = it },
+            onValueChange = { objective = SpaceInputRules.limitObjective(it) },
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row(
@@ -209,6 +213,10 @@ private fun AddSpaceNameField(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        SpaceFieldCharacterCounter(
+            length = value.length,
+            limit = SpaceInputRules.MAX_TITLE_LENGTH,
+        )
     }
 }
 
@@ -217,7 +225,19 @@ private fun AddSpaceObjectiveField(
     value: String,
     onValueChange: (String) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    val cursorScroller = rememberTextFieldCursorScroller()
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(
+                text = value,
+                selection = TextRange(
+                    fieldValue.selection.start.coerceAtMost(value.length),
+                    fieldValue.selection.end.coerceAtMost(value.length),
+                ),
+            )
+        }
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.add_space_objective_hint),
@@ -243,26 +263,45 @@ private fun AddSpaceObjectiveField(
                 )
             }
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                value = fieldValue,
+                onValueChange = {
+                    fieldValue = it
+                    onValueChange(it.text)
+                },
                 singleLine = false,
                 textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
                 cursorBrush = SolidColor(HomeTextPrimary),
+                onTextLayout = cursorScroller.onTextLayout(fieldValue.selection.end),
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState),
+                    .then(cursorScroller.scrollModifier),
             )
         }
+        SpaceFieldCharacterCounter(
+            length = value.length,
+            limit = SpaceInputRules.MAX_OBJECTIVE_LENGTH,
+        )
     }
 }
 
-private fun Context.findActivityOrNull(): Activity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is Activity) return current
-        current = current.baseContext
-    }
-    return current as? Activity
+@Composable
+internal fun SpaceFieldCharacterCounter(
+    length: Int,
+    limit: Int,
+) {
+    val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
+    Spacer(modifier = Modifier.height(6.dp))
+    Text(
+        text = stringResource(
+            R.string.add_source_text_content_counter,
+            numberFormat.format(length),
+            numberFormat.format(limit),
+        ),
+        fontSize = 12.sp,
+        color = HomeTextSecondary,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.End,
+    )
 }
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)

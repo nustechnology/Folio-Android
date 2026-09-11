@@ -310,6 +310,20 @@ class NotebookHtmlTest {
     }
 
     @Test
+    fun `htmlToMarkdown preserves common Latin-1 symbol entities without marking lossy`() {
+        val entities = listOf(
+            "laquo", "raquo", "deg", "bull", "euro", "times", "middot",
+            "sect", "pound", "frac12", "divide", "sup2", "dagger", "rarr",
+        )
+        for (name in entities) {
+            val html = "<p>&$name;</p>"
+            val conversion = NotebookHtml.htmlToMarkdownConversion(html)
+            assertEquals("Expected not lossy for &$name;", false, conversion.isLossy)
+            assertEquals("Expected preserved entity &$name;", "&$name;", conversion.markdown)
+        }
+    }
+
+    @Test
     fun `htmlToMarkdown decodes HTML5 legacy uppercase entity spellings`() {
         val conversion = NotebookHtml.htmlToMarkdownConversion(
             "<p>&AMP; &COPY; &NBSP;x &QUOT;hi&QUOT;</p>",
@@ -324,6 +338,16 @@ class NotebookHtmlTest {
         val markdown = NotebookHtml.htmlToMarkdown(html)
         assertEquals("25&deg;C and &laquo;quoted&raquo;", markdown)
         assertEquals(html, NotebookHtml.markdownToHtml(markdown))
+    }
+
+    @Test
+    fun `markdownToHtml preserves well-formed entities for round trip`() {
+        val markdown = "French &laquo;quotes&raquo; and 25&deg;C"
+        val html = NotebookHtml.markdownToHtml(markdown)
+        assertTrue(html.contains("&laquo;"))
+        assertTrue(html.contains("&raquo;"))
+        assertTrue(html.contains("&deg;"))
+        assertEquals(markdown, NotebookHtml.htmlToMarkdown(html))
     }
 
     @Test

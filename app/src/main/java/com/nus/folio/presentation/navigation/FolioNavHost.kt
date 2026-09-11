@@ -15,7 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nus.folio.di.LocalAppContainer
-import com.nus.folio.presentation.account.AccountSettingsScreen
 import com.nus.folio.presentation.home.HomeScreen
 import com.nus.folio.presentation.home.HomeTab
 import com.nus.folio.presentation.login.LoginScreen
@@ -30,18 +29,24 @@ object FolioDestination {
     const val SIGN_UP = "sign_up"
     const val RESET_PASSWORD = "reset_password"
     const val SPACES = "spaces"
-    const val ACCOUNT = "account"
     const val HOME = "home"
     const val SOURCE_DETAIL = "source_detail"
     const val HOME_TAB_RESULT = "home_tab_result"
     const val HOME_ASK_SOURCE_RESULT = "home_ask_source_result"
     const val HOME_REFRESH_SOURCES_RESULT = "home_refresh_sources_result"
+    const val HOME_RESEARCH_OBJECTIVE = "home_research_objective"
     const val LOGIN_SIGNED_OUT_RESULT = "login_signed_out_result"
 
     fun resetPassword(): String = RESET_PASSWORD
 
-    fun home(spaceId: String, spaceTitle: String = ""): String =
-        "$HOME/${Uri.encode(spaceId)}?title=${Uri.encode(spaceTitle)}"
+    fun home(
+        spaceId: String,
+        spaceTitle: String = "",
+        researchObjective: String = "",
+    ): String =
+        "$HOME/${Uri.encode(spaceId)}" +
+            "?title=${Uri.encode(spaceTitle)}" +
+            "&objective=${Uri.encode(researchObjective)}"
 
     fun sourceDetail(
         spaceId: String,
@@ -157,11 +162,15 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
             SpaceScreen(
                 onSpaceSelected = { space ->
                     navController.navigate(
-                        FolioDestination.home(spaceId = space.id, spaceTitle = space.title),
+                        FolioDestination.home(
+                            spaceId = space.id,
+                            spaceTitle = space.title,
+                            researchObjective = space.description,
+                        ),
                     )
-                },
-                onNavigateToAccount = {
-                    navController.navigate(FolioDestination.ACCOUNT)
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(FolioDestination.HOME_RESEARCH_OBJECTIVE, space.description)
                 },
                 onSignOut = {
                     navController.signOutAndNavigate {
@@ -175,27 +184,15 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 },
             )
         }
-        composable(FolioDestination.ACCOUNT) {
-            val container = LocalAppContainer.current
-            AccountSettingsScreen(
-                onBackClick = {
-                    // Prefer Spaces as the post-auth root; never pop it away on a double tap.
-                    if (!navController.popBackStack(FolioDestination.SPACES, inclusive = false)) {
-                        navController.popBackStackOrIgnore()
-                    }
-                },
-                onSignOut = {
-                    navController.signOutAndNavigate {
-                        container.clearAuthSessionUseCase()
-                    }
-                },
-            )
-        }
         composable(
-            route = "${FolioDestination.HOME}/{spaceId}?title={title}",
+            route = "${FolioDestination.HOME}/{spaceId}?title={title}&objective={objective}",
             arguments = listOf(
                 navArgument("spaceId") { type = NavType.StringType },
                 navArgument("title") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("objective") {
                     type = NavType.StringType
                     defaultValue = ""
                 },
@@ -214,6 +211,10 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
             HomeScreen(
                 spaceId = entry.arguments?.getString("spaceId").orEmpty(),
                 spaceTitle = entry.arguments?.getString("title").orEmpty(),
+                researchObjective = entry.savedStateHandle
+                    .get<String>(FolioDestination.HOME_RESEARCH_OBJECTIVE)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: entry.arguments?.getString("objective").orEmpty(),
                 onNavigateBack = {
                     // Double-tapping back must not pop Spaces (post-auth root) and blank the app.
                     if (!navController.popBackStack(FolioDestination.SPACES, inclusive = false)) {

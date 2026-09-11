@@ -1,13 +1,10 @@
 package com.nus.folio.presentation.home.bottomsheet
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,25 +12,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -44,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
-import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteOrigin
 import com.nus.folio.presentation.home.HomeSheetShape
@@ -55,7 +42,7 @@ import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTypeBadgeBackground
 import com.nus.folio.ui.theme.LoginCopper
 
-private val ConvertSnapshotHeight = 160.dp
+private val ConvertSnapshotMaxHeight = 320.dp
 private val ConvertBannerShape = RoundedCornerShape(12.dp)
 
 @Composable
@@ -64,42 +51,19 @@ internal fun ConvertNoteBottomSheet(
     onDismiss: () -> Unit,
     onCreateSource: (title: String, snapshot: String) -> Unit = { _, _ -> },
 ) {
-    val context = LocalContext.current
-    val discardProtection = rememberSheetDiscardProtectionState()
-
-    DisposableEffect(Unit) {
-        val window = context.findActivityOrNull()?.window
-            ?: return@DisposableEffect onDispose {}
-        val previousSoftInputMode = window.attributes.softInputMode
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
-        onDispose {
-            window.setSoftInputMode(previousSoftInputMode)
-        }
-    }
-
     AnimatedModalSheet(
         onDismiss = onDismiss,
-        confirmDismiss = { discardProtection.confirmDismiss() },
-        contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
+        contentWindowInsets = WindowInsets.navigationBars,
     ) { requestDismiss ->
-        discardProtection.dismissHolder.requestDismiss = requestDismiss
         AddSourceDragHandle()
         ConvertNoteSheetContent(
             note = note,
-            onDirtyChange = { discardProtection.hasUnsavedContent = it },
             onCancelClick = { requestDismiss() },
             onCreateSource = { title, snapshot ->
-                discardProtection.bypassDiscardConfirm = true
                 requestDismiss { onCreateSource(title, snapshot) }
             },
         )
     }
-
-    SheetDiscardConfirmBottomSheet(
-        visible = discardProtection.showDiscardConfirm,
-        onKeepEditing = { discardProtection.showDiscardConfirm = false },
-        onDiscard = { discardProtection.discardAndDismiss() },
-    )
 }
 
 @Composable
@@ -107,15 +71,10 @@ private fun ConvertNoteSheetContent(
     note: Note,
     onCancelClick: () -> Unit,
     onCreateSource: (title: String, snapshot: String) -> Unit,
-    onDirtyChange: (Boolean) -> Unit = {},
 ) {
-    var sourceTitle by rememberSaveable(note.id) { mutableStateOf(note.title) }
-    var snapshot by rememberSaveable(note.id) { mutableStateOf(note.content) }
+    val sourceTitle = note.title
+    val snapshot = note.content
     val canCreate = sourceTitle.isNotBlank() && snapshot.isNotBlank()
-
-    SideEffect {
-        onDirtyChange(sourceTitle != note.title || snapshot != note.content)
-    }
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -132,20 +91,23 @@ private fun ConvertNoteSheetContent(
         AddNoteLabeledField(
             label = stringResource(R.string.note_convert_source_title),
             value = sourceTitle,
-            onValueChange = { sourceTitle = it },
+            onValueChange = {},
             placeholder = stringResource(R.string.add_note_title_placeholder),
             singleLine = true,
+            readOnly = true,
         )
         Spacer(modifier = Modifier.height(16.dp))
         AddNoteLabeledField(
             label = stringResource(R.string.note_convert_snapshot),
             value = snapshot,
-            onValueChange = { snapshot = it },
+            onValueChange = {},
             placeholder = stringResource(R.string.add_note_content_placeholder),
             singleLine = false,
+            readOnly = true,
+            fillHeight = false,
             fieldModifier = Modifier
                 .fillMaxWidth()
-                .height(ConvertSnapshotHeight),
+                .heightIn(max = ConvertSnapshotMaxHeight),
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row(

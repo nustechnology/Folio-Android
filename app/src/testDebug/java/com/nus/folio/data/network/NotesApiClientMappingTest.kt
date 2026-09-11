@@ -88,4 +88,36 @@ class NotesApiClientMappingTest {
             ),
         )
     }
+
+    @Test
+    fun `contentToApi converts markdown to html like notebook`() {
+        assertEquals(
+            "<p><strong>Hello</strong> and <em>world</em></p>",
+            NotesApiClient.contentToApi("**Hello** and _world_"),
+        )
+    }
+
+    @Test
+    fun `contentFromApi converts html to markdown like notebook`() {
+        assertEquals(
+            "**Hello** and _world_",
+            NotesApiClient.contentFromApi("<p><strong>Hello</strong> and <em>world</em></p>"),
+        )
+    }
+
+    @Test
+    fun `contentFromApi keeps plain text without html tags`() {
+        assertEquals(
+            "Already markdown **bold**",
+            NotesApiClient.contentFromApi("Already markdown **bold**"),
+        )
+    }
+
+    @Test
+    fun `contentToApi converts lists and links`() {
+        assertEquals(
+            "<ul><li>First</li><li><a href=\"https://example.com\">Second</a></li></ul>",
+            NotesApiClient.contentToApi("- First\n- [Second](https://example.com)"),
+        )
+    }
 }

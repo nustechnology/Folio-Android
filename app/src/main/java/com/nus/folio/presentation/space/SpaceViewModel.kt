@@ -48,6 +48,18 @@ class SpaceViewModel(
         viewModelScope.launch {
             syncCurrentUserUseCase()
             loadAccounts()
+        }
+    }
+
+    /**
+     * Reloads spaces whenever the Spaces screen becomes visible again
+     * (first open, return from Home, or app resume).
+     */
+    fun onScreenFocused() {
+        val state = _uiState.value
+        if (state.visibleSpaces.isNotEmpty() || state.error != null) {
+            onRefresh()
+        } else {
             loadSpaces()
         }
     }

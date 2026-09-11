@@ -37,7 +37,7 @@ internal val HomeNavItemTint = Color(0xFFD8C7A2)
 internal val HomeNavTopLine = Color(0xFF1F3D36)
 internal val AskSuggestionShape = RoundedCornerShape(12.dp)
 internal val AskInputShape = RoundedCornerShape(16.dp)
-internal val AskSourceChipShape = RoundedCornerShape(20.dp)
+internal val AskSourceChipShape = RoundedCornerShape(12.dp)
 internal val AskSubmitShape = RoundedCornerShape(10.dp)
 internal val AskSparkleCircleShape = CircleShape
 internal val AskButtonBackground = Color(0xFF2D3E4E)
@@ -93,4 +93,9 @@ internal fun noteFilterBadgeColors(filter: NoteFilter): SourceTypeBadgeColors? =
 internal val NoteIconBadgeColors = SourceTypeBadgeColors(
     background = HomeTypeNoteBackground,
     content = HomeTypeNoteText,
+)
+
+internal val ConversationIconBadgeColors = SourceTypeBadgeColors(
+    background = HomeTypeNoteSavedBackground,
+    content = HomeTypeNoteSavedText,
 )

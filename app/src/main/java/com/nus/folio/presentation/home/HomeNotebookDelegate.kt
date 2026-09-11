@@ -2,6 +2,7 @@ package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.usecase.GetNotebookUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
+import com.nus.folio.domain.util.NotebookDefaults
 import com.nus.folio.domain.util.NotebookFilename
 import com.nus.folio.domain.util.NotebookInputRules
 import com.nus.folio.domain.util.NotebookMarkdownExporter
@@ -29,22 +30,20 @@ internal class HomeNotebookDelegate(
         if (hasLoadedNotebook) return
         loadJob?.cancel()
         loadJob = scope.launch {
-            state.update { it.copy(isLoadingNotebook = true) }
+            state.update { it.copy(isLoadingNotebook = true, notebookError = null) }
             getNotebookUseCase(spaceId)
                 .onSuccess { notebook ->
                     hasLoadedNotebook = true
                     val resolvedContent = if (notebook.isReadOnly) {
                         notebook.content
                     } else {
-                        notebook.content.ifBlank {
-                            defaultNotebookTemplate(state.value.spaceTitle)
-                        }
+                        resolveNotebookContent(notebook.content)
                     }
                     state.update { current ->
                         // Keep in-progress edits (debounce may still be pending) instead of
                         // replacing them with an older stored snapshot.
                         if (hasUnsavedNotebookEdits(current)) {
-                            current.copy(isLoadingNotebook = false)
+                            current.copy(isLoadingNotebook = false, notebookError = null)
                         } else {
                             current.copy(
                                 notebookContent = resolvedContent,
@@ -54,13 +53,33 @@ internal class HomeNotebookDelegate(
                                     else -> NotebookSaveStatus.IDLE
                                 },
                                 isLoadingNotebook = false,
+                                notebookError = null,
                             )
                         }
                     }
+                    ensureDefaultContent()
                 }
-                .onFailure {
-                    state.update { it.copy(isLoadingNotebook = false) }
+                .onFailure { throwable ->
+                    state.update { current ->
+                        current.copy(
+                            isLoadingNotebook = false,
+                            notebookError = throwable.message.orEmpty(),
+                        )
+                    }
                 }
+        }
+    }
+
+    /** Re-seeds Title + Research Objective when the notebook is still a pristine default. */
+    fun ensureDefaultContent() {
+        if (!hasLoadedNotebook) return
+        val current = state.value
+        if (current.notebookSaveStatus == NotebookSaveStatus.READ_ONLY) return
+        if (hasUnsavedNotebookEdits(current)) return
+        val seeded = resolveNotebookContent(current.notebookContent)
+        if (seeded == current.notebookContent) return
+        state.update {
+            it.copy(notebookContent = seeded)
         }
     }
 
@@ -239,14 +258,10 @@ internal class HomeNotebookDelegate(
             current.notebookSaveStatus == NotebookSaveStatus.FAILED ||
             saveJob?.isActive == true
 
-    private fun defaultNotebookTemplate(spaceTitle: String): String {
-        val resolvedTitle = spaceTitle.trim().ifBlank { "Untitled Research" }
-        return """
-            # Title
-            $resolvedTitle
-
-            ## Research Objective
-
-        """.trimIndent()
-    }
+    private fun resolveNotebookContent(storedContent: String): String =
+        NotebookDefaults.applyDefaults(
+            content = storedContent,
+            spaceTitle = state.value.spaceTitle,
+            researchObjective = state.value.spaceResearchObjective,
+        )
 }

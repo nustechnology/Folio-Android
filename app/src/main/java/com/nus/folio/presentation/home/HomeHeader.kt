@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +42,7 @@ internal fun HomeHeaderRow(
     onBackClick: () -> Unit,
     onAddClick: () -> Unit,
     spaceTitle: String = "",
+    titleOverride: String = "",
 ) {
     val titleRes = when (selectedTab) {
         HomeTab.SOURCES -> R.string.home_sources_title
@@ -54,6 +56,8 @@ internal fun HomeHeaderRow(
         HomeTab.NOTES -> R.string.home_notes_subtitle
         HomeTab.NOTEBOOK -> R.string.home_notebook_subtitle
     }
+    val resolvedTitle = titleOverride.trim().ifBlank { stringResource(titleRes) }
+    val showSubtitle = titleOverride.isBlank()
     val subtitle = spaceTitle.ifBlank { stringResource(subtitleRes) }
 
     Row(
@@ -68,24 +72,27 @@ internal fun HomeHeaderRow(
                 HomeBackButton(onClick = onBackClick)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = stringResource(titleRes),
+                    text = resolvedTitle,
                     modifier = Modifier.weight(1f),
                     fontFamily = CormorantGaramond,
-                    fontSize = 36.sp,
+                    fontSize = if (titleOverride.isBlank()) 36.sp else 24.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontStyle = FontStyle.Italic,
                     color = Color.White,
                     letterSpacing = (-0.4).sp,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = subtitle,
-                modifier = Modifier.padding(start = 30.dp),
-                fontSize = 14.sp,
-                color = HomeSearchPlaceholder,
-                maxLines = 1,
-            )
+            if (showSubtitle) {
+                Text(
+                    text = subtitle,
+                    modifier = Modifier.padding(start = 30.dp),
+                    fontSize = 14.sp,
+                    color = HomeSearchPlaceholder,
+                    maxLines = 1,
+                )
+            }
         }
         if (
             selectedTab == HomeTab.SOURCES ||

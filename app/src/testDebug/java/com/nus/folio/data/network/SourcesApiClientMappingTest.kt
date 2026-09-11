@@ -73,7 +73,7 @@ class SourcesApiClientMappingTest {
         val dirty = """
             <h1 onclick="alert(1)">Title</h1>
             <p>Hello<script>alert(1)</script></p>
-            <p><img src=x onerror=alert(1)></p>
+            <p><img src="https://cdn.example/a.png" onerror=alert(1)></p>
             <a href="javascript:alert(1)">link</a>
             <iframe src="https://evil.example"></iframe>
         """.trimIndent()
@@ -86,9 +86,37 @@ class SourcesApiClientMappingTest {
         assertTrue(!sanitized.contains("onclick", ignoreCase = true))
         assertTrue(!sanitized.contains("onerror", ignoreCase = true))
         assertTrue(!sanitized.contains("<iframe", ignoreCase = true))
-        assertTrue(!sanitized.contains("<img", ignoreCase = true))
+        assertTrue(sanitized.contains("""<img src="https://cdn.example/a.png">"""))
         assertTrue(!sanitized.contains("javascript:", ignoreCase = true))
         assertTrue(sanitized.contains("href=\"#\""))
+    }
+
+    @Test
+    fun `sanitizeHtmlFragment keeps public network images and strips local or dangerous src`() {
+        assertEquals(
+            """<p><img src="https://folio.nustechnology.com/media/photo.jpg" alt="Photo"></p>""",
+            SourcesApiClient.sanitizeHtmlFragment(
+                """<p><img src="https://folio.nustechnology.com/media/photo.jpg" alt="Photo" style="border:1px"></p>""",
+            ),
+        )
+        assertEquals(
+            """<p><img src="https://cdn.example/photo.jpg" alt="Photo"></p>""",
+            SourcesApiClient.sanitizeHtmlFragment(
+                """<p><img src="https://cdn.example/photo.jpg" alt="Photo" style="border:1px"></p>""",
+            ),
+        )
+        assertEquals(
+            """<img src="">""",
+            SourcesApiClient.sanitizeHtmlFragment("""<img src="http://127.0.0.1/secret.png">"""),
+        )
+        assertEquals(
+            """<img src="">""",
+            SourcesApiClient.sanitizeHtmlFragment("""<img src="javascript:alert(1)">"""),
+        )
+        assertEquals(
+            """<img src="">""",
+            SourcesApiClient.sanitizeHtmlFragment("""<img src="data:text/html,<script>alert(1)</script>">"""),
+        )
     }
 
     @Test
@@ -114,6 +142,20 @@ class SourcesApiClientMappingTest {
     @Test
     fun `sanitizeHtmlFragment keeps safe table markup`() {
         val html = "<table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>"
+        assertEquals(html, SourcesApiClient.sanitizeHtmlFragment(html))
+    }
+
+    @Test
+    fun `sanitizeHtmlFragment keeps figure quote and code used in PDF documents`() {
+        val html = """
+            <div class="pdf-page">
+            <figure><img src="https://folio.nustechnology.com/media/a.png" alt="Chart"><figcaption>Fig. 1</figcaption></figure>
+            <blockquote>A cited line</blockquote>
+            <pre><code>x = 1</code></pre>
+            <table><caption>Results</caption><tr><td>1</td></tr></table>
+            <p>H<sub>2</sub>O and x<sup>2</sup></p>
+            </div>
+        """.trimIndent().replace("\n", "")
         assertEquals(html, SourcesApiClient.sanitizeHtmlFragment(html))
     }
 
@@ -177,6 +219,15 @@ class SourcesApiClientMappingTest {
         assertEquals(
             "application/octet-stream",
             SourcesApiClient.sanitizeMultipartMimeType("application/pdf script=alert(1)"),
+        )
+        // Backslash is not an RFC 2045 token char; crafted values must not pass.
+        assertEquals(
+            "application/octet-stream",
+            SourcesApiClient.sanitizeMultipartMimeType("application\\/pdf"),
+        )
+        assertEquals(
+            "application/octet-stream",
+            SourcesApiClient.sanitizeMultipartMimeType("app\\lication/pdf"),
         )
     }
 

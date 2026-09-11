@@ -17,17 +17,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDown
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.nus.folio.R
+import com.nus.folio.components.TextFieldCursorScroll
 import com.nus.folio.presentation.home.NotebookSaveStatus
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.LoginCopper
@@ -43,6 +52,8 @@ internal fun NotebookEditor(
     modifier: Modifier = Modifier,
 ) {
     var fieldValue by remember { mutableStateOf(TextFieldValue(content)) }
+    var formatSelection by remember { mutableStateOf(TextRange.Zero) }
+    var freezeSelection by remember { mutableStateOf(false) }
     var undoState by remember { mutableStateOf(NotebookMarkdownActions.UndoState()) }
     var isInternalUpdate by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -50,11 +61,16 @@ internal fun NotebookEditor(
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val cursorMarginPx = with(density) { 24.dp.roundToPx() }
+    val focusRequester = remember { FocusRequester() }
+    val markdownVisuals = remember { NotebookMarkdownVisualTransformation() }
 
     fun scrollToCursorIfNeeded(layout: TextLayoutResult) {
-        val target = NotebookEditorScroll.cursorScrollTarget(
+        val mapping = markdownVisuals.visualizeCached(fieldValue.text).mapping
+        val cursorOffset = mapping.originalToTransformed(fieldValue.selection.end)
+            .coerceIn(0, layout.layoutInput.text.length)
+        val target = TextFieldCursorScroll.cursorScrollTarget(
             layout = layout,
-            cursorOffset = fieldValue.selection.end,
+            cursorOffset = cursorOffset,
             scrollOffset = scrollState.value,
             viewportHeight = viewportHeight,
             marginPx = cursorMarginPx,
@@ -68,6 +84,8 @@ internal fun NotebookEditor(
     LaunchedEffect(content) {
         if (!isInternalUpdate && fieldValue.text != content) {
             fieldValue = TextFieldValue(content)
+            formatSelection = TextRange.Zero
+            freezeSelection = false
         }
         isInternalUpdate = false
     }
@@ -76,11 +94,19 @@ internal fun NotebookEditor(
 
     fun applyTransform(transform: (TextFieldValue) -> TextFieldValue) {
         if (readOnly) return
-        undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
-        val next = transform(fieldValue)
+        val source = fieldValue.copy(selection = formatSelection)
+        undoState = NotebookMarkdownActions.pushUndo(undoState, source)
+        val next = transform(source)
         fieldValue = next
+        formatSelection = next.selection
+        freezeSelection = false
         isInternalUpdate = true
         onContentChange(next.text)
+        focusRequester.requestFocus()
+    }
+
+    val activeMarks = remember(fieldValue.text, formatSelection) {
+        NotebookMarkdownActions.activeMarks(fieldValue.copy(selection = formatSelection))
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -88,6 +114,7 @@ internal fun NotebookEditor(
             saveStatus = saveStatus,
             canUndo = undoState.undoStack.isNotEmpty(),
             canRedo = undoState.redoStack.isNotEmpty(),
+            activeMarks = activeMarks,
             onBoldClick = { applyTransform(NotebookMarkdownActions::toggleBold) },
             onItalicClick = { applyTransform(NotebookMarkdownActions::toggleItalic) },
             onHeading1Click = { applyTransform { NotebookMarkdownActions.setHeading(it, 1) } },
@@ -100,20 +127,42 @@ internal fun NotebookEditor(
                 NotebookMarkdownActions.undo(undoState, fieldValue)?.let { (next, state) ->
                     undoState = state
                     fieldValue = next
+                    formatSelection = next.selection
+                    freezeSelection = false
                     isInternalUpdate = true
                     onContentChange(next.text)
+                    focusRequester.requestFocus()
                 }
             },
             onRedoClick = {
                 NotebookMarkdownActions.redo(undoState, fieldValue)?.let { (next, state) ->
                     undoState = state
                     fieldValue = next
+                    formatSelection = next.selection
+                    freezeSelection = false
                     isInternalUpdate = true
                     onContentChange(next.text)
+                    focusRequester.requestFocus()
                 }
             },
             onRetrySaveClick = onRetrySave,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .zIndex(1f)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.changes.any { it.changedToDown() }) {
+                                formatSelection = fieldValue.selection
+                                freezeSelection = true
+                            }
+                            if (event.changes.any { it.changedToUp() }) {
+                                freezeSelection = false
+                            }
+                        }
+                    }
+                },
         )
         Box(
             modifier = Modifier
@@ -126,16 +175,21 @@ internal fun NotebookEditor(
             BasicTextField(
                 value = fieldValue,
                 enabled = !readOnly,
+                visualTransformation = markdownVisuals,
                 onValueChange = { next ->
-                    if (!readOnly) {
-                        val resolved = NotebookMarkdownActions.continueListOnEnter(fieldValue, next) ?: next
-                        if (resolved.text != fieldValue.text) {
-                            undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
-                        }
-                        fieldValue = resolved
-                        isInternalUpdate = true
-                        onContentChange(resolved.text)
+                    if (readOnly) return@BasicTextField
+                    val resolved = NotebookMarkdownActions.resolveMarkdownEdit(fieldValue, next)
+                    val textChanged = resolved.text != fieldValue.text
+                    if (textChanged) {
+                        undoState = NotebookMarkdownActions.pushUndo(undoState, fieldValue)
                     }
+                    fieldValue = resolved
+                    if (!freezeSelection || textChanged) {
+                        formatSelection = resolved.selection
+                        freezeSelection = false
+                    }
+                    isInternalUpdate = true
+                    onContentChange(resolved.text)
                 },
                 onTextLayout = ::scrollToCursorIfNeeded,
                 textStyle = TextStyle(
@@ -159,6 +213,7 @@ internal fun NotebookEditor(
                 },
                 modifier = Modifier
                     .fillMaxSize()
+                    .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         when (notebookShortcutAction(event)) {
                             NotebookShortcutAction.BOLD -> {
@@ -197,6 +252,8 @@ internal fun NotebookEditor(
                                 NotebookMarkdownActions.undo(undoState, fieldValue)?.let { (next, state) ->
                                     undoState = state
                                     fieldValue = next
+                                    formatSelection = next.selection
+                                    freezeSelection = false
                                     isInternalUpdate = true
                                     onContentChange(next.text)
                                 }
@@ -206,6 +263,8 @@ internal fun NotebookEditor(
                                 NotebookMarkdownActions.redo(undoState, fieldValue)?.let { (next, state) ->
                                     undoState = state
                                     fieldValue = next
+                                    formatSelection = next.selection
+                                    freezeSelection = false
                                     isInternalUpdate = true
                                     onContentChange(next.text)
                                 }

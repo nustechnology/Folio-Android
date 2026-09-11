@@ -72,21 +72,26 @@ private fun CitationPreviewSheetContent(
 
     Column {
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.citation_preview_title),
-            fontFamily = CormorantGaramond,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = HomeTextPrimary,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.citation_preview_index, citation.index),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = HomeTextSecondary,
-        )
-        Spacer(modifier = Modifier.height(20.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.citation_preview_title),
+                fontFamily = CormorantGaramond,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeTextPrimary,
+            )
+            Text(
+                text = stringResource(R.string.citation_preview_index, citation.index),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = HomeTextSecondary,
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -112,14 +117,6 @@ private fun CitationPreviewSheetContent(
                 color = badgeColors.content,
             )
         }
-        if (citation.locationLabel.isNotBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = citation.locationLabel,
-                fontSize = 14.sp,
-                color = HomeTextSecondary,
-            )
-        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.citation_preview_evidence_label),
@@ -128,22 +125,31 @@ private fun CitationPreviewSheetContent(
             color = HomeTextSecondary,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 88.dp, max = 220.dp)
+                .heightIn(min = 88.dp, max = 500.dp)
                 .clip(AskSuggestionShape)
                 .background(HomeCardBackground)
                 .border(1.dp, HomeCardBorder, AskSuggestionShape)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (citation.locationLabel.isNotBlank()) {
+                Text(
+                    text = citation.locationLabel.uppercase(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = HomeTextSecondary,
+                )
+            }
             Text(
                 text = citation.evidenceText.ifBlank {
                     stringResource(R.string.citation_preview_evidence_empty)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .then(
                         if (citation.evidenceText.isNotBlank()) {
                             Modifier

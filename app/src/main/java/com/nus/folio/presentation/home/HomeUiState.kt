@@ -1,6 +1,7 @@
 package com.nus.folio.presentation.home
 
 import com.nus.folio.domain.model.AskCitation
+import com.nus.folio.domain.model.AskConversation
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteSort
@@ -13,15 +14,23 @@ import com.nus.folio.domain.model.SourceStatus
 data class HomeUiState(
     val spaceId: String = "",
     val spaceTitle: String = "",
+    /** Research objective for this space; used in the empty-notebook default template. */
+    val spaceResearchObjective: String = "",
     val isLoading: Boolean = false,
     val isRefreshingSources: Boolean = false,
     /** True while reloading sources after a filter/sort change (list shows skeleton). */
     val isFilteringSources: Boolean = false,
     val isRefreshingNotes: Boolean = false,
+    /** True while reloading the Ask conversation list. */
+    val isRefreshingAskConversations: Boolean = false,
+    val isLoadingMoreAskConversations: Boolean = false,
+    val isSearchingAskConversations: Boolean = false,
     /** True while reloading notes after a filter/sort change (list shows skeleton). */
     val isFilteringNotes: Boolean = false,
     val sourcesError: String? = null,
     val notesError: String? = null,
+    val askConversationsError: String? = null,
+    val notebookError: String? = null,
     val searchQuery: String = "",
     val selectedFilter: SourceFilter = SourceFilter.ALL,
     val selectedSort: SourceSort = SourceSort.DEFAULT,
@@ -50,6 +59,11 @@ data class HomeUiState(
     val convertingNote: Note? = null,
     val deletingNote: Note? = null,
     val optionsSource: Source? = null,
+    val optionsConversation: AskConversation? = null,
+    val renamingConversation: AskConversation? = null,
+    val isRenamingConversation: Boolean = false,
+    val deletingConversation: AskConversation? = null,
+    val isDeletingConversation: Boolean = false,
     val editingSource: Source? = null,
     /** Plain content for TEXT source edits; empty for Web/File. */
     val editingSourceContent: String = "",
@@ -95,6 +109,16 @@ data class HomeUiState(
     val savingAskMessageId: String? = null,
     val askScope: AskScope = AskScope.ENTIRE_SPACE,
     val askSourceId: String? = null,
+    /** Past Ask threads for this space; shown until a conversation is opened. */
+    val askConversations: List<AskConversation> = emptyList(),
+    val askConversationsCurrentPage: Int = 1,
+    val askConversationsHasMore: Boolean = false,
+    /** True while the Ask tab is showing a chat thread instead of the list. */
+    val isAskChatOpen: Boolean = false,
+    /** Header title while a conversation is open; blank falls back to "Ask". */
+    val askConversationTitle: String = "",
+    /** True while fetching messages for the selected conversation. */
+    val isLoadingAskConversation: Boolean = false,
     /** Messages in the active Ask conversation; cleared when scope changes. */
     val askMessages: List<AskMessage> = emptyList(),
     /**
@@ -151,6 +175,8 @@ data class SaveAskNoteDraft(
     val initialTitle: String,
     val content: String,
     val citations: List<AskCitation>,
+    val conversationId: String? = null,
+    val backendMessageId: String? = null,
 )
 
 enum class AskMessageRole {
@@ -158,8 +184,9 @@ enum class AskMessageRole {
     ASSISTANT,
 }
 
-/** Sources in this space available in the Ask scope dropdown. */
-fun HomeUiState.askScopeSources(): List<Source> = allSources
+/** Ready sources available in the Ask scope dropdown. */
+fun HomeUiState.askScopeSources(): List<Source> =
+    allSources.filter { it.status == SourceStatus.READY }
 
 /** Ready sources used when grounding answers across the entire space. */
 fun HomeUiState.askReadySourceCount(): Int =
@@ -220,6 +247,8 @@ enum class HomeUserMessage {
     NOTE_SAVED,
     NOTE_SAVED_FROM_ASK,
     ASK_FEEDBACK_RECORDED,
+    CONVERSATION_RENAMED,
+    CONVERSATION_DELETED,
     NOTEBOOK_COPIED,
     NOTEBOOK_EXPORTED,
 }

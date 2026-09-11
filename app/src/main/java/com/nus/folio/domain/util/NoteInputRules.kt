@@ -21,6 +21,8 @@ object NoteInputRules {
     fun resolveTitle(title: String): String =
         title.trim().ifBlank { DEFAULT_TITLE }
 
+    fun limitTitle(value: String): String = value.take(MAX_TITLE_LENGTH)
+
     fun titleValidationError(title: String): TitleValidationError? =
         if (title.length > MAX_TITLE_LENGTH) TitleValidationError.TOO_LONG else null
 

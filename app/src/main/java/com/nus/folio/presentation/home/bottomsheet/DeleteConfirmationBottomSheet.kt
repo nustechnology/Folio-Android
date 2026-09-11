@@ -35,6 +35,7 @@ internal fun DeleteConfirmationBottomSheet(
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
     @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
+    @StringRes cancelLabelRes: Int = R.string.add_source_cancel,
     isSubmitting: Boolean = false,
     /**
      * When true (default), confirm animates the sheet closed then invokes [onConfirm]
@@ -54,6 +55,7 @@ internal fun DeleteConfirmationBottomSheet(
             titleRes = titleRes,
             messageRes = messageRes,
             confirmLabelRes = confirmLabelRes,
+            cancelLabelRes = cancelLabelRes,
             isSubmitting = isSubmitting,
             onCancelClick = {
                 if (!isSubmitting) requestDismiss()
@@ -77,6 +79,7 @@ internal fun DeleteConfirmationSheetContent(
     @StringRes titleRes: Int = R.string.source_delete_title,
     @StringRes messageRes: Int = R.string.source_delete_message,
     @StringRes confirmLabelRes: Int = R.string.source_delete_confirm,
+    @StringRes cancelLabelRes: Int = R.string.add_source_cancel,
     isSubmitting: Boolean = false,
 ) {
     Column {
@@ -103,6 +106,7 @@ internal fun DeleteConfirmationSheetContent(
             AddSourceCancelButton(
                 onClick = onCancelClick,
                 modifier = Modifier.weight(1f),
+                labelRes = cancelLabelRes,
             )
             AddSourceDestructiveButton(
                 onClick = onConfirm,
@@ -162,6 +166,33 @@ private fun DeleteNoteConfirmationPreview() {
     }
 }
 
+@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
+@Composable
+private fun DiscardUnsavedNoteConfirmationPreview() {
+    FolioAndroidTheme(dynamicColor = false) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(HomeSheetBackground, HomeSheetShape)
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+            ) {
+                AddSourceDragHandle()
+                DeleteConfirmationSheetContent(
+                    titleRes = R.string.add_note_discard_title,
+                    messageRes = R.string.add_note_discard_message,
+                    cancelLabelRes = R.string.add_note_discard_keep_editing,
+                    confirmLabelRes = R.string.add_note_discard_confirm,
+                    onCancelClick = {},
+                    onConfirm = {},
+                )
+            }
+        }
+    }
+}
+
 @Composable
 internal fun SheetDiscardConfirmBottomSheet(
     visible: Boolean,
@@ -170,6 +201,7 @@ internal fun SheetDiscardConfirmBottomSheet(
     @StringRes titleRes: Int = R.string.sheet_discard_unsaved_title,
     @StringRes messageRes: Int = R.string.sheet_discard_unsaved_message,
     @StringRes confirmLabelRes: Int = R.string.sheet_discard_confirm,
+    @StringRes cancelLabelRes: Int = R.string.add_source_cancel,
 ) {
     if (!visible) return
     DeleteConfirmationBottomSheet(
@@ -178,5 +210,6 @@ internal fun SheetDiscardConfirmBottomSheet(
         titleRes = titleRes,
         messageRes = messageRes,
         confirmLabelRes = confirmLabelRes,
+        cancelLabelRes = cancelLabelRes,
     )
 }

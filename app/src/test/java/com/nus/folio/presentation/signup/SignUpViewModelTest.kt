@@ -2,7 +2,6 @@ package com.nus.folio.presentation.signup
 
 import com.nus.folio.domain.model.AuthApiException
 import com.nus.folio.domain.model.AuthSession
-import com.nus.folio.domain.usecase.SignInWithAppleUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
 import com.nus.folio.testing.FakeAuthRepository
 import com.nus.folio.testing.MainDispatcherRule
@@ -23,7 +22,6 @@ class SignUpViewModelTest {
 
     private fun createViewModel(isAuthAvailable: Boolean = true): SignUpViewModel = SignUpViewModel(
         signUpUseCase = SignUpUseCase(repository),
-        signInWithAppleUseCase = SignInWithAppleUseCase(repository),
         isAuthAvailable = isAuthAvailable,
     )
 
@@ -252,7 +250,7 @@ class SignUpViewModelTest {
     @Test
     fun `onSignUpClick unknown host maps to NETWORK_ERROR`() {
         repository.signUpResult =
-            Result.failure(java.net.UnknownHostException("shale-crowd-satin.ngrok-free.dev"))
+            Result.failure(java.net.UnknownHostException("folio.nustechnology.com"))
         val viewModel = createViewModel()
 
         viewModel.onSignUpClick("Jordan Lee", "a@folio.app", "secret", "secret")
@@ -281,27 +279,6 @@ class SignUpViewModelTest {
 
         assertEquals(SignUpError.NETWORK_ERROR, viewModel.uiState.value.formError)
         assertNull(viewModel.uiState.value.toastMessage)
-    }
-
-    @Test
-    fun `onContinueWithAppleClick success navigates home`() {
-        repository.signInWithAppleResult = Result.success(AuthSession("apple.user@folio.app"))
-        val viewModel = createViewModel()
-
-        viewModel.onContinueWithAppleClick()
-
-        assertTrue(viewModel.uiState.value.shouldNavigateToHome)
-    }
-
-    @Test
-    fun `onContinueWithAppleClick failure with message sets toastMessage`() {
-        repository.signInWithAppleResult = Result.failure(AuthApiException("apple error"))
-        val viewModel = createViewModel()
-
-        viewModel.onContinueWithAppleClick()
-
-        assertEquals("apple error", viewModel.uiState.value.toastMessage)
-        assertNull(viewModel.uiState.value.formError)
     }
 
     @Test

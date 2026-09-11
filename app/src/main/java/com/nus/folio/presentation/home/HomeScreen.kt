@@ -1,5 +1,6 @@
 package com.nus.folio.presentation.home
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +46,7 @@ import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.components.rememberDismissKeyboardThen
 import com.nus.folio.components.rememberFolioToastHostState
 import com.nus.folio.di.LocalAppContainer
+import com.nus.folio.domain.model.AskConversation
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteFilter
 import com.nus.folio.domain.model.NoteOrigin
@@ -69,6 +74,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     spaceId: String,
     spaceTitle: String,
+    researchObjective: String = "",
     onNavigateBack: () -> Unit,
     onNavigateToSourceDetail: (sourceId: String, highlightText: String?) -> Unit,
     onSignOut: () -> Unit,
@@ -83,6 +89,7 @@ fun HomeScreen(
         factory = HomeViewModel.Factory(
             spaceId = spaceId,
             spaceTitle = spaceTitle,
+            researchObjective = researchObjective,
             getSourcesUseCase = LocalAppContainer.current.getSourcesUseCase,
             createSourceUseCase = LocalAppContainer.current.createSourceUseCase,
             observeSourceProcessingUseCase = LocalAppContainer.current.observeSourceProcessingUseCase,
@@ -90,6 +97,10 @@ fun HomeScreen(
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
             getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
             getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
+            getAskConversationsUseCase = LocalAppContainer.current.getAskConversationsUseCase,
+            getAskConversationUseCase = LocalAppContainer.current.getAskConversationUseCase,
+            updateAskConversationUseCase = LocalAppContainer.current.updateAskConversationUseCase,
+            deleteAskConversationUseCase = LocalAppContainer.current.deleteAskConversationUseCase,
             streamAskAnswerUseCase = LocalAppContainer.current.streamAskAnswerUseCase,
             submitAskFeedbackUseCase = LocalAppContainer.current.submitAskFeedbackUseCase,
             getNotesUseCase = LocalAppContainer.current.getNotesUseCase,
@@ -100,6 +111,7 @@ fun HomeScreen(
             convertNoteToSourceUseCase = LocalAppContainer.current.convertNoteToSourceUseCase,
             getNotebookUseCase = LocalAppContainer.current.getNotebookUseCase,
             saveNotebookUseCase = LocalAppContainer.current.saveNotebookUseCase,
+            getSpacesUseCase = LocalAppContainer.current.getSpacesUseCase,
             sourceFileBytesReader = LocalAppContainer.current.sourceFileBytesReader,
             refreshAuthSessionUseCase = LocalAppContainer.current.refreshAuthSessionUseCase,
             getCurrentSessionUseCase = LocalAppContainer.current.getCurrentSessionUseCase,
@@ -123,6 +135,14 @@ fun HomeScreen(
     val onOpenConversationSheet = rememberDismissKeyboardThen { showConversationSheet = true }
     val onOpenAnswerScopeSheet = rememberDismissKeyboardThen { showAnswerScopeSheet = true }
     val onOpenSignOutConfirm = rememberDismissKeyboardThen { showSignOutConfirm = true }
+
+    BackHandler(enabled = uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK) {
+        viewModel.onAskChatBack()
+    }
+
+    LaunchedEffect(researchObjective) {
+        viewModel.onResearchObjectiveAvailable(researchObjective)
+    }
 
     val exportDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/markdown"),
@@ -262,7 +282,13 @@ fun HomeScreen(
                     HomeTab.NOTEBOOK -> onNotebookAddClick()
                 }
             },
-            onBackClick = onNavigateBack,
+            onBackClick = {
+                if (uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK) {
+                    viewModel.onAskChatBack()
+                } else {
+                    onNavigateBack()
+                }
+            },
             onAskSubmit = viewModel::onAskSubmit,
             onAskStop = viewModel::onAskStop,
             onAskUserEnterAnimationFinished = viewModel::onAskUserEnterAnimationFinished,
@@ -271,14 +297,24 @@ fun HomeScreen(
             onAskSaveAsNote = viewModel::onAskSaveAsNote,
             onAskFeedback = viewModel::onAskFeedback,
             onAskCitationClick = viewModel::onAskCitationClick,
+            onConversationClick = viewModel::onConversationClick,
+            onConversationMoreClick = viewModel::onConversationOptionsClick,
+            onRefreshConversations = viewModel::onRefreshConversations,
+            onRetryConversations = viewModel::onRefreshConversations,
+            onNewConversationClick = {
+                showConversationSheet = false
+                viewModel.onNewConversation()
+            },
             onSourceMoreClick = viewModel::onSourceOptionsClick,
             onSourceClick = viewModel::onSourceClick,
             onNoteClick = viewModel::onNoteClick,
             onNoteMoreClick = viewModel::onNoteOptionsClick,
             onLoadMoreSources = viewModel::onLoadMoreSources,
             onLoadMoreNotes = viewModel::onLoadMoreNotes,
+            onLoadMoreConversations = viewModel::onLoadMoreConversations,
             onNotebookContentChange = viewModel::onNotebookContentChange,
             onRetryNotebookSave = viewModel::onRetryNotebookSave,
+            onRetryNotebookLoad = viewModel::onRetryNotebookLoad,
             onSignOut = onOpenSignOutConfirm,
             modifier = Modifier.fillMaxSize(),
         )
@@ -305,7 +341,17 @@ fun HomeScreen(
             onAskSaveAsNoteConfirm = viewModel::onAskSaveAsNoteConfirm,
             onAskCitationClick = viewModel::onAskCitationClick,
             onConversationSheetDismiss = { showConversationSheet = false },
-            onNewConversation = viewModel::onNewConversation,
+            onNewConversation = {
+                showConversationSheet = false
+                viewModel.onNewConversation()
+            },
+            onConversationOptionsDismiss = viewModel::onConversationOptionsDismiss,
+            onRenameConversationClick = viewModel::onRenameConversationClick,
+            onRenameConversationDismiss = viewModel::onRenameConversationDismiss,
+            onRenameConversationSave = viewModel::onRenameConversationSave,
+            onDeleteConversationClick = viewModel::onDeleteConversationClick,
+            onDeleteConversationDismiss = viewModel::onDeleteConversationDismiss,
+            onDeleteConversationConfirm = viewModel::onDeleteConversationConfirm,
             onAskScopeOptionSelected = viewModel::onAskScopeOptionSelected,
             onAnswerScopeSheetDismiss = { showAnswerScopeSheet = false },
             onCitationPreviewDismiss = viewModel::onCitationPreviewDismiss,
@@ -375,19 +421,29 @@ internal fun HomeContent(
     onAskSaveAsNote: (String) -> Unit = {},
     onAskFeedback: (String, Boolean) -> Unit = { _, _ -> },
     onAskCitationClick: (com.nus.folio.domain.model.AskCitation) -> Unit = {},
+    onConversationClick: (AskConversation) -> Unit = {},
+    onConversationMoreClick: (AskConversation) -> Unit = {},
+    onRefreshConversations: () -> Unit = {},
+    onRetryConversations: () -> Unit = {},
+    onNewConversationClick: () -> Unit = {},
     onSourceMoreClick: (Source) -> Unit,
     onSourceClick: (Source) -> Unit,
     onNoteClick: (Note) -> Unit,
     onNoteMoreClick: (Note) -> Unit,
     onLoadMoreSources: () -> Unit = {},
     onLoadMoreNotes: () -> Unit = {},
+    onLoadMoreConversations: () -> Unit = {},
     onNotebookContentChange: (String) -> Unit = {},
     onRetryNotebookSave: () -> Unit = {},
+    onRetryNotebookLoad: () -> Unit = {},
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    val hideBottomNavForAskInput = isImeVisible && uiState.selectedTab == HomeTab.ASK
+    val hideBottomNavForAskInput =
+        isImeVisible && uiState.selectedTab == HomeTab.ASK && uiState.isAskChatOpen
+    val notebookImeOpen = isImeVisible && uiState.selectedTab == HomeTab.NOTEBOOK
+    val hideBottomNav = hideBottomNavForAskInput || notebookImeOpen
 
     Box(
         modifier = modifier
@@ -396,52 +452,62 @@ internal fun HomeContent(
             .dismissKeyboardOnTapOutside(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(HomeHeader)
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 12.dp, bottom = 16.dp),
-            ) {
-                HomeHeaderRow(
-                    selectedTab = uiState.selectedTab,
-                    spaceTitle = uiState.spaceTitle,
-                    onBackClick = onBackClick,
-                    onAddClick = onAddClick,
-                )
-                if (
-                    uiState.selectedTab == HomeTab.SOURCES ||
-                    uiState.selectedTab == HomeTab.NOTES
+            if (!notebookImeOpen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HomeHeader)
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 16.dp),
                 ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    HomeHeaderRow(
+                        selectedTab = uiState.selectedTab,
+                        spaceTitle = uiState.spaceTitle,
+                        titleOverride = if (
+                            uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
+                        ) {
+                            uiState.askConversationTitle
+                        } else {
+                            ""
+                        },
+                        onBackClick = onBackClick,
+                        onAddClick = onAddClick,
+                    )
+                    if (
+                        uiState.selectedTab == HomeTab.SOURCES ||
+                        uiState.selectedTab == HomeTab.NOTES ||
+                        (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
                     ) {
-                        FolioSearchField(
-                            query = uiState.searchQuery,
-                            onQueryChange = onSearchQueryChange,
-                            placeholder = stringResource(
-                                if (uiState.selectedTab == HomeTab.NOTES) {
-                                    R.string.home_search_notes
-                                } else {
-                                    R.string.home_search_sources
-                                },
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (uiState.selectedTab == HomeTab.SOURCES) {
-                            HomeFilterSortButton(
-                                onClick = onFilterSortClick,
-                                showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            FolioSearchField(
+                                query = uiState.searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                placeholder = stringResource(
+                                    when (uiState.selectedTab) {
+                                        HomeTab.NOTES -> R.string.home_search_notes
+                                        HomeTab.ASK -> R.string.home_search_conversations
+                                        else -> R.string.home_search_sources
+                                    },
+                                ),
+                                modifier = Modifier.weight(1f),
                             )
-                        } else if (uiState.selectedTab == HomeTab.NOTES) {
-                            HomeFilterSortButton(
-                                onClick = onFilterSortClick,
-                                showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
-                            )
+                            if (uiState.selectedTab == HomeTab.SOURCES) {
+                                HomeFilterSortButton(
+                                    onClick = onFilterSortClick,
+                                    showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
+                                )
+                            } else if (uiState.selectedTab == HomeTab.NOTES) {
+                                HomeFilterSortButton(
+                                    onClick = onFilterSortClick,
+                                    showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
+                                )
+                            }
                         }
                     }
                 }
@@ -471,15 +537,22 @@ internal fun HomeContent(
                     onFeedback = onAskFeedback,
                     onCitationClick = onAskCitationClick,
                     onUserEnterAnimationFinished = onAskUserEnterAnimationFinished,
+                    onConversationClick = onConversationClick,
+                    onConversationMoreClick = onConversationMoreClick,
+                    onRefreshConversations = onRefreshConversations,
+                    onRetryConversations = onRetryConversations,
+                    onNewConversationClick = onNewConversationClick,
+                    onLoadMore = onLoadMoreConversations,
                     modifier = Modifier
                         .weight(1f)
-                        .then(
-                            if (hideBottomNavForAskInput) {
-                                Modifier.padding(bottom = 185.dp )
+                        .padding(
+                            bottom = if (hideBottomNavForAskInput) {
+                                0.dp
                             } else {
-                                Modifier.padding(bottom = HomeBottomNavClearance )
+                                HomeBottomNavClearance
                             },
-                        ),
+                        )
+                        .imePadding(),
                 )
                 HomeTab.NOTES -> NotesPane(
                     uiState = uiState,
@@ -500,16 +573,24 @@ internal fun HomeContent(
                     saveStatus = uiState.notebookSaveStatus,
                     isLoadingNotebook = uiState.isLoadingNotebook,
                     isLoadingNotes = uiState.isLoading,
+                    notebookError = uiState.notebookError,
                     onContentChange = onNotebookContentChange,
                     onRetrySave = onRetryNotebookSave,
+                    onRetryLoad = onRetryNotebookLoad,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(bottom = HomeBottomNavClearance),
+                        .then(
+                            if (notebookImeOpen) {
+                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                            } else {
+                                Modifier.padding(bottom = HomeBottomNavClearance)
+                            },
+                        ),
                 )
             }
         }
 
-        if (!hideBottomNavForAskInput) {
+        if (!hideBottomNav) {
             HomeBottomNav(
                 selectedTab = uiState.selectedTab,
                 onTabSelected = onTabSelected,
