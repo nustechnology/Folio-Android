@@ -20,14 +20,13 @@ android {
         applicationId = "com.nus.folio"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
+        versionCode = 6
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "String",
             "FOLIO_API_BASE_URL",
-//             "\"https://491c68efe64d.ngrok.app\"",
             "\"https://folio.nustechnology.com\"",
         )
     }

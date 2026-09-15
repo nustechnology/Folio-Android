@@ -107,7 +107,6 @@ fun SourceDetailScreen(
             onAskSourceClick = onAskSourceClick,
             onOpenOriginalClick = { showOpenOriginalSheet = true },
             onRetryLoad = viewModel::loadDetail,
-            onRetryProcessing = viewModel::onRetryProcessing,
             onSheetSelected = viewModel::onSheetSelected,
         )
 
@@ -198,7 +197,6 @@ private fun SourceDetailContent(
     onAskSourceClick: () -> Unit,
     onOpenOriginalClick: () -> Unit,
     onRetryLoad: () -> Unit,
-    onRetryProcessing: () -> Unit,
     onSheetSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -235,10 +233,8 @@ private fun SourceDetailContent(
                     detail = uiState.detail,
                     selectedSheetIndex = uiState.selectedSheetIndex,
                     isContentLoading = uiState.isContentLoading,
-                    isRetrying = uiState.isRetrying,
                     highlightText = highlightText,
                     onSheetSelected = onSheetSelected,
-                    onRetryProcessing = onRetryProcessing,
                 )
             }
             uiState.isLoading || uiState.isContentLoading -> {
@@ -309,7 +305,6 @@ private fun SourceDetailWebPreview() {
             onAskSourceClick = {},
             onOpenOriginalClick = {},
             onRetryLoad = {},
-            onRetryProcessing = {},
             onSheetSelected = {},
         )
     }
@@ -342,70 +337,6 @@ private fun SourceDetailDocumentPreview() {
             onAskSourceClick = {},
             onOpenOriginalClick = {},
             onRetryLoad = {},
-            onRetryProcessing = {},
-            onSheetSelected = {},
-        )
-    }
-}
-
-@Preview(showBackground = true, widthDp = 393, heightDp = 852)
-@Composable
-private fun SourceDetailProcessingPreview() {
-    FolioAndroidTheme(dynamicColor = false) {
-        SourceDetailContent(
-            highlightText = null,
-            uiState = SourceDetailUiState(
-                detail = SourceDetail(
-                    id = "3",
-                    title = "Weapons of Math Destruction",
-                    author = "Cathy O'Neil",
-                    addedLabel = "Added 2d ago",
-                    type = SourceType.BOOK,
-                    status = SourceStatus.PROCESSING,
-                    spaceId = "2",
-                    fileExtension = "epub",
-                    contentFormat = SourceContentFormat.DOCUMENT,
-                    originalFileName = "weapons-of-math-destruction.epub",
-                ),
-                previewUrl = "https://example.org/preview/book.epub",
-            ),
-            onBackClick = {},
-            onMoreClick = {},
-            onAskSourceClick = {},
-            onOpenOriginalClick = {},
-            onRetryLoad = {},
-            onRetryProcessing = {},
-            onSheetSelected = {},
-        )
-    }
-}
-
-@Preview(showBackground = true, widthDp = 393, heightDp = 852, name = "Source detail — failed")
-@Composable
-private fun SourceDetailFailedPreview() {
-    FolioAndroidTheme(dynamicColor = false) {
-        SourceDetailContent(
-            highlightText = null,
-            uiState = SourceDetailUiState(
-                detail = SourceDetail(
-                    id = "4",
-                    title = "The Age of Surveillance Capitalism",
-                    author = "Shoshana Zuboff",
-                    addedLabel = "Added 2d ago",
-                    type = SourceType.FILE,
-                    status = SourceStatus.FAILED,
-                    spaceId = "1",
-                    fileExtension = "pdf",
-                    contentFormat = SourceContentFormat.DOCUMENT,
-                    originalFileName = "surveillance-capitalism.pdf",
-                ),
-            ),
-            onBackClick = {},
-            onMoreClick = {},
-            onAskSourceClick = {},
-            onOpenOriginalClick = {},
-            onRetryLoad = {},
-            onRetryProcessing = {},
             onSheetSelected = {},
         )
     }

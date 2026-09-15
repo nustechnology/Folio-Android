@@ -1,24 +1,34 @@
 package com.nus.folio.presentation.sourcedetail
 
 import android.content.Context
+import android.view.View.MeasureSpec
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.nus.folio.BuildConfig
 import com.nus.folio.domain.model.SourceContentFormat
 import com.nus.folio.domain.util.SourceImageUrlRules
 import java.io.ByteArrayInputStream
 
+/**
+ * Renders source HTML in a read-only WebView that wraps content height and
+ * only expands to [maxHeight] (with internal scroll) when the document is taller.
+ */
 @Composable
 internal fun SourceHtmlRenderer(
     htmlBody: String,
     contentFormat: SourceContentFormat,
+    maxHeight: Dp,
     modifier: Modifier = Modifier,
     highlightText: String? = null,
 ) {
@@ -40,12 +50,15 @@ internal fun SourceHtmlRenderer(
     }
 
     AndroidView(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(max = maxHeight)
+            .wrapContentHeight(),
         factory = { context ->
             ReadOnlyWebView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
                 )
                 settings.javaScriptEnabled = false
                 settings.domStorageEnabled = false
@@ -54,8 +67,8 @@ internal fun SourceHtmlRenderer(
                 settings.blockNetworkImage = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                isVerticalScrollBarEnabled = true
-                isHorizontalScrollBarEnabled = contentFormat == SourceContentFormat.SHEET
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
                 isFocusable = false
                 isFocusableInTouchMode = false
                 isLongClickable = false
@@ -65,13 +78,16 @@ internal fun SourceHtmlRenderer(
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(
-                "file:///android_res/",
-                fullHtml,
-                "text/html",
-                "UTF-8",
-                null,
-            )
+            if (webView.tag != fullHtml) {
+                webView.tag = fullHtml
+                webView.loadDataWithBaseURL(
+                    "file:///android_res/",
+                    fullHtml,
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
         },
     )
 }
@@ -146,6 +162,13 @@ internal object CitationHighlight {
  * other schemes that should never load from source HTML.
  */
 private class SourceHtmlWebViewClient : WebViewClient() {
+    private val relayoutDelaysMs = longArrayOf(0L, 100L, 300L, 800L)
+
+    override fun onPageFinished(view: WebView?, url: String?) {
+        super.onPageFinished(view, url)
+        if (view != null) scheduleContentRelayout(view)
+    }
+
     override fun shouldInterceptRequest(
         view: WebView,
         request: WebResourceRequest,
@@ -155,6 +178,18 @@ private class SourceHtmlWebViewClient : WebViewClient() {
             "file", "data", "about", "http", "https" ->
                 super.shouldInterceptRequest(view, request)
             else -> blockedResponse()
+        }
+    }
+
+    private fun scheduleContentRelayout(view: WebView) {
+        relayoutDelaysMs.forEach { delayMs ->
+            view.postDelayed(
+                {
+                    view.requestLayout()
+                    view.invalidate()
+                },
+                delayMs,
+            )
         }
     }
 
@@ -170,9 +205,45 @@ private class SourceHtmlWebViewClient : WebViewClient() {
 }
 
 /**
- * WebView that never registers as a text editor, so the soft keyboard and IME
- * cannot insert, delete, or modify the rendered source content.
+ * WebView that wraps document height for Compose layout, and only takes an
+ * exact parent height (with scrolling) when content exceeds the available max.
  */
 private class ReadOnlyWebView(context: Context) : WebView(context) {
     override fun onCheckIsTextEditor(): Boolean = false
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val heightMode = MeasureSpec.getMode(heightMeasureSpec)
+        val heightSize = MeasureSpec.getSize(heightMeasureSpec)
+
+        // Measure to intrinsic HTML content height first.
+        super.onMeasure(
+            widthMeasureSpec,
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+        )
+        var contentPx = measuredHeight
+        if (contentPx <= 0) {
+            val cssHeight = contentHeight
+            if (cssHeight > 0) {
+                contentPx = (cssHeight * resources.displayMetrics.density).toInt()
+                setMeasuredDimension(measuredWidth, contentPx)
+            }
+        }
+
+        when (heightMode) {
+            MeasureSpec.EXACTLY -> {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+            MeasureSpec.AT_MOST -> {
+                if (contentPx > heightSize) {
+                    // Content overflows — take the full available height and scroll.
+                    super.onMeasure(
+                        widthMeasureSpec,
+                        MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY),
+                    )
+                }
+                // else keep content-wrapped height from the UNSPECIFIED pass
+            }
+            MeasureSpec.UNSPECIFIED -> Unit
+        }
+    }
 }

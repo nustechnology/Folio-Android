@@ -304,11 +304,6 @@
     <string name="source_delete_message">This permanently removes the source and its retrieval data.</string>
     <string name="source_delete_confirm">Delete</string>
     <string name="source_detail_title">Source</string>
-    <string name="source_detail_processing_title">Still processing</string>
-    <string name="source_detail_processing">We\u2019re extracting text and indexing evidence from this source. This usually takes a moment — check back soon.</string>
-    <string name="source_detail_failed_title">Processing failed</string>
-    <string name="source_detail_failed">We couldn\u2019t extract content from this source. You can retry processing or open the original file.</string>
-    <string name="source_detail_retry_processing">Retry processing</string>
     <string name="source_detail_sheet_label">Sheet</string>
     <string name="source_detail_ask_source">Ask source</string>
     <string name="source_detail_open_original">Open original ↗</string>
