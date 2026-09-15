@@ -4,7 +4,6 @@
     <string name="login_description">Your sources, notes and citations in one private archive.</string>
     <string name="login_email_hint">jordan@folio.app</string>
     <string name="login_password_hint">••••••••••</string>
-    <string name="login_forgot_password">Forgot password?</string>
     <string name="login_sign_in">Sign in</string>
     <string name="login_footer">Private by default. Your archive stays yours.</string>
     <string name="login_error_email_required">Enter your email address.</string>
@@ -47,19 +46,6 @@
     <string name="signup_show_confirm_password">Show confirm password</string>
     <string name="signup_hide_confirm_password">Hide confirm password</string>
     <string name="signup_loading">Creating account</string>
-
-    <string name="reset_password_tagline">PRIVATE ARCHIVE</string>
-    <string name="reset_password_headline">Reset password</string>
-    <string name="reset_password_description">Enter your email and Folio will send a secure recovery link.</string>
-    <string name="reset_password_email_label">Email address</string>
-    <string name="reset_password_email_hint">jordan@folio.app</string>
-    <string name="reset_password_send_link">Send recovery link</string>
-    <string name="reset_password_back_to_sign_in">Back to sign in</string>
-    <string name="reset_password_info_title">Private by default</string>
-    <string name="reset_password_info_body">Recovery links expire quickly and never expose source data.</string>
-    <string name="reset_password_error_email_required">Enter your email address.</string>
-    <string name="reset_password_error_send_failed">Could not send recovery link. Please try again.</string>
-    <string name="reset_password_link_sent">Recovery link sent. Check your inbox.</string>
 
     <string name="home_sources_title">Sources</string>
     <string name="home_sources_subtitle">Evidence library</string>

@@ -55,13 +55,6 @@ object SourceImageUrlRules {
         }
     }
 
-    /** Replaces disallowed `src` attribute values with an empty string. */
-    fun neutralizeDisallowedSources(html: String, trustedBaseUrl: String = ""): String =
-        SRC_ATTR_REGEX.replace(html) { match ->
-            val value = unquote(match.groupValues[1])
-            if (isAllowed(value, trustedBaseUrl)) match.value else """src="""""
-        }
-
     private fun isPublicNetworkUrl(src: String): Boolean {
         val host = networkHost(src) ?: return false
         return !isLocalOrPrivateHost(host)

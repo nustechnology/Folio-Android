@@ -8,7 +8,7 @@ import kotlinx.coroutines.delay
 
 /**
  * Debug auth data source.
- * [signUp] / [signIn] / [refresh] / [logout] hit the real auth API; Apple / password-reset stay local mocks.
+ * [signUp] / [signIn] / [refresh] / [logout] hit the real auth API; Apple stays a local mock.
  *
  * Paired with [com.nus.folio.data.auth.AuthCapabilities.isBackendAvailable] = true.
  */
@@ -68,11 +68,6 @@ class AuthDataSource(
             displayName = APPLE_DISPLAY_NAME,
             userId = APPLE_USER_ID,
         )
-    }
-
-    suspend fun requestPasswordReset(email: String) {
-        delay(300)
-        require(email.isNotBlank()) { "Email is required" }
     }
 
     private companion object {

@@ -15,7 +15,7 @@ Login → Spaces → Home (per space)
 
 | Screen | Description |
 |--------|-------------|
-| **Login** | Sign in, sign up, reset password |
+| **Login** | Sign in, sign up |
 | **Spaces** | Browse and manage research spaces |
 | **Home** | Tabbed workspace per space: Sources, Ask, Notes, Notebook |
 | **Account** | Profile and sign-out (navigated from Spaces) |
@@ -78,7 +78,7 @@ app/src/
 │   ├── domain/           # Models, repository interfaces, use cases
 │   ├── di/               # AppContainer, LocalAppContainer
 │   ├── presentation/
-│   │   ├── login/ signup/ resetpassword/
+│   │   ├── login/ signup/
 │   │   ├── space/        # Space list & management
 │   │   ├── home/         # Tabbed workspace (Sources, Ask, Notes, Notebook)
 │   │   ├── account/      # Account settings

@@ -18,7 +18,6 @@ import com.nus.folio.di.LocalAppContainer
 import com.nus.folio.presentation.home.HomeScreen
 import com.nus.folio.presentation.home.HomeTab
 import com.nus.folio.presentation.login.LoginScreen
-import com.nus.folio.presentation.resetpassword.ResetPasswordScreen
 import com.nus.folio.presentation.signup.SignUpScreen
 import com.nus.folio.presentation.sourcedetail.SourceDetailScreen
 import com.nus.folio.presentation.space.SpaceScreen
@@ -27,7 +26,6 @@ import kotlin.coroutines.cancellation.CancellationException
 object FolioDestination {
     const val LOGIN = "login"
     const val SIGN_UP = "sign_up"
-    const val RESET_PASSWORD = "reset_password"
     const val SPACES = "spaces"
     const val HOME = "home"
     const val SOURCE_DETAIL = "source_detail"
@@ -36,8 +34,6 @@ object FolioDestination {
     const val HOME_REFRESH_SOURCES_RESULT = "home_refresh_sources_result"
     const val HOME_RESEARCH_OBJECTIVE = "home_research_objective"
     const val LOGIN_SIGNED_OUT_RESULT = "login_signed_out_result"
-
-    fun resetPassword(): String = RESET_PASSWORD
 
     fun home(
         spaceId: String,
@@ -131,9 +127,6 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onNavigateToSignUp = {
                     navController.navigate(FolioDestination.SIGN_UP)
                 },
-                onNavigateToResetPassword = {
-                    navController.navigate(FolioDestination.resetPassword())
-                },
             )
         }
         composable(FolioDestination.SIGN_UP) {
@@ -150,11 +143,6 @@ fun FolioNavHost(modifier: Modifier = Modifier) {
                 onNavigateToLogin = {
                     navController.popBackStackOrIgnore()
                 },
-            )
-        }
-        composable(FolioDestination.RESET_PASSWORD) {
-            ResetPasswordScreen(
-                onNavigateBack = { navController.popBackStackOrIgnore() },
             )
         }
         composable(FolioDestination.SPACES) {

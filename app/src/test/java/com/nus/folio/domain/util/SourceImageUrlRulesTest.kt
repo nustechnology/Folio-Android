@@ -39,16 +39,6 @@ class SourceImageUrlRulesTest {
     }
 
     @Test
-    fun `neutralizeDisallowedSources blanks only disallowed src values`() {
-        val html =
-            """<p><img src="javascript:alert(1)"><img src="https://cdn.example/a.png"></p>"""
-        assertEquals(
-            """<p><img src=""><img src="https://cdn.example/a.png"></p>""",
-            SourceImageUrlRules.neutralizeDisallowedSources(html, apiBase),
-        )
-    }
-
-    @Test
     fun `prepareSources absolutizes relative paths and blanks dangerous src`() {
         val html =
             """<p><img src="/media/a.png"><img src="images/b.png"><img src="https://cdn.example/c.png"><img src="javascript:alert(1)"></p>"""

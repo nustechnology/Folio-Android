@@ -18,7 +18,6 @@ class FakeAuthRepository : AuthRepository {
         ),
     )
     var syncCurrentUserResult: Result<AuthSession>? = null
-    var requestPasswordResetResult: Result<Unit> = Result.success(Unit)
 
     var lastSignUpName: String? = null
     var lastSignUpEmail: String? = null
@@ -26,7 +25,6 @@ class FakeAuthRepository : AuthRepository {
     var lastSignUpConfirmPassword: String? = null
     var lastSignInEmail: String? = null
     var lastSignInPassword: String? = null
-    var lastPasswordResetEmail: String? = null
     var lastSyncUserId: String? = null
 
     var signUpCallCount = 0
@@ -35,7 +33,6 @@ class FakeAuthRepository : AuthRepository {
     var refreshSessionCallCount = 0
     var syncCurrentUserCallCount = 0
     var signOutCallCount = 0
-    var requestPasswordResetCallCount = 0
     var clearSessionCallCount = 0
 
     private var currentSession: AuthSession? = null
@@ -108,12 +105,6 @@ class FakeAuthRepository : AuthRepository {
         currentSession = null
         clearSessionCallCount++
         return Result.success(Unit)
-    }
-
-    override suspend fun requestPasswordReset(email: String): Result<Unit> {
-        requestPasswordResetCallCount++
-        lastPasswordResetEmail = email
-        return requestPasswordResetResult
     }
 
     override suspend fun restoreSession() = Unit

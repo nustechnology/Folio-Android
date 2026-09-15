@@ -248,14 +248,4 @@ class AuthDataSourceTest {
         assertEquals("Apple User", session.displayName)
         assertEquals("apple-user", session.userId)
     }
-
-    @Test
-    fun `requestPasswordReset succeeds for valid email`() = runTest {
-        dataSource().requestPasswordReset("user@folio.app")
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun `requestPasswordReset throws when email is blank`() = runTest {
-        dataSource().requestPasswordReset(" ")
-    }
 }

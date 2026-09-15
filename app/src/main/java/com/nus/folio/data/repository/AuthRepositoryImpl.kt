@@ -151,10 +151,6 @@ class AuthRepositoryImpl(
         }
     }
 
-    override suspend fun requestPasswordReset(email: String): Result<Unit> = runSuspendCatching {
-        dataSource.requestPasswordReset(email)
-    }
-
     override fun getCurrentSession(): AuthSession? = currentSession
 
     override suspend fun clearSession() {

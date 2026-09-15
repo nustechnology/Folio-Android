@@ -511,19 +511,4 @@ class AuthRepositoryImplTest {
         assertEquals("refresh-login", restored.getCurrentSession()?.refreshToken)
         assertEquals("d9c069fd-6c17-468b-82bd-1528512c8899", restored.getCurrentSession()?.userId)
     }
-
-    @Test
-    fun `requestPasswordReset returns success`() = runTest {
-        val result = repository.requestPasswordReset("user@folio.app")
-
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
-    fun `requestPasswordReset returns failure when email is blank`() = runTest {
-        val result = repository.requestPasswordReset("")
-
-        assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
-    }
 }
