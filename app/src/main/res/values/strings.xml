@@ -159,17 +159,17 @@
     <string name="add_source_upload_hint">Tap to upload a file or drag and drop</string>
     <string name="add_source_upload_types">PDF, DOCX, EPUB, MD, TXT, PPTX, XLSX, CSV</string>
     <string name="add_source_upload_limit">Max 50 MB per file</string>
-    <string name="add_source_web_url_label">Article URL (required)</string>
+    <string name="add_source_web_url_label">Article URL *</string>
     <string name="add_source_web_url_placeholder">https://example.org/care-technology-adoption</string>
-    <string name="add_source_web_title_label">Title (optional)</string>
+    <string name="add_source_web_title_label">Title</string>
     <string name="add_source_web_title_placeholder">Care Technology Adoption Survey 2026</string>
-    <string name="add_source_web_author_label">Author (optional)</string>
+    <string name="add_source_web_author_label">Author</string>
     <string name="add_source_web_author_placeholder">Care Systems Association</string>
-    <string name="add_source_text_title_label">Title (optional)</string>
+    <string name="add_source_text_title_label">Title</string>
     <string name="add_source_text_title_placeholder">Provider workshop evidence</string>
-    <string name="add_source_text_author_label">Author (optional)</string>
+    <string name="add_source_text_author_label">Author</string>
     <string name="add_source_text_author_placeholder">Internal research</string>
-    <string name="add_source_text_content_label">Content (required)</string>
+    <string name="add_source_text_content_label">Content *</string>
     <string name="add_source_text_content_placeholder">Frontline coordinators described repeated entry across scheduling, incident, and compliance systems.</string>
     <string name="add_source_text_content_counter">%1$s / %2$s</string>
     <string name="add_source_submit">Add source</string>
@@ -204,7 +204,7 @@
     <string name="edit_source_description">Update details for this source document.</string>
     <string name="edit_source_title_label">Title</string>
     <string name="edit_source_title_placeholder">Source title</string>
-    <string name="edit_source_author_label">Author (optional)</string>
+    <string name="edit_source_author_label">Author</string>
     <string name="edit_source_author_placeholder">Author name</string>
     <string name="edit_source_save">Save</string>
 

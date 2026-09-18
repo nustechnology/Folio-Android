@@ -246,7 +246,7 @@ internal fun AddNoteLabeledField(
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = label,
+            text = remember(label) { formatFieldLabel(label) },
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             color = LoginCopper,
