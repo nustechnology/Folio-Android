@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.nus.folio.R
 import com.nus.folio.components.TextFieldCursorScroll
+import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.presentation.home.NotebookSaveStatus
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.LoginCopper
@@ -170,7 +171,8 @@ internal fun NotebookEditor(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .onSizeChanged { viewportHeight = it.height }
-                .verticalScroll(scrollState),
+                .verticalScroll(scrollState)
+                .dismissKeyboardOnTapOutside(),
         ) {
             BasicTextField(
                 value = fieldValue,
@@ -212,7 +214,7 @@ internal fun NotebookEditor(
                     }
                 },
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         when (notebookShortcutAction(event)) {
