@@ -3,6 +3,8 @@ package com.nus.folio.presentation.home
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskConversation
 import com.nus.folio.domain.model.AskConversationDetail
+import com.nus.folio.domain.model.AskConversationMessage
+import com.nus.folio.domain.model.AskConversationRole
 import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AuthApiException
@@ -1035,6 +1037,26 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onConversationClick filters out empty assistant messages`() = runTest {
+        askRepository.conversationDetails = askRepository.conversationDetails + ("conv-empty" to AskConversationDetail(
+            conversation = AskConversation(id = "conv-empty", title = "Empty bot msg", dateLabel = "Today"),
+            messages = listOf(
+                AskConversationMessage(id = "u1", role = AskConversationRole.USER, content = "Hi"),
+                AskConversationMessage(id = "a1", role = AskConversationRole.ASSISTANT, content = ""),
+            ),
+        ))
+        val viewModel = createViewModel()
+        val emptyConv = AskConversation(id = "conv-empty", title = "Empty bot msg", dateLabel = "Today")
+
+        viewModel.onConversationClick(emptyConv)
+        advanceUntilIdle()
+
+        val messages = viewModel.uiState.value.askMessages
+        assertEquals(1, messages.size)
+        assertEquals("u1", messages.first().id)
+    }
+
+    @Test
     fun `onConversationClick restores entire space when conversation has no sourceId`() = runTest {
         val viewModel = createViewModel()
         viewModel.onAskScopeOptionSelected("1")
@@ -1380,6 +1402,20 @@ class HomeViewModelTest {
         assertFalse(assistant.isStreaming)
         assertTrue(assistant.wasStopped)
         assertEquals("Partial answer", assistant.content)
+    }
+
+    @Test
+    fun `onAskStop removes empty assistant message when stopped before content generation`() = runTest {
+        askRepository.streamEvents = emptyList()
+        askRepository.hangAfterStreamEvents = true
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Question")
+
+        viewModel.onAskStop()
+
+        val messages = viewModel.uiState.value.askMessages
+        assertEquals(1, messages.size)
+        assertEquals(AskMessageRole.USER, messages.first().role)
     }
 
     @Test
