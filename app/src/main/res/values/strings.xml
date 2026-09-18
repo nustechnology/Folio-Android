@@ -144,7 +144,7 @@
     <string name="answer_scope_source_subtitle">Source</string>
     <string name="answer_scope_search">Search scopes</string>
     <string name="answer_scope_search_hint">Search sources…</string>
-    <string name="answer_scope_no_matches">No sources match your search.</string>
+    <string name="answer_scope_no_matches">No matching sources</string>
     <string name="home_error_generic">Something went wrong. Please try again.</string>
     <string name="home_error_network">Could not reach the server. Check your connection and try again.</string>
     <string name="home_retry">Retry</string>
