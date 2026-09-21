@@ -200,13 +200,12 @@ class SourceDetailViewModel(
         _uiState.update { it.copy(editingSource = null, editingSourceContent = "") }
     }
 
-    fun onEditSourceSave(title: String, author: String, content: String) {
+    fun onEditSourceSave(title: String, author: String) {
         if (_uiState.value.isUpdatingSource) return
         val editing = _uiState.value.editingSource ?: return
         val trimmedTitle = title.trim()
         if (trimmedTitle.isBlank()) return
         val trimmedAuthor = author.trim()
-        val contentToSend = if (editing.type == SourceType.TEXT) content.trim() else null
 
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdatingSource = true, actionError = null) }
@@ -215,7 +214,7 @@ class SourceDetailViewModel(
                     title = trimmedTitle,
                     author = trimmedAuthor,
                 ),
-                content = contentToSend,
+                content = null,
             ).onSuccess { updated ->
                 _uiState.update { current ->
                     val detail = current.detail
@@ -226,11 +225,6 @@ class SourceDetailViewModel(
                             author = updated.author,
                             status = updated.status,
                             fileExtension = updated.fileExtension,
-                            plainContent = if (updated.type == SourceType.TEXT) {
-                                contentToSend ?: detail.plainContent
-                            } else {
-                                detail.plainContent
-                            },
                         ),
                         editingSource = null,
                         editingSourceContent = "",

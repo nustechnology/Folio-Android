@@ -65,7 +65,7 @@ internal fun HomeOverlaySheets(
     onCitationPreviewDismiss: () -> Unit,
     onCitationOpenInSource: () -> Unit,
     onEditSourceDismiss: () -> Unit,
-    onEditSourceSave: (String, String, String) -> Unit,
+    onEditSourceSave: (String, String) -> Unit,
     onDeleteSourceDismiss: () -> Unit,
     onDeleteSourceConfirm: () -> Unit,
     onViewNoteDismiss: () -> Unit,
@@ -171,7 +171,6 @@ internal fun HomeOverlaySheets(
     uiState.editingSource?.let { source ->
         EditSourceBottomSheet(
             source = source,
-            initialContent = uiState.editingSourceContent,
             onDismiss = onEditSourceDismiss,
             onSave = onEditSourceSave,
         )

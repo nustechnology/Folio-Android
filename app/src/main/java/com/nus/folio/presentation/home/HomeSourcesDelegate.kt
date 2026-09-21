@@ -587,21 +587,15 @@ internal class HomeSourcesDelegate(
         state.update { it.copy(editingSource = null, editingSourceContent = "") }
     }
 
-    fun onEditSourceSave(title: String, author: String, content: String = "") {
+    fun onEditSourceSave(title: String, author: String) {
         if (title.isBlank()) return
         val editing = state.value.editingSource ?: return
         val trimmedTitle = AddSourceInputRules.limitTitle(title.trim())
         val trimmedAuthor = AddSourceInputRules.limitAuthor(author.trim())
-        val contentToSend = if (editing.type == SourceType.TEXT) {
-            if (!AddSourceInputRules.isContentValid(content)) return
-            content.trim()
-        } else {
-            null
-        }
         val updated = editing.copy(title = trimmedTitle, author = trimmedAuthor)
 
         scope.launch {
-            updateSourceUseCase(updated, contentToSend)
+            updateSourceUseCase(updated, null)
                 .onSuccess { saved ->
                     state.update { current ->
                         val updatedSources = current.allSources.map { source ->

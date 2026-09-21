@@ -1901,7 +1901,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onEditSourceSave for text includes content`() = runTest {
+    fun `onEditSourceSave for text saves title and author with null content`() = runTest {
         val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
         val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
         viewModel.onEditSourceClick(source)
@@ -1910,16 +1910,12 @@ class HomeViewModelTest {
         viewModel.onEditSourceSave(
             title = "Updated notes",
             author = "Researcher",
-            content = "Updated manual source content for the archive.",
         )
 
         assertNull(viewModel.uiState.value.editingSource)
         assertEquals(HomeUserMessage.SOURCE_UPDATED, viewModel.uiState.value.userMessage)
         assertEquals(1, sourceRepository.updateSourceCallCount)
-        assertEquals(
-            "Updated manual source content for the archive.",
-            sourceRepository.lastUpdatedContent,
-        )
+        assertNull(sourceRepository.lastUpdatedContent)
     }
 
     @Test

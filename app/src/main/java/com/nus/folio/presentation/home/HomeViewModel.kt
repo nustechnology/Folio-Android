@@ -598,8 +598,8 @@ class HomeViewModel(
 
     fun onEditSourceDismiss() = sources.onEditSourceDismiss()
 
-    fun onEditSourceSave(title: String, author: String, content: String = "") =
-        sources.onEditSourceSave(title, author, content)
+    fun onEditSourceSave(title: String, author: String) =
+        sources.onEditSourceSave(title, author)
 
     fun onDeleteSourceClick(source: Source) = sources.onDeleteSourceClick(source)
 

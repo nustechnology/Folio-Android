@@ -161,7 +161,6 @@ fun SourceDetailScreen(
         uiState.editingSource?.let { source ->
             EditSourceBottomSheet(
                 source = source,
-                initialContent = uiState.editingSourceContent,
                 onDismiss = viewModel::onEditSourceDismiss,
                 onSave = viewModel::onEditSourceSave,
                 isSubmitting = uiState.isUpdatingSource,
