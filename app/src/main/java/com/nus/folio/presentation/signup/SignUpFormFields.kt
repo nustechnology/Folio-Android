@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
-import com.nus.folio.presentation.home.bottomsheet.formatFieldLabel
+import com.nus.folio.components.formatFieldLabel
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.LoginBackground
 import com.nus.folio.ui.theme.LoginBorder

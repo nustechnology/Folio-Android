@@ -146,6 +146,7 @@ internal fun HomeOverlaySheets(
             draft = draft,
             onDismiss = onAskSaveAsNoteDismiss,
             onSubmit = onAskSaveAsNoteConfirm,
+            onCitationClick = onAskCitationClick,
         )
     }
 

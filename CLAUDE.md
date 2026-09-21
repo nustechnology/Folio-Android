@@ -80,7 +80,7 @@ These types are **not** in `main` — they live in `debug/` / `release/` (`AuthC
 |------|-------|---------|
 | `AuthCapabilities` | `isBackendAvailable = true` | `true` |
 | API base URL | `https://folio.nustechnology.com` | `https://folio.nustechnology.com` |
-| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple + password-reset stay local mocks | Same as debug |
+| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple sign-in stays local mock | Same as debug |
 | `SpaceDataSource` | Real spaces API via `SpacesApiClient` (401 → refresh once + retry) | Same as debug |
 | `SourceDataSource` | Real sources API via `SourcesApiClient` (list/create/detail/update/retry/delete/preview); processing status via SSE (`SourcesSseClient`); 401 → refresh once + retry | Same as debug |
 | `NoteDataSource` | Real notes API via `NotesApiClient` (list/create/detail/update/delete/convert; 401 → refresh once + retry) | Same as debug |
@@ -145,11 +145,11 @@ fun SpaceScreen(
 
 ### Navigation
 
-- Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `RESET_PASSWORD`, `SPACES`, `HOME`, `SOURCE_DETAIL`
+- Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `SPACES`, `HOME`, `SOURCE_DETAIL`
 - Saved-state keys: `HOME_TAB_RESULT`, `HOME_ASK_SOURCE_RESULT`, `HOME_REFRESH_SOURCES_RESULT`, `HOME_RESEARCH_OBJECTIVE`, `LOGIN_SIGNED_OUT_RESULT`
 - Start destination: waits for `isSessionRestored`, then `SPACES` if signed in else `LOGIN`
 - Post-auth flow: Login / Sign Up → `SPACES` → `HOME/{spaceId}?title={title}&objective={objective}` → optional `SOURCE_DETAIL/{sourceId}?spaceId=&highlight=`
-- `FolioDestination.home(...)`, `sourceDetail(...)`, `resetPassword(email)` build typed routes
+- `FolioDestination.home(...)` and `sourceDetail(...)` build typed routes
 - Sign-out from Spaces (`AccountListBottomSheet`) clears the session and navigates back to `LOGIN` (sets `LOGIN_SIGNED_OUT_RESULT`)
 - Register new composables in `FolioNavHost`
 

@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.formatFieldLabel
 import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.components.rememberTextFieldCursorScroller
 import com.nus.folio.domain.util.NoteInputRules

@@ -1,4 +1,4 @@
-package com.nus.folio.presentation.home.bottomsheet
+package com.nus.folio.components
 
 import androidx.compose.ui.text.SpanStyle
 import com.nus.folio.ui.theme.HomeStatusFailedText

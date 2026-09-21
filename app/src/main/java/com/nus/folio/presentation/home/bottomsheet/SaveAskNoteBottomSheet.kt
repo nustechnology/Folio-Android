@@ -68,7 +68,7 @@ internal fun SaveAskNoteBottomSheet(
     draft: SaveAskNoteDraft,
     onDismiss: () -> Unit,
     onSubmit: (title: String, content: String) -> Unit,
-    onCitationClick: (AskCitation) -> Unit = {},
+    onCitationClick: (AskCitation) -> Unit,
 ) {
     val context = LocalContext.current
     val discardProtection = rememberSheetDiscardProtectionState()
@@ -117,7 +117,7 @@ private fun SaveAskNoteSheetContent(
     draft: SaveAskNoteDraft,
     onCancelClick: () -> Unit,
     onSubmit: (title: String, content: String) -> Unit,
-    onCitationClick: (AskCitation) -> Unit = {},
+    onCitationClick: (AskCitation) -> Unit,
     onDirtyChange: (Boolean) -> Unit = {},
 ) {
     var title by rememberSaveable(draft.messageId) { mutableStateOf(draft.initialTitle) }
@@ -318,6 +318,7 @@ private fun SaveAskNoteSheetContentPreview() {
                         ),
                     ),
                     onCancelClick = {},
+                    onCitationClick = {},
                     onSubmit = { _, _ -> },
                 )
             }

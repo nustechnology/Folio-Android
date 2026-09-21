@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import com.nus.folio.components.formatFieldLabel
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -169,24 +170,6 @@ internal fun AddSourceTextFields(
                     color = HomeStatusFailedText,
                 )
             }
-        }
-    }
-}
-
-internal fun formatFieldLabel(
-    label: String,
-): AnnotatedString {
-    val asteriskIndex = label.indexOf('*')
-    if (asteriskIndex == -1) {
-        return AnnotatedString(label)
-    }
-    return buildAnnotatedString {
-        append(label.substring(0, asteriskIndex))
-        withStyle(SpanStyle(color = HomeStatusFailedText)) {
-            append("*")
-        }
-        if (asteriskIndex + 1 < label.length) {
-            append(label.substring(asteriskIndex + 1))
         }
     }
 }

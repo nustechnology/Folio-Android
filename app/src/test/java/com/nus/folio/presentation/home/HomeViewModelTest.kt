@@ -1055,6 +1055,8 @@ class HomeViewModelTest {
         assertEquals(1, messages.size)
         assertEquals("u1", messages.first().id)
     }
+
+    @Test
     fun `onConversationClick restores entire space when conversation has no sourceId`() = runTest {
         val viewModel = createViewModel()
         viewModel.onAskScopeOptionSelected("1")
