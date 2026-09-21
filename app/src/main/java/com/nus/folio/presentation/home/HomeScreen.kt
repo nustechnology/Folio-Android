@@ -442,7 +442,8 @@ internal fun HomeContent(
     val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val hideBottomNavForAskInput =
         isImeVisible && uiState.selectedTab == HomeTab.ASK && uiState.isAskChatOpen
-    val hideBottomNav = hideBottomNavForAskInput
+    val notebookImeOpen = isImeVisible && uiState.selectedTab == HomeTab.NOTEBOOK
+    val hideBottomNav = hideBottomNavForAskInput || notebookImeOpen
 
     Box(
         modifier = modifier
@@ -451,60 +452,62 @@ internal fun HomeContent(
             .dismissKeyboardOnTapOutside(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(HomeHeader)
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 12.dp, bottom = 16.dp),
-            ) {
-                HomeHeaderRow(
-                    selectedTab = uiState.selectedTab,
-                    spaceTitle = uiState.spaceTitle,
-                    titleOverride = if (
-                        uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
-                    ) {
-                        uiState.askConversationTitle
-                    } else {
-                        ""
-                    },
-                    onBackClick = onBackClick,
-                    onAddClick = onAddClick,
-                )
-                if (
-                    uiState.selectedTab == HomeTab.SOURCES ||
-                    uiState.selectedTab == HomeTab.NOTES ||
-                    (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
+            if (!notebookImeOpen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HomeHeader)
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 16.dp),
                 ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    HomeHeaderRow(
+                        selectedTab = uiState.selectedTab,
+                        spaceTitle = uiState.spaceTitle,
+                        titleOverride = if (
+                            uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
+                        ) {
+                            uiState.askConversationTitle
+                        } else {
+                            ""
+                        },
+                        onBackClick = onBackClick,
+                        onAddClick = onAddClick,
+                    )
+                    if (
+                        uiState.selectedTab == HomeTab.SOURCES ||
+                        uiState.selectedTab == HomeTab.NOTES ||
+                        (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
                     ) {
-                        FolioSearchField(
-                            query = uiState.searchQuery,
-                            onQueryChange = onSearchQueryChange,
-                            placeholder = stringResource(
-                                when (uiState.selectedTab) {
-                                    HomeTab.NOTES -> R.string.home_search_notes
-                                    HomeTab.ASK -> R.string.home_search_conversations
-                                    else -> R.string.home_search_sources
-                                },
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (uiState.selectedTab == HomeTab.SOURCES) {
-                            HomeFilterSortButton(
-                                onClick = onFilterSortClick,
-                                showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            FolioSearchField(
+                                query = uiState.searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                placeholder = stringResource(
+                                    when (uiState.selectedTab) {
+                                        HomeTab.NOTES -> R.string.home_search_notes
+                                        HomeTab.ASK -> R.string.home_search_conversations
+                                        else -> R.string.home_search_sources
+                                    },
+                                ),
+                                modifier = Modifier.weight(1f),
                             )
-                        } else if (uiState.selectedTab == HomeTab.NOTES) {
-                            HomeFilterSortButton(
-                                onClick = onFilterSortClick,
-                                showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
-                            )
+                            if (uiState.selectedTab == HomeTab.SOURCES) {
+                                HomeFilterSortButton(
+                                    onClick = onFilterSortClick,
+                                    showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
+                                )
+                            } else if (uiState.selectedTab == HomeTab.NOTES) {
+                                HomeFilterSortButton(
+                                    onClick = onFilterSortClick,
+                                    showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
+                                )
+                            }
                         }
                     }
                 }
@@ -576,8 +579,13 @@ internal fun HomeContent(
                     onRetryLoad = onRetryNotebookLoad,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(bottom = HomeBottomNavClearance)
-                        .imePadding(),
+                        .then(
+                            if (notebookImeOpen) {
+                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                            } else {
+                                Modifier.padding(bottom = HomeBottomNavClearance)
+                            },
+                        ),
                 )
             }
         }

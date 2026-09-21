@@ -41,9 +41,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -71,6 +71,7 @@ import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
 import java.text.NumberFormat
 import java.util.Locale
+
 
 private val AddNoteContentHeight = 160.dp
 
@@ -233,7 +234,7 @@ internal fun AddNoteLabeledField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    singleLine: Boolean,
+    singleLine: Boolean = false,
     errorMessage: String? = null,
     characterLimit: Int? = null,
     readOnly: Boolean = false,

@@ -90,6 +90,13 @@ internal object NotebookMarkdownVisuals {
         return builder.build()
     }
 
+    /** Raw text with 1:1 offsets — used when visual mapping is inconsistent. */
+    internal fun identityVisualized(markdown: String): VisualizedMarkdown =
+        VisualizedMarkdown(
+            text = AnnotatedString(markdown),
+            mapping = OffsetMapping.Identity,
+        )
+
     private class VisualBuilder(private val original: String) {
         private val out = AnnotatedString.Builder()
         private val origToTrans = IntArray(original.length + 1)
@@ -112,8 +119,10 @@ internal object NotebookMarkdownVisuals {
             origToTrans[original.length] = out.length
             val transformedLength = out.length
             val originalLength = original.length
-            check(transToOrigChars.size == transformedLength) {
-                "Each shown character must have a transformed→original entry"
+            // Malformed parse paths must not crash the editor — fall back to showing
+            // the raw markdown with an identity offset map.
+            if (transToOrigChars.size != transformedLength) {
+                return identityVisualized(original)
             }
             // Caret offsets 0..length-1 map to the original index of each shown
             // character. The end caret (length) must sit immediately after the last

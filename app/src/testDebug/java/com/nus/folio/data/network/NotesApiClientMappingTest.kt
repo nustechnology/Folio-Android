@@ -124,27 +124,25 @@ class NotesApiClientMappingTest {
     @Test
     fun `parseNote maps citations from payload`() {
         val note = NotesApiClient.parseNote(
-            org.json.JSONObject(
-                """
+            """
+            {
+              "id": "note-1",
+              "researchSpaceId": "space-1",
+              "title": "Saved answer",
+              "content": "<p>Answer [1]</p>",
+              "originType": "SavedAnswer",
+              "citationCount": 1,
+              "citations": [
                 {
-                  "id": "note-1",
-                  "researchSpaceId": "space-1",
-                  "title": "Saved answer",
-                  "content": "<p>Answer [1]</p>",
-                  "originType": "SavedAnswer",
-                  "citationCount": 1,
-                  "citations": [
-                    {
-                      "sourceId": "src-1",
-                      "sourceTitle": "Computing Machinery",
-                      "sourceType": "file",
-                      "page": 14,
-                      "evidenceText": "imitation game"
-                    }
-                  ]
+                  "sourceId": "src-1",
+                  "sourceTitle": "Computing Machinery",
+                  "sourceType": "file",
+                  "page": 14,
+                  "evidenceText": "imitation game"
                 }
-                """.trimIndent(),
-            ),
+              ]
+            }
+            """.trimIndent(),
             nowInstant = Instant.parse("2026-08-06T12:00:00Z"),
         )
 

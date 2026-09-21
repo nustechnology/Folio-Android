@@ -732,12 +732,15 @@ internal class HomeAskDelegate(
     }
 
     fun onDeleteConversationDismiss() {
+        if (state.value.isDeletingConversation) return
         state.update { it.copy(deletingConversation = null) }
     }
 
     fun onDeleteConversationConfirm() {
+        if (state.value.isDeletingConversation) return
         val deleting = state.value.deletingConversation ?: return
         scope.launch {
+            state.update { it.copy(isDeletingConversation = true, actionError = null) }
             deleteAskConversationUseCase(spaceId, deleting.id)
                 .onSuccess {
                     val closingChat = askConversationId == deleting.id ||
@@ -753,6 +756,7 @@ internal class HomeAskDelegate(
                         current.copy(
                             askConversations = current.askConversations.filterNot { it.id == deleting.id },
                             deletingConversation = null,
+                            isDeletingConversation = false,
                             userMessage = HomeUserMessage.CONVERSATION_DELETED,
                             isAskChatOpen = if (closingChat) false else current.isAskChatOpen,
                             askConversationTitle = if (closingChat) {
@@ -781,7 +785,10 @@ internal class HomeAskDelegate(
                 }
                 .onFailure { throwable ->
                     state.update {
-                        it.copy(actionError = throwable.toHomeActionError())
+                        it.copy(
+                            isDeletingConversation = false,
+                            actionError = throwable.toHomeActionError(),
+                        )
                     }
                 }
         }

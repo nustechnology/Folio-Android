@@ -258,13 +258,6 @@
     <string name="notebook_toolbar_link">Link</string>
     <string name="notebook_toolbar_undo">Undo</string>
     <string name="notebook_toolbar_redo">Redo</string>
-    <string name="notebook_toolbar_bold_symbol" translatable="false">B</string>
-    <string name="notebook_toolbar_italic_symbol" translatable="false">I</string>
-    <string name="notebook_toolbar_bullet_symbol" translatable="false">•</string>
-    <string name="notebook_toolbar_ordered_symbol" translatable="false">1.</string>
-    <string name="notebook_toolbar_blockquote_symbol" translatable="false">❝</string>
-    <string name="notebook_toolbar_undo_symbol" translatable="false">↶</string>
-    <string name="notebook_toolbar_redo_symbol" translatable="false">↷</string>
     <string name="notebook_actions_title">Notebook actions</string>
     <string name="notebook_actions_copy">Copy notebook</string>
     <string name="notebook_actions_export">Export</string>

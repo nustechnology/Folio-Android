@@ -63,6 +63,7 @@ data class HomeUiState(
     val renamingConversation: AskConversation? = null,
     val isRenamingConversation: Boolean = false,
     val deletingConversation: AskConversation? = null,
+    val isDeletingConversation: Boolean = false,
     val editingSource: Source? = null,
     /** Plain content for TEXT source edits; empty for Web/File. */
     val editingSourceContent: String = "",

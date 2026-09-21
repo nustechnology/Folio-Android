@@ -185,6 +185,31 @@ class NotebookMarkdownActionsTest {
     }
 
     @Test
+    fun `activeMarks finds link on same line in a long document`() {
+        val prefix = "plain paragraph\n".repeat(200)
+        val value = TextFieldValue(
+            prefix + "See [Hello](https://example.com) now",
+            TextRange(prefix.length + 6),
+        )
+        val marks = NotebookMarkdownActions.activeMarks(value)
+        assertEquals(true, marks.link)
+        assertEquals(false, NotebookMarkdownActions.activeMarks(
+            TextFieldValue(prefix + "See Hello now", TextRange(prefix.length + 4)),
+        ).link)
+    }
+
+    @Test
+    fun `toggleLink unwraps link without scanning unrelated lines`() {
+        val prefix = "note\n".repeat(100)
+        val value = TextFieldValue(
+            prefix + "See [Hello](https://example.com) now",
+            TextRange(prefix.length + 6, prefix.length + 11),
+        )
+        val result = NotebookMarkdownActions.toggleLink(value)
+        assertEquals(prefix + "See Hello now", result.text)
+    }
+
+    @Test
     fun `setHeading toggles the same level off`() {
         val value = TextFieldValue("# Title\nBody", TextRange(3))
         val result = NotebookMarkdownActions.setHeading(value, 1)

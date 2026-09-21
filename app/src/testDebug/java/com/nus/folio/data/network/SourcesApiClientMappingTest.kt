@@ -220,6 +220,15 @@ class SourcesApiClientMappingTest {
             "application/octet-stream",
             SourcesApiClient.sanitizeMultipartMimeType("application/pdf script=alert(1)"),
         )
+        // Backslash is not an RFC 2045 token char; crafted values must not pass.
+        assertEquals(
+            "application/octet-stream",
+            SourcesApiClient.sanitizeMultipartMimeType("application\\/pdf"),
+        )
+        assertEquals(
+            "application/octet-stream",
+            SourcesApiClient.sanitizeMultipartMimeType("app\\lication/pdf"),
+        )
     }
 
     @Test

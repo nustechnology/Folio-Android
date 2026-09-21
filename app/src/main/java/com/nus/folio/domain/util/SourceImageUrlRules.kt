@@ -9,7 +9,12 @@ import java.util.Locale
  *
  * Allowed: relative paths, data-image URIs, and http(s) / protocol-relative
  * URLs with a parseable public host. Loopback, link-local, and private
- * addresses are rejected. Everything else is treated as disallowed.
+ * addresses are rejected, including Chromium legacy numeric IPv4 host forms
+ * (decimal, octal, hex, and short dotted forms). Everything else is treated
+ * as disallowed.
+ *
+ * `srcset` and `imagesrcset` are stripped entirely: WebView can pick any
+ * candidate, so leaving them would bypass per-URL [isAllowed] checks on `src`.
  *
  * Relative paths are resolved against [apiBaseUrl] before rendering because
  * the WebView document base is `file:///android_res/` (for bundled fonts) and
@@ -19,8 +24,8 @@ object SourceImageUrlRules {
     private val SRC_ATTR_REGEX = Regex(
         """(?i)\bsrc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""",
     )
-    private val IPV4_REGEX = Regex(
-        """^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""",
+    private val SRCSET_ATTR_REGEX = Regex(
+        """(?i)\s*\b(?:imagesrcset|srcset)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""",
     )
 
     fun isAllowed(src: String, trustedBaseUrl: String = ""): Boolean {
@@ -39,12 +44,13 @@ object SourceImageUrlRules {
     }
 
     /**
-     * Blanks disallowed `src` values and rewrites relative paths to absolute
-     * URLs under [apiBaseUrl] so WebView can fetch Folio document images.
+     * Strips `srcset` / `imagesrcset`, blanks disallowed `src` values, and
+     * rewrites relative paths to absolute URLs under [apiBaseUrl] so WebView
+     * can fetch Folio document images.
      */
     fun prepareSources(html: String, apiBaseUrl: String): String {
         val base = apiBaseUrl.trim().trimEnd('/')
-        return SRC_ATTR_REGEX.replace(html) { match ->
+        return SRC_ATTR_REGEX.replace(stripSrcsetAttributes(html)) { match ->
             val value = unquote(match.groupValues[1])
             when {
                 !isAllowed(value, base) -> """src="""""
@@ -54,6 +60,21 @@ object SourceImageUrlRules {
             }
         }
     }
+
+    /**
+     * Strips `srcset` / `imagesrcset` and blanks disallowed `src` values without rewriting relative paths.
+     */
+    fun neutralizeDisallowedSources(html: String, trustedBaseUrl: String = ""): String {
+        val base = trustedBaseUrl.trim().trimEnd('/')
+        return SRC_ATTR_REGEX.replace(stripSrcsetAttributes(html)) { match ->
+            val value = unquote(match.groupValues[1])
+            if (!isAllowed(value, base)) """src=""""" else match.value
+        }
+    }
+
+    /** Removes responsive-image candidate lists that would bypass `src` checks. */
+    private fun stripSrcsetAttributes(html: String): String =
+        SRCSET_ATTR_REGEX.replace(html, "")
 
     private fun isPublicNetworkUrl(src: String): Boolean {
         val host = networkHost(src) ?: return false
@@ -73,17 +94,95 @@ object SourceImageUrlRules {
         }
         val ipv4 = parseIpv4(normalized)
         if (ipv4 != null) return isPrivateOrLocalIpv4(ipv4)
+        // Chromium resolves decimal / octal / hex IPv4 forms (e.g. 2130706433,
+        // 0177.0.0.1, 0x7f000001). Reject hosts that look numeric but fail to
+        // parse so they cannot bypass the private-range check as "hostnames".
+        if (looksLikeNumericIpv4(normalized)) return true
         if (normalized.contains(':')) {
             return isPrivateOrLocalIpv6(normalized)
         }
         return false
     }
 
+    /**
+     * Parses dotted and legacy numeric IPv4 host forms the way Chromium does:
+     * 1–4 parts, each decimal / octal (`0…`) / hex (`0x…`), with fewer than
+     * four parts expanding into the trailing 32-bit / 24-bit / 16-bit field.
+     */
     private fun parseIpv4(host: String): IntArray? {
-        val match = IPV4_REGEX.matchEntire(host) ?: return null
-        val octets = IntArray(4) { match.groupValues[it + 1].toInt() }
-        if (octets.any { it !in 0..255 }) return null
-        return octets
+        val parts = host.split('.')
+        if (parts.size !in 1..4 || parts.any { it.isEmpty() }) return null
+        val numbers = LongArray(parts.size) { parseIpv4Part(parts[it]) ?: return null }
+        return when (parts.size) {
+            1 -> expandIpv4Parts(numbers[0], bitWidths = intArrayOf(32))
+            2 -> expandIpv4Parts(numbers[0], numbers[1], bitWidths = intArrayOf(8, 24))
+            3 -> expandIpv4Parts(
+                numbers[0],
+                numbers[1],
+                numbers[2],
+                bitWidths = intArrayOf(8, 8, 16),
+            )
+            4 -> expandIpv4Parts(
+                numbers[0],
+                numbers[1],
+                numbers[2],
+                numbers[3],
+                bitWidths = intArrayOf(8, 8, 8, 8),
+            )
+            else -> null
+        }
+    }
+
+    private fun parseIpv4Part(part: String): Long? {
+        if (part.isEmpty()) return null
+        val lower = part.lowercase(Locale.US)
+        return when {
+            lower.startsWith("0x") -> {
+                if (lower.length == 2) return null
+                lower.substring(2).toLongOrNull(16)
+            }
+            lower.length > 1 && lower[0] == '0' -> {
+                if (lower.any { it !in '0'..'7' }) return null
+                lower.toLongOrNull(8)
+            }
+            else -> {
+                if (lower.any { it !in '0'..'9' }) return null
+                lower.toLongOrNull(10)
+            }
+        }
+    }
+
+    private fun expandIpv4Parts(vararg numbers: Long, bitWidths: IntArray): IntArray? {
+        if (numbers.size != bitWidths.size) return null
+        var value = 0L
+        for (i in numbers.indices) {
+            val n = numbers[i]
+            val width = bitWidths[i]
+            val max = (1L shl width) - 1L
+            if (n !in 0..max) return null
+            value = (value shl width) or n
+        }
+        if (value !in 0..0xffff_ffffL) return null
+        return intArrayOf(
+            ((value ushr 24) and 0xff).toInt(),
+            ((value ushr 16) and 0xff).toInt(),
+            ((value ushr 8) and 0xff).toInt(),
+            (value and 0xff).toInt(),
+        )
+    }
+
+    /** True when [host] is only digits / dots / `0x` hex parts (legacy IPv4 shape). */
+    private fun looksLikeNumericIpv4(host: String): Boolean {
+        val parts = host.split('.')
+        if (parts.size !in 1..4 || parts.any { it.isEmpty() }) return false
+        return parts.all { part ->
+            val lower = part.lowercase(Locale.US)
+            when {
+                lower.startsWith("0x") ->
+                    lower.length > 2 && lower.substring(2).all { it in '0'..'9' || it in 'a'..'f' }
+                else -> lower.all { it in '0'..'9' }
+            }
+        }
     }
 
     private fun isPrivateOrLocalIpv4(octets: IntArray): Boolean {
@@ -102,16 +201,48 @@ object SourceImageUrlRules {
     }
 
     private fun isPrivateOrLocalIpv6(host: String): Boolean {
-        // IPv4-mapped IPv6 (::ffff:x.x.x.x)
-        val mapped = host.substringAfterLast(":", missingDelimiterValue = "")
-        val mappedIpv4 = parseIpv4(mapped)
-        if (host.contains('.') && mappedIpv4 != null && host.contains("ffff", ignoreCase = true)) {
+        // IPv4-mapped IPv6 (::ffff:a.b.c.d or ::ffff:XXXX:YYYY hex)
+        val mappedIpv4 = parseIpv4MappedHost(host)
+        if (mappedIpv4 != null) {
             return isPrivateOrLocalIpv4(mappedIpv4)
         }
         val first = host.substringBefore(':').ifEmpty { "0" }
         val prefix = first.toIntOrNull(16) ?: return true
-        // fe80::/10 link-local, fc00::/7 ULA, ::1 already handled
+        // ::/8 (prefix 0) covers expanded loopback / unspecified (0:0:0:0:0:0:0:1,
+        // 0:0:0:0:0:0:0:0); compressed ::1 / :: are handled earlier. Mapped
+        // ::ffff: addresses are already classified above.
+        if (prefix == 0) return true
+        // fe80::/10 link-local, fc00::/7 ULA
         return prefix in 0xfc00..0xfdff || prefix in 0xfe80..0xfebf
+    }
+
+    /**
+     * Decodes IPv4-mapped IPv6 (`::ffff:0:0/96`) to four octets.
+     *
+     * Accepts dotted (`::ffff:127.0.0.1`) and hexadecimal (`::ffff:7f00:1`)
+     * embedded forms. Returns null when [host] is not an IPv4-mapped address.
+     */
+    private fun parseIpv4MappedHost(host: String): IntArray? {
+        val marker = "ffff:"
+        val markerIndex = host.indexOf(marker)
+        if (markerIndex < 0) return null
+        val before = host.substring(0, markerIndex).trimEnd(':')
+        if (before.isNotEmpty() && !before.split(':').all { it.isEmpty() || it == "0" }) {
+            return null
+        }
+        val embedded = host.substring(markerIndex + marker.length)
+        parseIpv4(embedded)?.let { return it }
+        val hextets = embedded.split(':')
+        if (hextets.size != 2) return null
+        val hi = hextets[0].toIntOrNull(16) ?: return null
+        val lo = hextets[1].toIntOrNull(16) ?: return null
+        if (hi !in 0..0xffff || lo !in 0..0xffff) return null
+        return intArrayOf(
+            (hi ushr 8) and 0xff,
+            hi and 0xff,
+            (lo ushr 8) and 0xff,
+            lo and 0xff,
+        )
     }
 
     private fun isRelativePath(src: String): Boolean {

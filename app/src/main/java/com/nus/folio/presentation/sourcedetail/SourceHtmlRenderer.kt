@@ -205,8 +205,8 @@ private class SourceHtmlWebViewClient : WebViewClient() {
 }
 
 /**
- * WebView that wraps document height for Compose layout, and only takes an
- * exact parent height (with scrolling) when content exceeds the available max.
+ * WebView that wraps document height for Compose layout, and never registers
+ * as a text editor so the soft keyboard and IME cannot modify rendered source content.
  */
 private class ReadOnlyWebView(context: Context) : WebView(context) {
     override fun onCheckIsTextEditor(): Boolean = false

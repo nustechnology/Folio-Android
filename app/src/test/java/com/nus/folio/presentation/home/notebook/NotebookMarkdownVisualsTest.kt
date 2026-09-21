@@ -126,4 +126,44 @@ class NotebookMarkdownVisualsTest {
         assertEquals(visualized.text.text, filtered.text.text)
         assertEquals("Title\nbold and italic\n- item", visualized.text.text)
     }
+
+    @Test
+    fun `visualize never throws on malformed markdown`() {
+        val samples = listOf(
+            "**",
+            "****",
+            "_",
+            "[]()",
+            "[a](",
+            "**_mixed_",
+            "# ",
+            ">**bold**",
+            "\n\n**a**\n_",
+            "[".repeat(64) + "](x)",
+            "**Hello",
+            "text with **unclosed and _also",
+        )
+        samples.forEach { sample ->
+            val visualized = NotebookMarkdownVisuals.visualize(sample)
+            val transformedLen = visualized.text.text.length
+            assertTrue(transformedLen >= 0)
+            assertTrue(visualized.mapping.originalToTransformed(0) in 0..transformedLen)
+            assertTrue(
+                visualized.mapping.transformedToOriginal(0) in 0..sample.length,
+            )
+            assertTrue(
+                visualized.mapping.originalToTransformed(sample.length) in 0..transformedLen,
+            )
+        }
+    }
+
+    @Test
+    fun `identityVisualized maps offsets one to one`() {
+        val markdown = "**raw**"
+        val visualized = NotebookMarkdownVisuals.identityVisualized(markdown)
+        assertEquals(markdown, visualized.text.text)
+        assertEquals(0, visualized.mapping.originalToTransformed(0))
+        assertEquals(markdown.length, visualized.mapping.originalToTransformed(markdown.length))
+        assertEquals(3, visualized.mapping.transformedToOriginal(3))
+    }
 }

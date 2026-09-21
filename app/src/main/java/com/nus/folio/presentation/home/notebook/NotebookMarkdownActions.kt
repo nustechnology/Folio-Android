@@ -94,11 +94,30 @@ internal object NotebookMarkdownActions {
         )
     }
 
+    /**
+     * Finds a markdown link that fully encloses [start, end]. Scans only the
+     * line(s) covering the selection so caret moves stay O(line) on long docs.
+     */
     private fun findEnclosingLink(text: String, start: Int, end: Int): MatchResult? {
-        LINK_PATTERN.findAll(text).forEach { match ->
-            val linkStart = match.range.first
+        if (text.isEmpty()) return null
+        val selStart = start.coerceIn(0, text.length)
+        val selEnd = end.coerceIn(0, text.length)
+        val searchStart = lineStartOf(text, selStart)
+        val searchEnd = lineEndOf(text, selEnd)
+        if (searchStart >= searchEnd) return null
+        var from = searchStart
+        while (from < searchEnd) {
+            val match = LINK_PATTERN.find(text, from) ?: return null
+            if (match.range.first >= searchEnd) return null
             val linkEndExclusive = match.range.last + 1
-            if (start >= linkStart && end <= linkEndExclusive) return match
+            if (linkEndExclusive <= searchEnd &&
+                selStart >= match.range.first &&
+                selEnd <= linkEndExclusive
+            ) {
+                return match
+            }
+            if (match.range.first >= selEnd) return null
+            from = match.range.first + 1
         }
         return null
     }

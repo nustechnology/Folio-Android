@@ -1,12 +1,14 @@
 package com.nus.folio.data.network
 
 import android.util.Log
+import com.nus.folio.BuildConfig
 
 /**
  * Debug-only HTTP request/response logger for Folio API clients.
  * Filter Logcat by tag [TAG] (`FolioHttp`).
  *
- * Sensitive fields (passwords, tokens, Authorization) are redacted.
+ * No-ops in release (`BuildConfig.DEBUG == false`). Sensitive fields
+ * (passwords, tokens, Authorization) are redacted when logging is enabled.
  */
 internal object HttpDebugLogger {
     const val TAG = "FolioHttp"
@@ -14,12 +16,22 @@ internal object HttpDebugLogger {
     private const val MAX_BODY_CHARS = 4_000
     private const val REDACTED = "***"
 
+    /**
+     * Test override for [isEnabled]. `null` means use [BuildConfig.DEBUG].
+     */
+    @Volatile
+    internal var enabledOverride: Boolean? = null
+
+    internal val isEnabled: Boolean
+        get() = enabledOverride ?: BuildConfig.DEBUG
+
     fun logRequest(
         method: String,
         url: String,
         body: String? = null,
         contentType: String? = null,
     ) {
+        if (!isEnabled) return
         val meta = buildString {
             append("→ ")
             append(method)
@@ -43,6 +55,7 @@ internal object HttpDebugLogger {
         code: Int,
         body: String?,
     ) {
+        if (!isEnabled) return
         Log.d(TAG, "← $method $url → HTTP $code")
         if (!body.isNullOrBlank()) {
             Log.d(TAG, "  response body: ${formatBody(body)}")
@@ -54,10 +67,12 @@ internal object HttpDebugLogger {
         url: String,
         error: Throwable,
     ) {
+        if (!isEnabled) return
         Log.e(TAG, "✖ $method $url → ${error.javaClass.simpleName}: ${error.message}", error)
     }
 
     fun logEvent(message: String) {
+        if (!isEnabled) return
         Log.d(TAG, message)
     }
 

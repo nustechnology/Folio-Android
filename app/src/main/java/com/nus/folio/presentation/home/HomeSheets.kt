@@ -146,7 +146,6 @@ internal fun HomeOverlaySheets(
             draft = draft,
             onDismiss = onAskSaveAsNoteDismiss,
             onSubmit = onAskSaveAsNoteConfirm,
-            onCitationClick = onAskCitationClick,
         )
     }
 
@@ -285,6 +284,8 @@ internal fun HomeOverlaySheets(
             messageRes = R.string.conversation_delete_message,
             onDismiss = onDeleteConversationDismiss,
             onConfirm = onDeleteConversationConfirm,
+            isSubmitting = uiState.isDeletingConversation,
+            closeOnConfirm = false,
         )
     }
 

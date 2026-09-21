@@ -2,7 +2,7 @@
 
 Native Android client for Folio — private research, grounded answers. Sources, notes, and citations in one private archive.
 
-**Package:** `com.nus.folio` | **Screens:** Login (start) → Spaces → Home (per space) → Source Detail; Sign Up. Account is a bottom sheet on Spaces (not a nav route).
+**Package:** `com.nus.folio` | **Screens:** Login (start) → Spaces → Home (per space) → Source Detail; Sign Up, Reset Password (account sheet + sign-out from Spaces)
 
 ## Tech Stack
 
@@ -80,7 +80,7 @@ These types are **not** in `main` — they live in `debug/` / `release/` (`AuthC
 |------|-------|---------|
 | `AuthCapabilities` | `isBackendAvailable = true` | `true` |
 | API base URL | `https://folio.nustechnology.com` | `https://folio.nustechnology.com` |
-| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple stays a local mock | Same as debug |
+| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple + password-reset stay local mocks | Same as debug |
 | `SpaceDataSource` | Real spaces API via `SpacesApiClient` (401 → refresh once + retry) | Same as debug |
 | `SourceDataSource` | Real sources API via `SourcesApiClient` (list/create/detail/update/retry/delete/preview); processing status via SSE (`SourcesSseClient`); 401 → refresh once + retry | Same as debug |
 | `NoteDataSource` | Real notes API via `NotesApiClient` (list/create/detail/update/delete/convert; 401 → refresh once + retry) | Same as debug |
@@ -138,21 +138,19 @@ fun SpaceScreen(
 - User-facing strings in `res/values/strings.xml`
 - `rememberSaveable` for form fields
 - `Modifier` parameter with default, passed to root layout
-- Previews wrap content in `FolioAndroidTheme`
-- Home is tabbed (`HomeTab`: Sources, Ask, Notes, Notebook)
-- Account / sign-out live on Spaces via `AccountListBottomSheet` (not a separate nav route)
+- Home is tabbed (`HomeTab`: Sources, Ask, Notes, Notebook); account list + sign-out live in a Spaces bottom sheet (`AccountListBottomSheet`), not a separate screen
 - Source Detail is a separate nav route from Home (optional citation highlight + “ask about this source” result back to Home Ask)
 - Shared UI components live in `components/` (modal sheets, toasts, skeletons, search field, empty state, loading indicators, item options)
 - Domain input / formatting helpers live in `domain/util/` (e.g. `AuthInputRules`, `AddSourceInputRules`, `NoteInputRules`, `NotebookInputRules`, `SpaceInputRules`, `SourceImageUrlRules`)
 
 ### Navigation
 
-- Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `SPACES`, `HOME`, `SOURCE_DETAIL`
+- Routes in `FolioDestination` (`FolioNavHost.kt`): `LOGIN`, `SIGN_UP`, `RESET_PASSWORD`, `SPACES`, `HOME`, `SOURCE_DETAIL`
 - Saved-state keys: `HOME_TAB_RESULT`, `HOME_ASK_SOURCE_RESULT`, `HOME_REFRESH_SOURCES_RESULT`, `HOME_RESEARCH_OBJECTIVE`, `LOGIN_SIGNED_OUT_RESULT`
 - Start destination: waits for `isSessionRestored`, then `SPACES` if signed in else `LOGIN`
 - Post-auth flow: Login / Sign Up → `SPACES` → `HOME/{spaceId}?title={title}&objective={objective}` → optional `SOURCE_DETAIL/{sourceId}?spaceId=&highlight=`
-- `FolioDestination.home(...)`, `sourceDetail(...)` build typed routes
-- Sign-out from Spaces clears the session and navigates to `LOGIN` (sets `LOGIN_SIGNED_OUT_RESULT`)
+- `FolioDestination.home(...)`, `sourceDetail(...)`, `resetPassword(email)` build typed routes
+- Sign-out from Spaces (`AccountListBottomSheet`) clears the session and navigates back to `LOGIN` (sets `LOGIN_SIGNED_OUT_RESULT`)
 - Register new composables in `FolioNavHost`
 
 ## Design System
@@ -213,6 +211,7 @@ Follow dependency direction: define contracts in `domain` first, implement in `d
 | Notebook editor | `presentation/home/notebook/` (editor, toolbar, `NotebookSideEffects`) |
 | Home sheets | `presentation/home/bottomsheet/` (e.g. `AddSourceBottomSheet.kt`, `ConversationBottomSheet.kt`) |
 | Source detail | `presentation/sourcedetail/SourceDetailScreen.kt`, `SourceDetailViewModel.kt` |
+| Account sheet (Spaces) | `presentation/space/AccountListBottomSheet.kt` |
 | Shared components | `components/` (`FolioToast`, `AnimatedModalSheet`, `FolioSkeleton`, `FolioSearchField`, …) |
 | Auth use cases | `domain/usecase/SignInUseCase.kt`, `SignUpUseCase.kt`, `RefreshAuthSessionUseCase.kt`, `GetCurrentSessionUseCase.kt` |
 | Home data use cases | `GetSourcesUseCase`, `CreateSourceUseCase`, `GetAskSuggestionsUseCase`, `StreamAskAnswerUseCase`, `GetAskConversationsUseCase`, `SubmitAskFeedbackUseCase`, `GetNotesUseCase`, `GetNotebookUseCase`, `SaveNotebookUseCase`, … |

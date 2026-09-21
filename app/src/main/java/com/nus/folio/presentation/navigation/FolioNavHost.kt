@@ -35,6 +35,7 @@ object FolioDestination {
     const val HOME_RESEARCH_OBJECTIVE = "home_research_objective"
     const val LOGIN_SIGNED_OUT_RESULT = "login_signed_out_result"
 
+
     fun home(
         spaceId: String,
         spaceTitle: String = "",
