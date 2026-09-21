@@ -62,7 +62,7 @@ import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginPlaceholder
 
 /**
- * Autocomplete-style scope picker: Entire Space (default) plus all sources in the space.
+ * Autocomplete-style scope picker: Entire Space (default) plus ready sources in the space.
  * [onScopeOptionSelected] receives `null` for Entire Space, or a source id for a single document.
  */
 @Composable

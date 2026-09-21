@@ -9,6 +9,8 @@ package com.nus.folio.domain.util
  * unwrapped without marking the conversion lossy. Tags that carry structure this markdown
  * subset cannot express (table, pre, img, h4+, …) are still unwrapped for display and
  * flagged [Conversion.isLossy] so callers can refuse to write the reduced document back.
+ * Named / numeric entities that are not decoded are kept verbatim in markdown; [escapeHtml]
+ * preserves undecodable entity references on the markdown→HTML path so round-trips stay lossless.
  */
 object NotebookHtml {
     data class Conversion(
@@ -491,20 +493,21 @@ object NotebookHtml {
 
     private val ENTITY = Regex("""&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);""")
 
+    /** HTML5 legacy / typography names valid in any ASCII case (not Latin-1 letter pairs). */
+    private val LEGACY_CASE_INSENSITIVE_ENTITIES = setOf(
+        "amp", "lt", "gt", "quot", "apos", "nbsp",
+        "copy", "reg", "trade",
+        "lsquo", "rsquo", "ldquo", "rdquo", "mdash", "ndash", "hellip",
+    )
+
     private val NAMED_ENTITIES = mapOf(
-        // XML / HTML essentials (+ HTML5 legacy uppercase spellings)
+        // XML / HTML essentials
         "amp" to "&",
-        "AMP" to "&",
         "lt" to "<",
-        "LT" to "<",
         "gt" to ">",
-        "GT" to ">",
         "quot" to "\"",
-        "QUOT" to "\"",
         "apos" to "'",
-        "APOS" to "'",
         "nbsp" to "\u00A0",
-        "NBSP" to "\u00A0",
         // Typography rich-text editors commonly emit
         "lsquo" to "\u2018",
         "rsquo" to "\u2019",
@@ -514,7 +517,6 @@ object NotebookHtml {
         "ndash" to "\u2013",
         "hellip" to "\u2026",
         "copy" to "\u00A9",
-        "COPY" to "\u00A9",
         "reg" to "\u00AE",
         "trade" to "\u2122",
         // Latin-1 letter entities (ISO-8859-1)
@@ -547,6 +549,9 @@ object NotebookHtml {
         body.startsWith("#") ->
             body.substring(1).toIntOrNull()?.let(::codePointToString)
         else -> NAMED_ENTITIES[body]
+            ?: NAMED_ENTITIES[body.lowercase()].takeIf {
+                body.lowercase() in LEGACY_CASE_INSENSITIVE_ENTITIES
+            }
     }
 
     private fun codePointToString(code: Int): String? {

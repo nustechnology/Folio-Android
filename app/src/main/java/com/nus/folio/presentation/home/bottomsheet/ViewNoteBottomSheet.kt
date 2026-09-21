@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +40,7 @@ import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.presentation.home.HomeUploadZoneShape
 import com.nus.folio.presentation.home.SourceTypeBadgeColors
 import com.nus.folio.presentation.home.noteOriginBadgeColors
+import com.nus.folio.presentation.home.notebook.NotebookMarkdownVisuals
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeReadOnlyFieldBackground
@@ -46,7 +49,7 @@ import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 
-private val ViewNoteContentHeight = 160.dp
+private val ViewNoteContentMaxHeight = 420.dp
 
 @Composable
 internal fun ViewNoteBottomSheet(
@@ -195,10 +198,13 @@ private fun ViewNoteContentBox(
     onCitationClick: (AskCitation) -> Unit,
 ) {
     val scrollState = rememberScrollState()
+    val markdownText = remember(content) {
+        NotebookMarkdownVisuals.visualize(content).text
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(ViewNoteContentHeight)
+            .heightIn(max = ViewNoteContentMaxHeight)
             .clip(HomeUploadZoneShape)
             .border(1.dp, HomeReadOnlyFieldBorder, HomeUploadZoneShape)
             .background(HomeReadOnlyFieldBackground)
@@ -210,13 +216,14 @@ private fun ViewNoteContentBox(
                 citations = citations,
                 onCitationClick = onCitationClick,
                 interactiveCitations = citations.isNotEmpty(),
+                renderMarkdown = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(scrollState),
             )
         } else {
             Text(
-                text = content,
+                text = markdownText,
                 color = HomeTextPrimary,
                 fontSize = 15.sp,
                 lineHeight = 22.sp,
@@ -246,7 +253,7 @@ private fun ViewNoteSheetContentPreview() {
                     note = Note(
                         id = "3",
                         title = "Turing Test — Key Takeaways",
-                        content = "The imitation game reframes intelligence as observable linguistic behavior [1].",
+                        content = "The imitation game reframes **intelligence** as _observable_ linguistic behavior [1].",
                         project = "Dissertation Research",
                         updatedLabel = "Updated 3d ago",
                         isPinned = false,

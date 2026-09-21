@@ -113,14 +113,21 @@ fun SourceDetailScreen(
 
         if (showOpenOriginalSheet) {
             val detail = uiState.detail
-            OpenOriginalBottomSheet(
-                fileName = detail?.originalFileName
-                    ?.takeIf { it.isNotBlank() }
-                    ?: detail?.title
-                    ?: stringResource(R.string.source_detail_title),
-                onDismiss = { showOpenOriginalSheet = false },
-                onConfirm = viewModel::onOpenOriginalClick,
-            )
+            if (detail != null && detail.type != SourceType.TEXT) {
+                val displayValue = when (detail.type) {
+                    SourceType.WEB -> uiState.previewUrl.orEmpty()
+                    SourceType.FILE, SourceType.BOOK, SourceType.TEXT ->
+                        detail.originalFileName.takeIf { it.isNotBlank() } ?: detail.title
+                }
+                OpenOriginalBottomSheet(
+                    sourceType = detail.type,
+                    displayValue = displayValue.ifBlank {
+                        stringResource(R.string.source_detail_title)
+                    },
+                    onDismiss = { showOpenOriginalSheet = false },
+                    onConfirm = viewModel::onOpenOriginalClick,
+                )
+            }
         }
 
         if (showSourceOptionsSheet) {
@@ -203,8 +210,11 @@ private fun SourceDetailContent(
     ) {
         SourceDetailHeader(
             detail = uiState.detail,
-            showOpenOriginal = uiState.detail?.status == SourceStatus.READY &&
-                !uiState.previewUrl.isNullOrBlank(),
+            showOpenOriginal = uiState.detail?.let { detail ->
+                detail.status == SourceStatus.READY &&
+                    detail.type != SourceType.TEXT &&
+                    !uiState.previewUrl.isNullOrBlank()
+            } == true,
             onBackClick = onBackClick,
             onMoreClick = onMoreClick,
             onAskSourceClick = onAskSourceClick,

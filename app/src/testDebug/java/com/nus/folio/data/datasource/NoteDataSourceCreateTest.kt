@@ -21,6 +21,8 @@ class NoteDataSourceCreateTest {
         var lastSpaceId: String? = null
         var lastTitle: String? = null
         var lastContent: String? = null
+        var lastConversationId: String? = null
+        var lastMessageId: String? = null
         var lastSort: String? = null
         var lastSearch: String? = null
         var lastPage: Int? = null
@@ -102,12 +104,16 @@ class NoteDataSourceCreateTest {
             spaceId: String,
             title: String,
             content: String,
+            conversationId: String?,
+            messageId: String?,
         ): Note {
             createCallCount++
             lastAccessToken = accessToken
             lastSpaceId = spaceId
             lastTitle = title
             lastContent = content
+            lastConversationId = conversationId
+            lastMessageId = messageId
             if (failUnauthorizedOnce && accessToken == "expired-token") {
                 failUnauthorizedOnce = false
                 throw UnauthorizedException("Create note failed (HTTP 401)")
@@ -285,6 +291,29 @@ class NoteDataSourceCreateTest {
 
         assertEquals(NoteOrigin.SAVED_ANSWER, created.origin)
         assertEquals(3, created.citationCount)
+    }
+
+    @Test
+    fun `createNote forwards ask origin conversation and message ids`() = runTest {
+        val api = FakeNotesApi()
+        val dataSource = NoteDataSource(
+            notesApi = api,
+            accessTokenProvider = { "access-token" },
+        )
+
+        dataSource.createNote(
+            CreateNoteRequest(
+                spaceId = "space-1",
+                title = "Saved answer",
+                content = "Body",
+                origin = NoteOrigin.SAVED_ANSWER,
+                conversationId = "conv-1",
+                messageId = "msg-1",
+            ),
+        )
+
+        assertEquals("conv-1", api.lastConversationId)
+        assertEquals("msg-1", api.lastMessageId)
     }
 
     @Test

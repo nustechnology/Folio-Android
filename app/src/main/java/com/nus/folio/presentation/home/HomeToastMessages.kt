@@ -16,6 +16,8 @@ internal fun HomeUserMessage.toHomeToastVisuals(context: Context): FolioToastVis
         HomeUserMessage.NOTE_SAVED -> R.string.toast_note_saved
         HomeUserMessage.NOTE_SAVED_FROM_ASK -> R.string.toast_note_saved_from_ask
         HomeUserMessage.ASK_FEEDBACK_RECORDED -> R.string.home_ask_feedback_recorded
+        HomeUserMessage.CONVERSATION_RENAMED -> R.string.toast_conversation_renamed
+        HomeUserMessage.CONVERSATION_DELETED -> R.string.toast_conversation_deleted
         HomeUserMessage.NOTEBOOK_COPIED -> R.string.notebook_copied_to_clipboard
         HomeUserMessage.NOTEBOOK_EXPORTED -> R.string.notebook_exported
     }
@@ -34,6 +36,8 @@ internal fun HomeUserMessage.toHomeToastVisuals(context: Context): FolioToastVis
         HomeUserMessage.NOTE_DELETED,
         HomeUserMessage.NOTE_SAVED,
         HomeUserMessage.NOTE_SAVED_FROM_ASK,
+        HomeUserMessage.CONVERSATION_RENAMED,
+        HomeUserMessage.CONVERSATION_DELETED,
         HomeUserMessage.NOTEBOOK_COPIED,
         HomeUserMessage.NOTEBOOK_EXPORTED,
         -> FolioToastStyle.Success

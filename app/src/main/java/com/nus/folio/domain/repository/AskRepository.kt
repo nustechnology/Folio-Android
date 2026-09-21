@@ -1,5 +1,9 @@
 package com.nus.folio.domain.repository
 
+import com.nus.folio.domain.model.AskConversation
+import com.nus.folio.domain.model.AskConversationDetail
+import com.nus.folio.domain.model.AskConversationLibrary
+import com.nus.folio.domain.model.AskConversationPaging
 import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AskSuggestions
@@ -38,5 +42,30 @@ interface AskRepository {
         conversationId: String,
         messageId: String,
         rating: AskFeedbackRating,
+    ): Result<Unit>
+
+    /** Conversations in [spaceId], newest first when the API provides timestamps. */
+    suspend fun getConversations(
+        spaceId: String,
+        search: String? = null,
+        page: Int = AskConversationPaging.DEFAULT_PAGE,
+        limit: Int = AskConversationPaging.DEFAULT_LIMIT,
+    ): Result<AskConversationLibrary>
+
+    /** Full message thread for [conversationId] in [spaceId]. */
+    suspend fun getConversation(
+        spaceId: String,
+        conversationId: String,
+    ): Result<AskConversationDetail>
+
+    suspend fun updateConversation(
+        spaceId: String,
+        conversationId: String,
+        title: String,
+    ): Result<AskConversation>
+
+    suspend fun deleteConversation(
+        spaceId: String,
+        conversationId: String,
     ): Result<Unit>
 }

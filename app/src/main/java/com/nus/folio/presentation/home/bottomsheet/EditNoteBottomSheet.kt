@@ -1,8 +1,5 @@
 package com.nus.folio.presentation.home.bottomsheet
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -39,11 +37,14 @@ import com.nus.folio.components.AnimatedModalSheet
 import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.domain.model.Note
 import com.nus.folio.domain.model.NoteOrigin
+import com.nus.folio.domain.util.NoteInputRules
 import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeSheetBackground
 import com.nus.folio.ui.theme.HomeTextPrimary
+
+private val EditNoteContentMaxHeight = 350.dp
 
 @Composable
 internal fun EditNoteBottomSheet(
@@ -102,9 +103,22 @@ private fun EditNoteSheetContent(
     onSave: (title: String, content: String) -> Unit,
     onDirtyChange: (Boolean) -> Unit = {},
 ) {
-    var title by rememberSaveable(note.id) { mutableStateOf(note.title) }
+    var title by rememberSaveable(note.id) {
+        mutableStateOf(NoteInputRules.limitTitle(note.title))
+    }
     var content by rememberSaveable(note.id) { mutableStateOf(note.content) }
-    val canSave = title.isNotBlank() && content.isNotBlank()
+    val canSave = NoteInputRules.canSave(title, content)
+    val titleError = when (NoteInputRules.titleValidationError(title)) {
+        NoteInputRules.TitleValidationError.TOO_LONG ->
+            stringResource(R.string.add_note_title_too_long)
+        null -> null
+    }
+    val contentError = when (NoteInputRules.contentValidationError(content)) {
+        NoteInputRules.ContentValidationError.TOO_LONG ->
+            stringResource(R.string.add_note_content_too_long)
+        NoteInputRules.ContentValidationError.EMPTY -> null
+        null -> null
+    }
 
     SideEffect {
         onDirtyChange(title != note.title || content != note.content)
@@ -134,24 +148,29 @@ private fun EditNoteSheetContent(
             color = HomeTextPrimary,
             lineHeight = 20.sp,
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         AddNoteLabeledField(
             label = stringResource(R.string.add_note_title_hint),
             value = title,
-            onValueChange = { title = it },
+            onValueChange = { title = NoteInputRules.limitTitle(it) },
             placeholder = stringResource(R.string.add_note_title_placeholder),
             singleLine = true,
+            errorMessage = titleError,
+            characterLimit = NoteInputRules.MAX_TITLE_LENGTH,
         )
-        Spacer(modifier = Modifier.height(16.dp))
         AddNoteLabeledField(
             label = stringResource(R.string.add_note_content_hint),
             value = content,
             onValueChange = { content = it },
             placeholder = stringResource(R.string.add_note_content_placeholder),
             singleLine = false,
+            fillHeight = false,
+            showFormatToolbar = true,
+            errorMessage = contentError,
+            characterLimit = NoteInputRules.MAX_CONTENT_LENGTH,
             fieldModifier = Modifier
                 .fillMaxWidth()
-                .height(NoteSheetContentHeight),
+                .heightIn(max = EditNoteContentMaxHeight),
         )
         Spacer(modifier = Modifier.height(24.dp))
         Row(

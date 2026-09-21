@@ -55,7 +55,6 @@ private val SettingsButtonShape = RoundedCornerShape(10.dp)
 internal fun AccountListBottomSheet(
     accounts: List<SpaceAccountItem>,
     onDismiss: () -> Unit,
-    onOpenAccountSettings: () -> Unit = {},
     onSignOutClick: () -> Unit = {},
 ) {
     AnimatedModalSheet(
@@ -66,7 +65,6 @@ internal fun AccountListBottomSheet(
         AccountListSheetContent(
             accounts = accounts,
             onSignOutClick = { requestDismiss(after = onSignOutClick) },
-            onAccountClick = { requestDismiss(after = onOpenAccountSettings) },
         )
     }
 }
@@ -75,7 +73,6 @@ internal fun AccountListBottomSheet(
 private fun AccountListSheetContent(
     accounts: List<SpaceAccountItem>,
     onSignOutClick: () -> Unit,
-    onAccountClick: () -> Unit = {},
 ) {
     Column {
         Spacer(modifier = Modifier.height(8.dp))
@@ -118,10 +115,7 @@ private fun AccountListSheetContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             accounts.forEach { account ->
-                AccountListRow(
-                    account = account,
-                    onClick = onAccountClick,
-                )
+                AccountListRow(account = account)
             }
         }
     }
@@ -130,7 +124,6 @@ private fun AccountListSheetContent(
 @Composable
 private fun AccountListRow(
     account: SpaceAccountItem,
-    onClick: () -> Unit,
 ) {
     val initial = initialsFromDisplayName(account.displayName, account.email)
     val background = if (account.isSelected) HomeHeader else HomeCardBackground
@@ -145,11 +138,6 @@ private fun AccountListRow(
             .clip(AccountRowShape)
             .background(background)
             .border(1.dp, borderColor, AccountRowShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),

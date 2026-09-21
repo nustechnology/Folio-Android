@@ -12,7 +12,7 @@ data class SignUpUiState(
     val formError: SignUpError? = null,
     /** Fixed client toast (e.g. email already exists); mapped to strings in the screen. */
     val toastError: SignUpError? = null,
-    /** Dynamic toast text (e.g. Apple / other API messages). */
+    /** Dynamic toast text from API error messages. */
     val toastMessage: String? = null,
     val shouldNavigateToHome: Boolean = false,
 )
