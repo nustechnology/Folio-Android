@@ -7,7 +7,6 @@ import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
-import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.model.toApiSourceType
 import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.usecase.CreateSourceUseCase

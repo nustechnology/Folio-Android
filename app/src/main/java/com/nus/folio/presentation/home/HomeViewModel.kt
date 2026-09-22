@@ -33,7 +33,6 @@ import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
-import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
@@ -67,7 +66,6 @@ class HomeViewModel(
     private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
     private val updateSourceUseCase: UpdateSourceUseCase,
     private val deleteSourceUseCase: DeleteSourceUseCase,
-    private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
     private val getAskConversationsUseCase: GetAskConversationsUseCase,
     private val getAskConversationUseCase: GetAskConversationUseCase,
@@ -654,7 +652,6 @@ class HomeViewModel(
         private val observeSourceProcessingUseCase: ObserveSourceProcessingUseCase,
         private val updateSourceUseCase: UpdateSourceUseCase,
         private val deleteSourceUseCase: DeleteSourceUseCase,
-        private val getSourceDetailUseCase: GetSourceDetailUseCase,
         private val getAskSuggestionsUseCase: GetAskSuggestionsUseCase,
         private val getAskConversationsUseCase: GetAskConversationsUseCase,
         private val getAskConversationUseCase: GetAskConversationUseCase,
@@ -687,7 +684,6 @@ class HomeViewModel(
                 observeSourceProcessingUseCase = observeSourceProcessingUseCase,
                 updateSourceUseCase = updateSourceUseCase,
                 deleteSourceUseCase = deleteSourceUseCase,
-                getSourceDetailUseCase = getSourceDetailUseCase,
                 getAskSuggestionsUseCase = getAskSuggestionsUseCase,
                 getAskConversationsUseCase = getAskConversationsUseCase,
                 getAskConversationUseCase = getAskConversationUseCase,

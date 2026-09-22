@@ -95,7 +95,6 @@ fun HomeScreen(
             observeSourceProcessingUseCase = LocalAppContainer.current.observeSourceProcessingUseCase,
             updateSourceUseCase = LocalAppContainer.current.updateSourceUseCase,
             deleteSourceUseCase = LocalAppContainer.current.deleteSourceUseCase,
-            getSourceDetailUseCase = LocalAppContainer.current.getSourceDetailUseCase,
             getAskSuggestionsUseCase = LocalAppContainer.current.getAskSuggestionsUseCase,
             getAskConversationsUseCase = LocalAppContainer.current.getAskConversationsUseCase,
             getAskConversationUseCase = LocalAppContainer.current.getAskConversationUseCase,

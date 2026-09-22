@@ -37,7 +37,6 @@ import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
-import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
@@ -109,7 +108,6 @@ class HomeViewModelTest {
             observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(sourceRepository),
             updateSourceUseCase = UpdateSourceUseCase(sourceRepository),
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
-            getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
             getAskConversationsUseCase = GetAskConversationsUseCase(askRepository),
             getAskConversationUseCase = GetAskConversationUseCase(askRepository),
