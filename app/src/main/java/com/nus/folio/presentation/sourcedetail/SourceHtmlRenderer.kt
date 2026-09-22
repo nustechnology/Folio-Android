@@ -198,15 +198,8 @@ private class SourceHtmlWebViewClient : WebViewClient() {
         heightCheckRunnable?.let { view.removeCallbacks(it) }
         heightCheckRunnable = object : Runnable {
             private var attempts = 0
-            private var unchangedCount = 0
             override fun run() {
                 val currentHeight = view.contentHeight
-                if (currentHeight > 0 && currentHeight == lastContentHeight) {
-                    unchangedCount++
-                    if (unchangedCount >= 4) return
-                } else {
-                    unchangedCount = 0
-                }
                 if (currentHeight != lastContentHeight && currentHeight > 0) {
                     lastContentHeight = currentHeight
                     view.requestLayout()
