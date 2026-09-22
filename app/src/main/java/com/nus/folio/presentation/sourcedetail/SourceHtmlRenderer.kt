@@ -198,15 +198,21 @@ private class SourceHtmlWebViewClient : WebViewClient() {
         heightCheckRunnable?.let { view.removeCallbacks(it) }
         heightCheckRunnable = object : Runnable {
             private var attempts = 0
+            private var unchangedCount = 0
             override fun run() {
-                if (attempts++ >= 10) return // Stop after ~5 seconds
                 val currentHeight = view.contentHeight
+                if (currentHeight == lastContentHeight && currentHeight > 0) {
+                    unchangedCount++
+                    if (unchangedCount >= 2) return // Height stable, stop polling
+                } else {
+                    unchangedCount = 0
+                }
                 if (currentHeight != lastContentHeight && currentHeight > 0) {
                     lastContentHeight = currentHeight
                     view.requestLayout()
                     view.invalidate()
                 }
-                view.postDelayed(this, 500)
+                if (attempts++ < 10) view.postDelayed(this, 500)
             }
         }
         view.postDelayed(heightCheckRunnable!!, 1000)
