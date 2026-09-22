@@ -477,16 +477,6 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun `signInWithApple returns apple session`() = runTest {
-        val result = repository.signInWithApple()
-
-        assertTrue(result.isSuccess)
-        assertEquals("apple.user@folio.app", result.getOrNull()?.email)
-        assertEquals("Apple User", result.getOrNull()?.displayName)
-        assertEquals("Apple User", repository.getCurrentSession()?.displayName)
-    }
-
-    @Test
     fun `clearSession removes current session`() = runTest {
         repository.signIn("jordan@folio.app", "secret")
 

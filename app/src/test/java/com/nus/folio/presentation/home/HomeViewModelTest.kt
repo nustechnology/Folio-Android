@@ -1419,6 +1419,34 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onAskStop retains assistant message when citations present but content blank`() = runTest {
+        askRepository.streamEvents = listOf(
+            AskStreamEvent.Citations(
+                listOf(
+                    AskCitation(
+                        index = 1,
+                        sourceId = "s1",
+                        sourceTitle = "Source",
+                        sourceType = SourceType.FILE,
+                    ),
+                ),
+            ),
+        )
+        askRepository.hangAfterStreamEvents = true
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        viewModel.onAskStop()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertFalse(assistant.isStreaming)
+        assertTrue(assistant.wasStopped)
+        assertTrue(assistant.content.isBlank())
+        assertEquals(1, assistant.citations.size)
+    }
+
+    @Test
     fun `onAskFeedback records rating and toast`() = runTest {
         val viewModel = createViewModel()
         viewModel.onAskSubmit("Q")

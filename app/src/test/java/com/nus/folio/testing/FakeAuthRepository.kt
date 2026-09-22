@@ -8,8 +8,6 @@ class FakeAuthRepository : AuthRepository {
 
     var signUpResult: Result<AuthSession> = Result.success(AuthSession("new.user@folio.app"))
     var signInResult: Result<AuthSession> = Result.success(AuthSession("user@folio.app"))
-    var signInWithAppleResult: Result<AuthSession> =
-        Result.success(AuthSession("apple.user@folio.app"))
     var refreshSessionResult: Result<AuthSession> = Result.success(
         AuthSession(
             email = "user@folio.app",
@@ -29,7 +27,6 @@ class FakeAuthRepository : AuthRepository {
 
     var signUpCallCount = 0
     var signInCallCount = 0
-    var signInWithAppleCallCount = 0
     var refreshSessionCallCount = 0
     var syncCurrentUserCallCount = 0
     var signOutCallCount = 0
@@ -65,13 +62,6 @@ class FakeAuthRepository : AuthRepository {
         lastSignInEmail = email
         lastSignInPassword = password
         return signInResult.also { result ->
-            result.onSuccess { currentSession = it }
-        }
-    }
-
-    override suspend fun signInWithApple(): Result<AuthSession> {
-        signInWithAppleCallCount++
-        return signInWithAppleResult.also { result ->
             result.onSuccess { currentSession = it }
         }
     }

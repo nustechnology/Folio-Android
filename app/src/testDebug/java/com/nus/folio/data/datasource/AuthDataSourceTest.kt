@@ -239,13 +239,4 @@ class AuthDataSourceTest {
             "access-token",
         )
     }
-
-    @Test
-    fun `signInWithApple returns fixed apple session`() = runTest {
-        val session = dataSource().signInWithApple()
-
-        assertEquals("apple.user@folio.app", session.email)
-        assertEquals("Apple User", session.displayName)
-        assertEquals("apple-user", session.userId)
-    }
 }

@@ -71,14 +71,6 @@ class AuthRepositoryImpl(
         }
     }
 
-    override suspend fun signInWithApple(): Result<AuthSession> = sessionMutex.withLock {
-        runSuspendCatching {
-            dataSource.signInWithApple()
-        }.also { result ->
-            result.onSuccess { setSession(it) }
-        }
-    }
-
     override suspend fun refreshSession(): Result<AuthSession> {
         // Capture generation before waiting on the mutex. Concurrent 401 retries serialize
         // here; once the first refresh completes, later waiters reuse that result instead of

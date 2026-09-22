@@ -80,7 +80,7 @@ These types are **not** in `main` — they live in `debug/` / `release/` (`AuthC
 |------|-------|---------|
 | `AuthCapabilities` | `isBackendAvailable = true` | `true` |
 | API base URL | `https://folio.nustechnology.com` | `https://folio.nustechnology.com` |
-| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser); Apple sign-in stays local mock | Same as debug |
+| `AuthDataSource` | Real auth API via `AuthApiClient` (sign-up / sign-in / refresh / logout / getUser) | Same as debug |
 | `SpaceDataSource` | Real spaces API via `SpacesApiClient` (401 → refresh once + retry) | Same as debug |
 | `SourceDataSource` | Real sources API via `SourcesApiClient` (list/create/detail/update/retry/delete/preview); processing status via SSE (`SourcesSseClient`); 401 → refresh once + retry | Same as debug |
 | `NoteDataSource` | Real notes API via `NotesApiClient` (list/create/detail/update/delete/convert; 401 → refresh once + retry) | Same as debug |
@@ -135,6 +135,7 @@ fun SpaceScreen(
 ### Screens
 
 - Public `*Screen` composable + private `*Content` for UI/preview
+- Previews wrap content in `FolioAndroidTheme`
 - User-facing strings in `res/values/strings.xml`
 - `rememberSaveable` for form fields
 - `Modifier` parameter with default, passed to root layout
