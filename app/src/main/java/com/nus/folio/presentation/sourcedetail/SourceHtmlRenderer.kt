@@ -67,8 +67,8 @@ internal fun SourceHtmlRenderer(
                 settings.blockNetworkImage = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
+                isVerticalScrollBarEnabled = true
+                isHorizontalScrollBarEnabled = contentFormat == SourceContentFormat.SHEET
                 isFocusable = false
                 isFocusableInTouchMode = false
                 isLongClickable = false
@@ -162,7 +162,9 @@ internal object CitationHighlight {
  * other schemes that should never load from source HTML.
  */
 private class SourceHtmlWebViewClient : WebViewClient() {
-    private val relayoutDelaysMs = longArrayOf(0L, 100L, 300L, 800L)
+    private val initialDelaysMs = longArrayOf(0L, 100L, 300L, 800L)
+    private var lastContentHeight = 0
+    private var heightCheckRunnable: Runnable? = null
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
@@ -182,7 +184,7 @@ private class SourceHtmlWebViewClient : WebViewClient() {
     }
 
     private fun scheduleContentRelayout(view: WebView) {
-        relayoutDelaysMs.forEach { delayMs ->
+        initialDelaysMs.forEach { delayMs ->
             view.postDelayed(
                 {
                     view.requestLayout()
@@ -191,6 +193,23 @@ private class SourceHtmlWebViewClient : WebViewClient() {
                 delayMs,
             )
         }
+        // Poll for content height changes to catch late-loading resources (e.g., images).
+        lastContentHeight = 0
+        heightCheckRunnable?.let { view.removeCallbacks(it) }
+        heightCheckRunnable = object : Runnable {
+            private var attempts = 0
+            override fun run() {
+                if (attempts++ >= 10) return // Stop after ~5 seconds
+                val currentHeight = view.contentHeight
+                if (currentHeight != lastContentHeight && currentHeight > 0) {
+                    lastContentHeight = currentHeight
+                    view.requestLayout()
+                    view.invalidate()
+                }
+                view.postDelayed(this, 500)
+            }
+        }
+        view.postDelayed(heightCheckRunnable!!, 1000)
     }
 
     private fun blockedResponse(): WebResourceResponse =

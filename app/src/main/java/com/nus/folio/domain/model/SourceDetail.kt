@@ -55,6 +55,5 @@ data class SourceDetail(
     val originalFileName: String,
     val htmlContent: String? = null,
     val sheets: List<SourceSheetTab> = emptyList(),
-    val plainContent: String? = null,
     val structuredContent: StructuredContent? = null,
 )

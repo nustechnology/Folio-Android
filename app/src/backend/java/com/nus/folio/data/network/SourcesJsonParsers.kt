@@ -222,9 +222,6 @@ internal object SourcesJsonParsers {
                 else -> contentToHtml(rawContent).takeIf { it.isNotBlank() }
             }
         }
-        val plainContent = rawContent.takeIf {
-            listSource.type == SourceType.TEXT && it.isNotBlank()
-        }
         return SourceDetail(
             id = listSource.id,
             title = listSource.title,
@@ -240,7 +237,6 @@ internal object SourcesJsonParsers {
             },
             htmlContent = htmlContent,
             sheets = sheets,
-            plainContent = plainContent,
             structuredContent = structuredContent,
         )
     }

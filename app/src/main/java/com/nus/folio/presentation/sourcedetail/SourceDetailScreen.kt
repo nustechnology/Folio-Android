@@ -227,6 +227,22 @@ private fun SourceDetailContent(
                     isError = true,
                 )
             }
+            uiState.detail != null && uiState.detail.status == SourceStatus.PROCESSING -> {
+                SourceDetailMessageState(
+                    message = stringResource(R.string.home_status_processing),
+                    actionLabel = null,
+                    onAction = {},
+                    isError = false,
+                )
+            }
+            uiState.detail != null && uiState.detail.status == SourceStatus.FAILED -> {
+                SourceDetailMessageState(
+                    message = stringResource(R.string.home_status_failed),
+                    actionLabel = stringResource(R.string.home_retry),
+                    onAction = onRetryLoad,
+                    isError = true,
+                )
+            }
             uiState.detail != null -> {
                 SourceDetailBody(
                     detail = uiState.detail,

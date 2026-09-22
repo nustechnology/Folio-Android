@@ -231,10 +231,6 @@ class FakeSourceRepository : SourceRepository {
                 contentFormat = SourceContentFormat.DOCUMENT,
                 originalFileName = "source.${source.fileExtension.ifBlank { "pdf" }}",
                 htmlContent = "<h1>${source.title}</h1><p>Preview content.</p>",
-                plainContent = when (source.type) {
-                    SourceType.TEXT -> "Sample manual source content for editing."
-                    else -> null
-                },
                 structuredContent = if (source.type == SourceType.WEB) {
                     StructuredContent.Document(
                         "<h1>${source.title}</h1><p>Preview content.</p>",

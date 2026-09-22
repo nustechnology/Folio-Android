@@ -28,6 +28,14 @@ object SourceImageUrlRules {
         """(?i)\s*\b(?:imagesrcset|srcset)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""",
     )
 
+    /**
+     * Returns true when [src] should be allowed to load in the WebView.
+     *
+     * Network URLs (http/https) are allowed only when the host is public
+     * (not loopback, RFC1918, or link-local). [trustedBaseUrl] is reserved
+     * for relative path resolution and is **not** used for network URL
+     * validation — trust is determined solely by the host's network class.
+     */
     fun isAllowed(src: String, trustedBaseUrl: String = ""): Boolean {
         val value = src.trim()
         if (value.isEmpty()) return true

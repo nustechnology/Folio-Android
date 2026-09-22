@@ -55,8 +55,6 @@ internal fun SourceDetailBody(
     highlightText: String?,
     onSheetSelected: (Int) -> Unit,
 ) {
-    if (detail.status != SourceStatus.READY) return
-
     Column(
         modifier = Modifier
             .fillMaxSize()
