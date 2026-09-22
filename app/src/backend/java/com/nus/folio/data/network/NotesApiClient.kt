@@ -239,7 +239,7 @@ class NotesApiClient(
         val noteJson = root.optJSONObject("data")?.optJSONObject("note")
             ?: root.optJSONObject("note")
             ?: throw IOException("$failureLabel failed: missing note payload")
-        return parseNote(noteJson, nowInstant())
+        return parseNote(noteJson.toString(), nowInstant())
     }
 
     private fun parseNotesPage(
@@ -267,7 +267,7 @@ class NotesApiClient(
         val notes = buildList {
             for (index in 0 until notesArray.length()) {
                 val item = notesArray.optJSONObject(index) ?: continue
-                add(parseNote(item, nowInstant()))
+                add(parseNote(item.toString(), nowInstant()))
             }
         }
 
@@ -328,38 +328,50 @@ class NotesApiClient(
             NotebookHtml.htmlToMarkdown(htmlOrText)
 
         internal fun parseNote(
-            json: JSONObject,
+            jsonStr: String,
             nowInstant: Instant = Instant.now(),
         ): Note {
-            val id = json.optString("id").takeIf { it.isNotBlank() }
+            val id = AskApiClient.matchQuotedString(jsonStr, "id")
+                ?.takeIf { it.isNotBlank() }
                 ?: throw IOException("Note payload missing id")
-            val spaceId = sequenceOf("researchSpaceId", "spaceId")
-                .map { json.optString(it) }
-                .firstOrNull { it.isNotBlank() }
-                .orEmpty()
-            val title = json.optString("title").takeIf { it.isNotBlank() } ?: "Untitled note"
-            // List payloads use contentPreview; create/detail use content.
-            // API stores HTML (same subset as notebook); domain/editor keep markdown.
-            val rawContent = sequenceOf("content", "contentPreview")
-                .map { json.optString(it) }
-                .firstOrNull { it.isNotBlank() }
-                .orEmpty()
+            val spaceId = AskApiClient.matchQuotedString(jsonStr, "researchSpaceId")
+                ?.takeIf { it.isNotBlank() }
+                ?: AskApiClient.matchQuotedString(jsonStr, "spaceId")
+                    ?.takeIf { it.isNotBlank() }
+                    .orEmpty()
+            val title = AskApiClient.matchQuotedString(jsonStr, "title")
+                ?.takeIf { it.isNotBlank() }
+                ?: "Untitled note"
+            val rawContent = AskApiClient.matchQuotedString(jsonStr, "content")
+                ?.takeIf { it.isNotBlank() }
+                ?: AskApiClient.matchQuotedString(jsonStr, "contentPreview")
+                    ?.takeIf { it.isNotBlank() }
+                    .orEmpty()
             val content = contentFromApi(rawContent)
-            val updatedAt = sequenceOf("updatedAt", "createdAt")
-                .map { json.optString(it) }
-                .firstOrNull { it.isNotBlank() }
-                .orEmpty()
+            val updatedAt = AskApiClient.matchQuotedString(jsonStr, "updatedAt")
+                ?.takeIf { it.isNotBlank() }
+                ?: AskApiClient.matchQuotedString(jsonStr, "createdAt")
+                    ?.takeIf { it.isNotBlank() }
+                    .orEmpty()
+            val citations = AskApiClient.parseCitations(jsonStr)
+            val countVal = AskApiClient.matchJsonInt(jsonStr, "citationCount") ?: 0
+            val citationCount = countVal.coerceAtLeast(0).takeIf { it > 0 } ?: citations.size
+
+            val project = AskApiClient.matchQuotedString(jsonStr, "project")?.takeIf { it.isNotBlank() }
+            val isPinned = AskApiClient.matchJsonBoolean(jsonStr, "isPinned") ?: false
+            val originType = AskApiClient.matchQuotedString(jsonStr, "originType")
 
             return Note(
                 id = id,
                 title = title,
                 content = content,
-                project = json.optString("project").takeIf { it.isNotBlank() },
+                project = project,
                 updatedLabel = formatUpdatedLabel(updatedAt, nowInstant),
-                isPinned = json.optBoolean("isPinned", false),
+                isPinned = isPinned,
                 spaceId = spaceId,
-                origin = mapOriginType(json.optString("originType")),
-                citationCount = json.optInt("citationCount", 0).coerceAtLeast(0),
+                origin = mapOriginType(originType),
+                citationCount = citationCount,
+                citations = citations,
             )
         }
 

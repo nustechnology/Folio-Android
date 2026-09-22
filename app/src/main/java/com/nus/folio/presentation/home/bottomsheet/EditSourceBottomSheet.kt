@@ -46,20 +46,13 @@ import com.nus.folio.presentation.home.HomeSheetShape
 import com.nus.folio.ui.theme.CormorantGaramond
 import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeSheetBackground
-import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.HomeTextPrimary
-import com.nus.folio.ui.theme.HomeTextSecondary
-import java.text.NumberFormat
-import java.util.Locale
-
-private val EditSourceContentHeight = 160.dp
 
 @Composable
 internal fun EditSourceBottomSheet(
     source: Source,
-    initialContent: String = "",
     onDismiss: () -> Unit,
-    onSave: (title: String, author: String, content: String) -> Unit = { _, _, _ -> },
+    onSave: (title: String, author: String) -> Unit = { _, _ -> },
     isSubmitting: Boolean = false,
     /**
      * When true (default), save animates the sheet closed then invokes [onSave]
@@ -95,19 +88,18 @@ internal fun EditSourceBottomSheet(
         AddSourceDragHandle()
         EditSourceSheetContent(
             source = source,
-            initialContent = initialContent,
             isSubmitting = isSubmitting,
             onDirtyChange = { discardProtection.hasUnsavedContent = it },
             onCancelClick = {
                 if (!isSubmitting) requestDismiss()
             },
-            onSave = { title, author, content ->
+            onSave = { title, author ->
                 if (isSubmitting) return@EditSourceSheetContent
                 if (closeOnSave) {
                     discardProtection.bypassDiscardConfirm = true
-                    requestDismiss { onSave(title, author, content) }
+                    requestDismiss { onSave(title, author) }
                 } else {
-                    onSave(title, author, content)
+                    onSave(title, author)
                 }
             },
         )
@@ -123,33 +115,19 @@ internal fun EditSourceBottomSheet(
 @Composable
 internal fun EditSourceSheetContent(
     source: Source,
-    initialContent: String = "",
     onCancelClick: () -> Unit,
-    onSave: (title: String, author: String, content: String) -> Unit,
+    onSave: (title: String, author: String) -> Unit,
     onDirtyChange: (Boolean) -> Unit = {},
     isSubmitting: Boolean = false,
 ) {
-    val isTextSource = source.type == SourceType.TEXT
     var title by rememberSaveable(source.id) { mutableStateOf(source.title) }
     var author by rememberSaveable(source.id) { mutableStateOf(source.author) }
-    var content by rememberSaveable(source.id, initialContent) { mutableStateOf(initialContent) }
-    val contentError = if (isTextSource) {
-        AddSourceInputRules.contentValidationError(content)
-    } else {
-        null
-    }
-    val canSave = title.isNotBlank() &&
-        !isSubmitting &&
-        (!isTextSource || AddSourceInputRules.isContentValid(content))
-    val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
+    val canSave = title.isNotBlank() && !isSubmitting
     val scrollState = rememberScrollState()
 
     SideEffect {
-        val contentChanged = isTextSource && content != initialContent
         onDirtyChange(
-            title != source.title ||
-                author != source.author ||
-                contentChanged,
+            title != source.title || author != source.author,
         )
     }
 
@@ -190,53 +168,6 @@ internal fun EditSourceSheetContent(
             singleLine = true,
             characterLimit = AddSourceInputRules.MAX_AUTHOR_LENGTH,
         )
-        if (isTextSource) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                AddSourceLabeledField(
-                    label = stringResource(R.string.add_source_text_content_label),
-                    value = content,
-                    onValueChange = { content = it },
-                    placeholder = stringResource(R.string.add_source_text_content_placeholder),
-                    singleLine = false,
-                    fieldModifier = Modifier
-                        .fillMaxWidth()
-                        .height(EditSourceContentHeight),
-                    showResizeHint = true,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = stringResource(
-                        R.string.add_source_text_content_counter,
-                        numberFormat.format(content.length),
-                        numberFormat.format(AddSourceInputRules.MAX_CONTENT_LENGTH),
-                    ),
-                    fontSize = 12.sp,
-                    color = if (content.length > AddSourceInputRules.MAX_CONTENT_LENGTH) {
-                        HomeStatusFailedText
-                    } else {
-                        HomeTextSecondary
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.End,
-                )
-                if (contentError != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = when (contentError) {
-                            AddSourceInputRules.ContentValidationError.TOO_SHORT ->
-                                stringResource(R.string.add_source_text_content_too_short)
-                            AddSourceInputRules.ContentValidationError.TOO_LONG ->
-                                stringResource(
-                                    R.string.add_source_text_content_too_long,
-                                    numberFormat.format(AddSourceInputRules.MAX_CONTENT_LENGTH),
-                                )
-                        },
-                        fontSize = 12.sp,
-                        color = HomeStatusFailedText,
-                    )
-                }
-            }
-        }
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -252,7 +183,6 @@ internal fun EditSourceSheetContent(
                     onSave(
                         title.trim(),
                         author.trim(),
-                        if (isTextSource) content.trim() else "",
                     )
                 },
                 labelRes = R.string.edit_source_save,
@@ -288,40 +218,7 @@ private fun EditSourceSheetContentPreview() {
                         spaceId = "1",
                     ),
                     onCancelClick = {},
-                    onSave = { _, _, _ -> },
-                )
-            }
-        }
-    }
-}
-
-@Preview(showBackground = true, widthDp = 393, heightDp = 852, backgroundColor = 0xFFF7F1E6)
-@Composable
-private fun EditTextSourceSheetContentPreview() {
-    FolioAndroidTheme(dynamicColor = false) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(HomeSheetBackground, HomeSheetShape)
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 20.dp),
-            ) {
-                AddSourceDragHandle()
-                EditSourceSheetContent(
-                    source = Source(
-                        id = "6",
-                        title = "Interview notes: archival methods",
-                        type = SourceType.TEXT,
-                        author = "Field notes",
-                        addedLabel = "Added 2d ago",
-                        status = SourceStatus.READY,
-                        spaceId = "3",
-                    ),
-                    initialContent = "Frontline coordinators described repeated entry across systems.",
-                    onCancelClick = {},
-                    onSave = { _, _, _ -> },
+                    onSave = { _, _ -> },
                 )
             }
         }

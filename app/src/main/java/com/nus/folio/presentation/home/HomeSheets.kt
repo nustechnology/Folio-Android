@@ -65,7 +65,7 @@ internal fun HomeOverlaySheets(
     onCitationPreviewDismiss: () -> Unit,
     onCitationOpenInSource: () -> Unit,
     onEditSourceDismiss: () -> Unit,
-    onEditSourceSave: (String, String, String) -> Unit,
+    onEditSourceSave: (String, String) -> Unit,
     onDeleteSourceDismiss: () -> Unit,
     onDeleteSourceConfirm: () -> Unit,
     onViewNoteDismiss: () -> Unit,
@@ -146,6 +146,7 @@ internal fun HomeOverlaySheets(
             draft = draft,
             onDismiss = onAskSaveAsNoteDismiss,
             onSubmit = onAskSaveAsNoteConfirm,
+            onCitationClick = onAskCitationClick,
         )
     }
 
@@ -167,18 +168,9 @@ internal fun HomeOverlaySheets(
         )
     }
 
-    uiState.previewCitation?.let { citation ->
-        CitationPreviewBottomSheet(
-            citation = citation,
-            onDismiss = onCitationPreviewDismiss,
-            onOpenInSource = onCitationOpenInSource,
-        )
-    }
-
     uiState.editingSource?.let { source ->
         EditSourceBottomSheet(
             source = source,
-            initialContent = uiState.editingSourceContent,
             onDismiss = onEditSourceDismiss,
             onSave = onEditSourceSave,
         )
@@ -345,6 +337,15 @@ internal fun HomeOverlaySheets(
         ExportNotebookBottomSheet(
             onDismiss = onNotebookExportDismiss,
             onExport = onNotebookExportConfirm,
+        )
+    }
+
+    // Keep citation preview above View Note / Save Ask Note so taps are not covered.
+    uiState.previewCitation?.let { citation ->
+        CitationPreviewBottomSheet(
+            citation = citation,
+            onDismiss = onCitationPreviewDismiss,
+            onOpenInSource = onCitationOpenInSource,
         )
     }
 }

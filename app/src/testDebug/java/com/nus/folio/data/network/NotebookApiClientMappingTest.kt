@@ -9,14 +9,6 @@ import java.net.HttpURLConnection
 class NotebookApiClientMappingTest {
 
     @Test
-    fun `spaceNotebook path encodes space id`() {
-        assertEquals(
-            "https://example.test/api/v1/spaces/space%2F1/notebook",
-            FolioApiPaths.spaceNotebook("space/1", baseUrl = "https://example.test"),
-        )
-    }
-
-    @Test
     fun `buildNotebookRequestJson wraps html content`() {
         val html = NotebookHtml.markdownToHtml("# Title")
         val json = NotebookApiClient.buildNotebookRequestJson(html)

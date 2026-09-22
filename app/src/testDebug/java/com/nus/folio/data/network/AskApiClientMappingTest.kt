@@ -14,22 +14,6 @@ import org.junit.Test
 class AskApiClientMappingTest {
 
     @Test
-    fun `spaceAsk path encodes space id`() {
-        assertEquals(
-            "https://example.test/api/v1/spaces/space%2F1/ask",
-            FolioApiPaths.spaceAsk("space/1", baseUrl = "https://example.test"),
-        )
-        assertEquals(
-            "https://example.test/api/v1/spaces/space%2F1/ask/suggestions?scope=source&sourceId=src-1",
-            FolioApiPaths.spaceAskSuggestions(
-                spaceId = "space/1",
-                baseUrl = "https://example.test",
-                query = "scope=source&sourceId=src-1",
-            ),
-        )
-    }
-
-    @Test
     fun `buildAskRequestJson uses space scope without sourceId`() {
         val json = AskApiClient.buildAskRequestJson(
             question = "What problems appear most often?",

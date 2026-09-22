@@ -3,6 +3,8 @@ package com.nus.folio.presentation.home
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.domain.model.AskConversation
 import com.nus.folio.domain.model.AskConversationDetail
+import com.nus.folio.domain.model.AskConversationMessage
+import com.nus.folio.domain.model.AskConversationRole
 import com.nus.folio.domain.model.AskFeedbackRating
 import com.nus.folio.domain.model.AskStreamEvent
 import com.nus.folio.domain.model.AuthApiException
@@ -35,7 +37,6 @@ import com.nus.folio.domain.usecase.GetNoteDetailUseCase
 import com.nus.folio.domain.usecase.GetNotesUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.SaveNotebookUseCase
-import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
@@ -107,7 +108,6 @@ class HomeViewModelTest {
             observeSourceProcessingUseCase = ObserveSourceProcessingUseCase(sourceRepository),
             updateSourceUseCase = UpdateSourceUseCase(sourceRepository),
             deleteSourceUseCase = DeleteSourceUseCase(sourceRepository),
-            getSourceDetailUseCase = GetSourceDetailUseCase(sourceRepository),
             getAskSuggestionsUseCase = GetAskSuggestionsUseCase(askRepository),
             getAskConversationsUseCase = GetAskConversationsUseCase(askRepository),
             getAskConversationUseCase = GetAskConversationUseCase(askRepository),
@@ -1035,6 +1035,26 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `onConversationClick filters out empty assistant messages`() = runTest {
+        askRepository.conversationDetails = askRepository.conversationDetails + ("conv-empty" to AskConversationDetail(
+            conversation = AskConversation(id = "conv-empty", title = "Empty bot msg", dateLabel = "Today"),
+            messages = listOf(
+                AskConversationMessage(id = "u1", role = AskConversationRole.USER, content = "Hi"),
+                AskConversationMessage(id = "a1", role = AskConversationRole.ASSISTANT, content = ""),
+            ),
+        ))
+        val viewModel = createViewModel()
+        val emptyConv = AskConversation(id = "conv-empty", title = "Empty bot msg", dateLabel = "Today")
+
+        viewModel.onConversationClick(emptyConv)
+        advanceUntilIdle()
+
+        val messages = viewModel.uiState.value.askMessages
+        assertEquals(1, messages.size)
+        assertEquals("u1", messages.first().id)
+    }
+
+    @Test
     fun `onConversationClick restores entire space when conversation has no sourceId`() = runTest {
         val viewModel = createViewModel()
         viewModel.onAskScopeOptionSelected("1")
@@ -1380,6 +1400,48 @@ class HomeViewModelTest {
         assertFalse(assistant.isStreaming)
         assertTrue(assistant.wasStopped)
         assertEquals("Partial answer", assistant.content)
+    }
+
+    @Test
+    fun `onAskStop removes empty assistant message when stopped before content generation`() = runTest {
+        askRepository.streamEvents = emptyList()
+        askRepository.hangAfterStreamEvents = true
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Question")
+
+        viewModel.onAskStop()
+
+        val messages = viewModel.uiState.value.askMessages
+        assertEquals(1, messages.size)
+        assertEquals(AskMessageRole.USER, messages.first().role)
+    }
+
+    @Test
+    fun `onAskStop retains assistant message when citations present but content blank`() = runTest {
+        askRepository.streamEvents = listOf(
+            AskStreamEvent.Citations(
+                listOf(
+                    AskCitation(
+                        index = 1,
+                        sourceId = "s1",
+                        sourceTitle = "Source",
+                        sourceType = SourceType.FILE,
+                    ),
+                ),
+            ),
+        )
+        askRepository.hangAfterStreamEvents = true
+        val viewModel = createViewModel()
+        viewModel.onAskSubmit("Question")
+        advanceUntilIdle()
+
+        viewModel.onAskStop()
+
+        val assistant = viewModel.uiState.value.askMessages.first { it.role == AskMessageRole.ASSISTANT }
+        assertFalse(assistant.isStreaming)
+        assertTrue(assistant.wasStopped)
+        assertTrue(assistant.content.isBlank())
+        assertEquals(1, assistant.citations.size)
     }
 
     @Test
@@ -1849,23 +1911,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onEditSourceClick for text loads plain content`() = runTest {
-        val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
-        val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
-
-        viewModel.onEditSourceClick(source)
-        advanceUntilIdle()
-
-        assertEquals(source, viewModel.uiState.value.editingSource)
-        assertEquals(
-            "Sample manual source content for editing.",
-            viewModel.uiState.value.editingSourceContent,
-        )
-        assertEquals(1, sourceRepository.getSourceDetailCallCount)
-    }
-
-    @Test
-    fun `onEditSourceSave for text includes content`() = runTest {
+    fun `onEditSourceSave for text saves title and author with null content`() = runTest {
         val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
         val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
         viewModel.onEditSourceClick(source)
@@ -1874,16 +1920,12 @@ class HomeViewModelTest {
         viewModel.onEditSourceSave(
             title = "Updated notes",
             author = "Researcher",
-            content = "Updated manual source content for the archive.",
         )
 
         assertNull(viewModel.uiState.value.editingSource)
         assertEquals(HomeUserMessage.SOURCE_UPDATED, viewModel.uiState.value.userMessage)
         assertEquals(1, sourceRepository.updateSourceCallCount)
-        assertEquals(
-            "Updated manual source content for the archive.",
-            sourceRepository.lastUpdatedContent,
-        )
+        assertNull(sourceRepository.lastUpdatedContent)
     }
 
     @Test

@@ -83,7 +83,6 @@ private val ButtonShape = RoundedCornerShape(12.dp)
 fun LoginScreen(
     onNavigateToSpaces: () -> Unit,
     onNavigateToSignUp: () -> Unit,
-    onNavigateToResetPassword: () -> Unit,
     modifier: Modifier = Modifier,
     showSignedOutToast: Boolean = false,
     onSignedOutToastShown: () -> Unit = {},
@@ -130,7 +129,6 @@ fun LoginScreen(
             onClearPasswordError = viewModel::clearPasswordError,
             onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
             onSignInClick = viewModel::onSignInClick,
-            onForgotPasswordClick = onNavigateToResetPassword,
             onSignUpClick = onNavigateToSignUp,
             modifier = Modifier.fillMaxSize(),
         )
@@ -154,7 +152,6 @@ private fun LoginContent(
     onClearPasswordError: () -> Unit,
     onTogglePasswordVisibility: () -> Unit,
     onSignInClick: (email: String, password: String) -> Unit,
-    onForgotPasswordClick: () -> Unit,
     onSignUpClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -201,13 +198,6 @@ private fun LoginContent(
             onToggleVisibility = onTogglePasswordVisibility,
             enabled = inputsEnabled,
             errorMessage = uiState.passwordError?.let { loginErrorMessage(it) },
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LoginForgotPassword(
-            onClick = onForgotPasswordClick,
-            enabled = inputsEnabled,
         )
 
         LoginFeedback(uiState = uiState)
@@ -474,28 +464,6 @@ private fun loginTextFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 @Composable
-private fun LoginForgotPassword(
-    onClick: () -> Unit,
-    enabled: Boolean,
-) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.login_forgot_password),
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .clickable(
-                    enabled = enabled,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick,
-                ),
-            fontSize = 13.sp,
-            color = LoginTextSecondary,
-        )
-    }
-}
-
-@Composable
 private fun LoginLoadingScreen(
     modifier: Modifier = Modifier,
 ) {
@@ -558,7 +526,6 @@ private fun LoginContentPreview() {
             onClearPasswordError = {},
             onTogglePasswordVisibility = {},
             onSignInClick = { _, _ -> },
-            onForgotPasswordClick = {},
             onSignUpClick = {},
         )
     }
@@ -575,7 +542,6 @@ private fun LoginLoadingScreenPreview() {
                 onClearPasswordError = {},
                 onTogglePasswordVisibility = {},
                 onSignInClick = { _, _ -> },
-                onForgotPasswordClick = {},
                 onSignUpClick = {},
             )
             LoginLoadingScreen()

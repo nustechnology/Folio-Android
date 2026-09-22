@@ -4,14 +4,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -42,72 +45,77 @@ import com.nus.folio.ui.theme.HomeCardBorder
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.HomeTextSecondary
 
+private val ContentCardVerticalPadding = 12.dp
+
 @Composable
 internal fun SourceDetailBody(
     detail: SourceDetail,
     selectedSheetIndex: Int,
     isContentLoading: Boolean,
-    isRetrying: Boolean,
     highlightText: String?,
     onSheetSelected: (Int) -> Unit,
-    onRetryProcessing: () -> Unit,
 ) {
-    when (detail.status) {
-        SourceStatus.PROCESSING -> {
-            SourceDetailProcessingState()
-        }
-        SourceStatus.FAILED -> {
-            SourceDetailFailedState(
-                isRetrying = isRetrying,
-                onRetry = onRetryProcessing,
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+            .navigationBarsPadding()
+            .padding(bottom = 16.dp),
+    ) {
+        if (!isContentLoading &&
+            detail.contentFormat == SourceContentFormat.SHEET &&
+            detail.sheets.size > 1
+        ) {
+            SheetTabSelector(
+                sheets = detail.sheets,
+                selectedIndex = selectedSheetIndex,
+                onSheetSelected = onSheetSelected,
             )
+            Spacer(modifier = Modifier.height(12.dp))
         }
-        SourceStatus.READY -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-            ) {
-                if (!isContentLoading &&
-                    detail.contentFormat == SourceContentFormat.SHEET &&
-                    detail.sheets.size > 1
-                ) {
-                    SheetTabSelector(
-                        sheets = detail.sheets,
-                        selectedIndex = selectedSheetIndex,
-                        onSheetSelected = onSheetSelected,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+
+        if (isContentLoading) {
+            SourceDetailHtmlLoading()
+        } else {
+            val htmlBody = when (val structured = detail.structuredContent) {
+                is StructuredContent.Document -> structured.html
+                is StructuredContent.Slides ->
+                    StructuredContentHtml.slidesToHtml(structured.slides)
+                is StructuredContent.Sheets ->
+                    detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
+                        ?: StructuredContentHtml.body(structured, selectedSheetIndex)
+                null -> when {
+                    detail.contentFormat == SourceContentFormat.SHEET ->
+                        detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
+                            ?: detail.htmlContent.orEmpty()
+                    else -> detail.htmlContent.orEmpty()
                 }
+            }
 
-                if (isContentLoading) {
-                    SourceDetailHtmlLoading()
-                } else {
-                    val htmlBody = when (val structured = detail.structuredContent) {
-                        is StructuredContent.Document -> structured.html
-                        is StructuredContent.Slides ->
-                            StructuredContentHtml.slidesToHtml(structured.slides)
-                        is StructuredContent.Sheets ->
-                            detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
-                                ?: StructuredContentHtml.body(structured, selectedSheetIndex)
-                        null -> when {
-                            detail.contentFormat == SourceContentFormat.SHEET ->
-                                detail.sheets.getOrNull(selectedSheetIndex)?.htmlTable
-                                    ?: detail.htmlContent.orEmpty()
-                            else -> detail.htmlContent.orEmpty()
-                        }
-                    }
-
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+            ) {
+                val maxWebHeight = (maxHeight - ContentCardVerticalPadding * 2)
+                    .coerceAtLeast(0.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .clip(HomeCardShape)
+                        .background(HomeCardBackground)
+                        .border(1.dp, HomeCardBorder, HomeCardShape)
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = ContentCardVerticalPadding,
+                        ),
+                ) {
                     SourceHtmlRenderer(
                         htmlBody = htmlBody,
                         contentFormat = detail.contentFormat,
+                        maxHeight = maxWebHeight,
                         highlightText = highlightText,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(HomeCardShape)
-                            .background(HomeCardBackground)
-                            .border(1.dp, HomeCardBorder, HomeCardShape)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                 }
             }

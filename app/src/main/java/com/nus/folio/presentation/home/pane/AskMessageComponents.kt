@@ -5,8 +5,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -47,6 +50,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -56,6 +60,10 @@ import com.nus.folio.R
 import com.nus.folio.domain.model.AskCitation
 import com.nus.folio.presentation.home.AskButtonBackground
 import com.nus.folio.presentation.home.AskFeedback
+import com.nus.folio.presentation.home.AskFeedbackChoiceBackground
+import com.nus.folio.presentation.home.AskFeedbackChoiceSelectedBackground
+import com.nus.folio.presentation.home.AskFeedbackNoSelectedBackground
+import com.nus.folio.presentation.home.AskFeedbackNoSelectedText
 import com.nus.folio.presentation.home.AskMessage
 import com.nus.folio.presentation.home.AskMessageRole
 import com.nus.folio.presentation.home.AskSourceChipBackground
@@ -486,7 +494,8 @@ internal fun AskResponseToolbar(
     modifier: Modifier = Modifier,
 ) {
     var showFeedbackChoices by rememberSaveable(messageId) { mutableStateOf(false) }
-    val showFeedbackPrompt = feedback == AskFeedback.NONE
+    // Keep Yes/No visible after a rating so the choice stays on screen and can be changed.
+    val showChoices = showFeedbackChoices || feedback != AskFeedback.NONE
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -504,64 +513,47 @@ internal fun AskResponseToolbar(
             selected = isSavedAsNote,
             onClick = { onSaveAsNote(messageId) },
         )
-        AnimatedVisibility(
-            visible = showFeedbackPrompt,
-            enter = fadeIn(animationSpec = tween(AskFeedbackEnterMillis)) +
-                slideInHorizontally(
-                    animationSpec = tween(AskFeedbackEnterMillis),
-                    initialOffsetX = { it / 2 },
-                ),
-            exit = fadeOut(animationSpec = tween(AskFeedbackExitMillis)) +
-                slideOutHorizontally(
-                    animationSpec = tween(AskFeedbackExitMillis),
-                    targetOffsetX = { it / 2 },
-                ),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AnimatedContent(
-                targetState = showFeedbackChoices,
-                transitionSpec = {
-                    (
-                        fadeIn(animationSpec = tween(AskFeedbackEnterMillis)) +
-                            slideInHorizontally(
-                                animationSpec = tween(AskFeedbackEnterMillis),
-                                initialOffsetX = { it / 2 },
-                            )
-                        ) togetherWith (
-                        fadeOut(animationSpec = tween(AskFeedbackExitMillis)) +
-                            slideOutHorizontally(
-                                animationSpec = tween(AskFeedbackExitMillis),
-                                targetOffsetX = { -it / 3 },
-                            )
-                        )
-                },
-                label = "askFeedbackChoices",
-            ) { showChoices ->
-                if (showChoices) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        AskFeedbackChoice(
-                            text = stringResource(R.string.home_ask_feedback_yes),
-                            color = AskButtonBackground,
-                            onClick = { onFeedback(messageId, true) },
-                        )
-                        AskFeedbackChoice(
-                            text = stringResource(R.string.home_ask_feedback_no),
-                            color = HomeTextSecondary,
-                            onClick = { onFeedback(messageId, false) },
-                        )
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.home_ask_useful_label),
-                        modifier = Modifier
-                            .clip(AskSourceChipShape)
-                            .clickable { showFeedbackChoices = true }
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = HomeTextSecondary,
+            Text(
+                text = stringResource(R.string.home_ask_useful_label),
+                modifier = Modifier
+                    .clip(AskSourceChipShape)
+                    .clickable(enabled = !showChoices) { showFeedbackChoices = true }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = HomeTextSecondary,
+            )
+            AnimatedVisibility(
+                visible = showChoices,
+                enter = fadeIn(animationSpec = tween(AskFeedbackEnterMillis)) +
+                    expandHorizontally(
+                        animationSpec = tween(AskFeedbackEnterMillis),
+                        expandFrom = Alignment.Start,
+                    ),
+                exit = fadeOut(animationSpec = tween(AskFeedbackExitMillis)) +
+                    shrinkHorizontally(
+                        animationSpec = tween(AskFeedbackExitMillis),
+                        shrinkTowards = Alignment.Start,
+                    ),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    AskFeedbackChoice(
+                        text = stringResource(R.string.home_ask_feedback_yes),
+                        selected = feedback == AskFeedback.USEFUL,
+                        onClick = { onFeedback(messageId, true) },
+                    )
+                    AskFeedbackChoice(
+                        text = stringResource(R.string.home_ask_feedback_no),
+                        selected = feedback == AskFeedback.NOT_USEFUL,
+                        onClick = { onFeedback(messageId, false) },
+                        isNegative = true,
                     )
                 }
             }
@@ -572,19 +564,32 @@ internal fun AskResponseToolbar(
 @Composable
 private fun AskFeedbackChoice(
     text: String,
-    color: Color,
+    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isNegative: Boolean = false,
 ) {
+    val backgroundColor = when {
+        selected && isNegative -> AskFeedbackNoSelectedBackground
+        selected -> AskFeedbackChoiceSelectedBackground
+        else -> AskFeedbackChoiceBackground
+    }
+    val textColor = when {
+        selected && isNegative -> AskFeedbackNoSelectedText
+        else -> HomeHeader
+    }
     Text(
         text = text,
         modifier = modifier
             .clip(AskSourceChipShape)
+            .background(backgroundColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .defaultMinSize(minWidth = 44.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
-        color = color,
+        color = textColor,
+        textAlign = TextAlign.Center,
     )
 }
 

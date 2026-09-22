@@ -192,9 +192,9 @@ class SourceDetailViewModelTest {
         val viewModel = createViewModel()
         viewModel.onEditSourceClick()
 
-        viewModel.onEditSourceSave(title = "Updated title", author = "Author", content = "")
+        viewModel.onEditSourceSave(title = "Updated title", author = "Author")
         assertTrue(viewModel.uiState.value.isUpdatingSource)
-        viewModel.onEditSourceSave(title = "Second title", author = "Author", content = "")
+        viewModel.onEditSourceSave(title = "Second title", author = "Author")
         viewModel.onEditSourceDismiss()
 
         assertEquals(1, repository.updateSourceCallCount)

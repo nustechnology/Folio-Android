@@ -400,16 +400,20 @@ private fun SourceCard(
         verticalAlignment = Alignment.Top,
     ) {
         val badgeColors = sourceTypeBadgeColors(source.type)
-        Text(
-            text = sourceBadgeLabel(source),
+        Box(
             modifier = Modifier
+                .size(44.dp)
                 .clip(HomeBadgeShape)
-                .background(badgeColors.background)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = badgeColors.content,
-        )
+                .background(badgeColors.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = sourceBadgeLabel(source),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = badgeColors.content,
+            )
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

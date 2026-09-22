@@ -4,11 +4,10 @@ import com.nus.folio.data.network.AuthApi
 import com.nus.folio.data.network.AuthApiClient
 import com.nus.folio.domain.model.AuthSession
 import com.nus.folio.domain.model.UserProfile
-import kotlinx.coroutines.delay
 
 /**
  * Debug auth data source.
- * [signUp] / [signIn] / [refresh] / [logout] hit the real auth API; Apple / password-reset stay local mocks.
+ * [signUp] / [signIn] / [refresh] / [logout] hit the real auth API; Apple stays a local mock.
  *
  * Paired with [com.nus.folio.data.auth.AuthCapabilities.isBackendAvailable] = true.
  */
@@ -61,23 +60,4 @@ class AuthDataSource(
         return authApi.getUser(id.trim(), accessToken.trim())
     }
 
-    suspend fun signInWithApple(): AuthSession {
-        delay(400)
-        return AuthSession(
-            email = APPLE_EMAIL,
-            displayName = APPLE_DISPLAY_NAME,
-            userId = APPLE_USER_ID,
-        )
-    }
-
-    suspend fun requestPasswordReset(email: String) {
-        delay(300)
-        require(email.isNotBlank()) { "Email is required" }
-    }
-
-    private companion object {
-        const val APPLE_EMAIL = "apple.user@folio.app"
-        const val APPLE_DISPLAY_NAME = "Apple User"
-        const val APPLE_USER_ID = "apple-user"
-    }
 }

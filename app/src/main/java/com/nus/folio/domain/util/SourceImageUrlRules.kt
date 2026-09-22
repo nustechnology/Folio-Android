@@ -28,6 +28,14 @@ object SourceImageUrlRules {
         """(?i)\s*\b(?:imagesrcset|srcset)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""",
     )
 
+    /**
+     * Returns true when [src] should be allowed to load in the WebView.
+     *
+     * Network URLs (http/https) are allowed only when the host is public
+     * (not loopback, RFC1918, or link-local). [trustedBaseUrl] is reserved
+     * for relative path resolution and is **not** used for network URL
+     * validation — trust is determined solely by the host's network class.
+     */
     fun isAllowed(src: String, trustedBaseUrl: String = ""): Boolean {
         val value = src.trim()
         if (value.isEmpty()) return true
@@ -62,14 +70,15 @@ object SourceImageUrlRules {
     }
 
     /**
-     * Strips `srcset` / `imagesrcset` and replaces disallowed `src` attribute
-     * values with an empty string.
+     * Strips `srcset` / `imagesrcset` and blanks disallowed `src` values without rewriting relative paths.
      */
-    fun neutralizeDisallowedSources(html: String, trustedBaseUrl: String = ""): String =
-        SRC_ATTR_REGEX.replace(stripSrcsetAttributes(html)) { match ->
+    fun neutralizeDisallowedSources(html: String, trustedBaseUrl: String = ""): String {
+        val base = trustedBaseUrl.trim().trimEnd('/')
+        return SRC_ATTR_REGEX.replace(stripSrcsetAttributes(html)) { match ->
             val value = unquote(match.groupValues[1])
-            if (isAllowed(value, trustedBaseUrl)) match.value else """src="""""
+            if (!isAllowed(value, base)) """src=""""" else match.value
         }
+    }
 
     /** Removes responsive-image candidate lists that would bypass `src` checks. */
     private fun stripSrcsetAttributes(html: String): String =

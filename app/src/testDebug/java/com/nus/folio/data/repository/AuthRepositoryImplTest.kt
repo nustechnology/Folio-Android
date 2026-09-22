@@ -477,16 +477,6 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun `signInWithApple returns apple session`() = runTest {
-        val result = repository.signInWithApple()
-
-        assertTrue(result.isSuccess)
-        assertEquals("apple.user@folio.app", result.getOrNull()?.email)
-        assertEquals("Apple User", result.getOrNull()?.displayName)
-        assertEquals("Apple User", repository.getCurrentSession()?.displayName)
-    }
-
-    @Test
     fun `clearSession removes current session`() = runTest {
         repository.signIn("jordan@folio.app", "secret")
 
@@ -510,20 +500,5 @@ class AuthRepositoryImplTest {
         assertEquals("access-login", restored.getCurrentSession()?.accessToken)
         assertEquals("refresh-login", restored.getCurrentSession()?.refreshToken)
         assertEquals("d9c069fd-6c17-468b-82bd-1528512c8899", restored.getCurrentSession()?.userId)
-    }
-
-    @Test
-    fun `requestPasswordReset returns success`() = runTest {
-        val result = repository.requestPasswordReset("user@folio.app")
-
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
-    fun `requestPasswordReset returns failure when email is blank`() = runTest {
-        val result = repository.requestPasswordReset("")
-
-        assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
     }
 }

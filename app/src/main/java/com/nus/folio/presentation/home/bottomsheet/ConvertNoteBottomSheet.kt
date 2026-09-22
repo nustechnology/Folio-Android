@@ -105,6 +105,7 @@ private fun ConvertNoteSheetContent(
             singleLine = false,
             readOnly = true,
             fillHeight = false,
+            renderMarkdown = true,
             fieldModifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = ConvertSnapshotMaxHeight),
@@ -181,7 +182,10 @@ private fun ConvertNoteSheetContentPreview() {
                     note = Note(
                         id = "1",
                         title = "Recurring operational problems",
-                        content = "The evidence repeatedly identifies fragmented client records, manual compliance reporting, and weak information flow between field and office teams.",
+                        content = "The evidence repeatedly identifies **fragmented client records**, " +
+                            "_manual compliance reporting_, and weak information flow between field and office teams.\n\n" +
+                            "- First finding\n" +
+                            "- Second finding",
                         project = null,
                         updatedLabel = "Updated 1d ago",
                         isPinned = false,

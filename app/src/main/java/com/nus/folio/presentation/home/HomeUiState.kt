@@ -65,8 +65,6 @@ data class HomeUiState(
     val deletingConversation: AskConversation? = null,
     val isDeletingConversation: Boolean = false,
     val editingSource: Source? = null,
-    /** Plain content for TEXT source edits; empty for Web/File. */
-    val editingSourceContent: String = "",
     val deletingSource: Source? = null,
     val showNotebookActions: Boolean = false,
     val showNotebookExport: Boolean = false,

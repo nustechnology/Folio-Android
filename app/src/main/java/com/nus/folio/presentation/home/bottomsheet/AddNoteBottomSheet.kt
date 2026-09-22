@@ -41,8 +41,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.nus.folio.R
 import com.nus.folio.components.AnimatedModalSheet
+import com.nus.folio.components.formatFieldLabel
 import com.nus.folio.components.rememberSheetDiscardProtectionState
 import com.nus.folio.components.rememberTextFieldCursorScroller
 import com.nus.folio.domain.util.NoteInputRules
@@ -70,6 +72,7 @@ import com.nus.folio.ui.theme.HomeTextSecondary
 import com.nus.folio.ui.theme.LoginCopper
 import java.text.NumberFormat
 import java.util.Locale
+
 
 private val AddNoteContentHeight = 160.dp
 
@@ -232,19 +235,20 @@ internal fun AddNoteLabeledField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    singleLine: Boolean,
+    singleLine: Boolean = false,
     errorMessage: String? = null,
     characterLimit: Int? = null,
     readOnly: Boolean = false,
     fillHeight: Boolean = true,
     showFormatToolbar: Boolean = false,
     formatToolbarEnabled: Boolean = true,
+    renderMarkdown: Boolean = false,
     fieldModifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = label,
+            text = remember(label) { formatFieldLabel(label) },
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             color = LoginCopper,
@@ -270,6 +274,7 @@ internal fun AddNoteLabeledField(
                 isError = errorMessage != null,
                 readOnly = readOnly,
                 fillHeight = fillHeight,
+                renderMarkdown = renderMarkdown && !singleLine,
                 modifier = fieldModifier,
             )
         }
@@ -473,9 +478,15 @@ internal fun AddNoteField(
     isError: Boolean = false,
     readOnly: Boolean = false,
     fillHeight: Boolean = true,
+    renderMarkdown: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val cursorScroller = rememberTextFieldCursorScroller()
+    val markdownVisuals = if (renderMarkdown) {
+        remember { NotebookMarkdownVisualTransformation() }
+    } else {
+        null
+    }
     var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
     var reconcileGeneration by remember { mutableIntStateOf(0) }
 
@@ -538,6 +549,7 @@ internal fun AddNoteField(
             },
             readOnly = readOnly,
             singleLine = singleLine,
+            visualTransformation = markdownVisuals ?: VisualTransformation.None,
             textStyle = TextStyle(color = HomeTextPrimary, fontSize = 15.sp),
             cursorBrush = SolidColor(HomeTextPrimary),
             onTextLayout = if (singleLine) {

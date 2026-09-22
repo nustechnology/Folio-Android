@@ -111,15 +111,22 @@ internal class HomeAskDelegate(
         askStreamJob = null
         streamingAssistantId = null
         state.update { current ->
-            current.copy(
-                askMessages = current.askMessages.map { message ->
-                    if (message.id == assistantId) {
-                        message.copy(isStreaming = false, wasStopped = true)
-                    } else {
-                        message
-                    }
-                },
-            )
+            val targetMessage = current.askMessages.firstOrNull { it.id == assistantId }
+            if (targetMessage != null && targetMessage.content.isBlank() && targetMessage.citations.isEmpty() && targetMessage.limitation == null) {
+                current.copy(
+                    askMessages = current.askMessages.filterNot { it.id == assistantId },
+                )
+            } else {
+                current.copy(
+                    askMessages = current.askMessages.map { message ->
+                        if (message.id == assistantId) {
+                            message.copy(isStreaming = false, wasStopped = true)
+                        } else {
+                            message
+                        }
+                    },
+                )
+            }
         }
     }
 
@@ -239,7 +246,7 @@ internal class HomeAskDelegate(
             return
         }
         val previousFeedback = message.feedback
-        // Optimistic: hide the prompt immediately; revert if the request fails.
+        // Optimistic: apply the rating immediately; revert if the request fails.
         state.update { ui ->
             ui.copy(
                 askMessages = ui.askMessages.map { existing ->
@@ -616,9 +623,16 @@ internal class HomeAskDelegate(
                     val (restoredScope, restoredSourceId) = detail.conversation
                         .copy(sourceId = detail.conversation.sourceId ?: conversation.sourceId)
                         .askScopeSelection(availableSourceIds)
-                    val messages = detail.messages.map { message ->
-                        message.toAskMessage(conversationId = detail.conversation.id)
-                    }
+                    val messages = detail.messages
+                        .map { message ->
+                            message.toAskMessage(conversationId = detail.conversation.id)
+                        }
+                        .filterNot { message ->
+                            message.role == AskMessageRole.ASSISTANT &&
+                                message.content.isBlank() &&
+                                message.citations.isEmpty() &&
+                                message.limitation == null
+                        }
                     state.update {
                         it.copy(
                             isLoadingAskConversation = false,

@@ -11,6 +11,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
+import com.nus.folio.components.formatFieldLabel
 import com.nus.folio.ui.theme.HomeStatusFailedText
 import com.nus.folio.ui.theme.LoginBackground
 import com.nus.folio.ui.theme.LoginBorder
@@ -46,7 +48,7 @@ internal fun SignUpLabeledField(
     val isError = errorMessage != null
 
     Text(
-        text = label,
+        text = remember(label) { formatFieldLabel(label) },
         fontSize = 13.sp,
         color = LoginTextSecondary,
         fontWeight = FontWeight.Medium,
@@ -99,7 +101,7 @@ internal fun SignUpPasswordField(
     val isError = errorMessage != null
 
     Text(
-        text = label,
+        text = remember(label) { formatFieldLabel(label) },
         fontSize = 13.sp,
         color = LoginTextSecondary,
         fontWeight = FontWeight.Medium,

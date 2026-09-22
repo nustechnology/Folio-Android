@@ -8,8 +8,6 @@ class FakeAuthRepository : AuthRepository {
 
     var signUpResult: Result<AuthSession> = Result.success(AuthSession("new.user@folio.app"))
     var signInResult: Result<AuthSession> = Result.success(AuthSession("user@folio.app"))
-    var signInWithAppleResult: Result<AuthSession> =
-        Result.success(AuthSession("apple.user@folio.app"))
     var refreshSessionResult: Result<AuthSession> = Result.success(
         AuthSession(
             email = "user@folio.app",
@@ -18,7 +16,6 @@ class FakeAuthRepository : AuthRepository {
         ),
     )
     var syncCurrentUserResult: Result<AuthSession>? = null
-    var requestPasswordResetResult: Result<Unit> = Result.success(Unit)
 
     var lastSignUpName: String? = null
     var lastSignUpEmail: String? = null
@@ -26,16 +23,13 @@ class FakeAuthRepository : AuthRepository {
     var lastSignUpConfirmPassword: String? = null
     var lastSignInEmail: String? = null
     var lastSignInPassword: String? = null
-    var lastPasswordResetEmail: String? = null
     var lastSyncUserId: String? = null
 
     var signUpCallCount = 0
     var signInCallCount = 0
-    var signInWithAppleCallCount = 0
     var refreshSessionCallCount = 0
     var syncCurrentUserCallCount = 0
     var signOutCallCount = 0
-    var requestPasswordResetCallCount = 0
     var clearSessionCallCount = 0
 
     private var currentSession: AuthSession? = null
@@ -72,13 +66,6 @@ class FakeAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun signInWithApple(): Result<AuthSession> {
-        signInWithAppleCallCount++
-        return signInWithAppleResult.also { result ->
-            result.onSuccess { currentSession = it }
-        }
-    }
-
     override suspend fun refreshSession(): Result<AuthSession> {
         refreshSessionCallCount++
         return refreshSessionResult.also { result ->
@@ -108,12 +95,6 @@ class FakeAuthRepository : AuthRepository {
         currentSession = null
         clearSessionCallCount++
         return Result.success(Unit)
-    }
-
-    override suspend fun requestPasswordReset(email: String): Result<Unit> {
-        requestPasswordResetCallCount++
-        lastPasswordResetEmail = email
-        return requestPasswordResetResult
     }
 
     override suspend fun restoreSession() = Unit

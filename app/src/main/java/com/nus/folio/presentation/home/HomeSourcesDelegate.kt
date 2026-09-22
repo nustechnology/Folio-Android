@@ -7,13 +7,11 @@ import com.nus.folio.domain.model.SourcePaging
 import com.nus.folio.domain.model.SourceProcessingState
 import com.nus.folio.domain.model.SourceSort
 import com.nus.folio.domain.model.SourceStatus
-import com.nus.folio.domain.model.SourceType
 import com.nus.folio.domain.model.toApiSourceType
 import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
-import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
@@ -48,7 +46,6 @@ internal class HomeSourcesDelegate(
     private val updateSourceUseCase: UpdateSourceUseCase,
     private val deleteSourceUseCase: DeleteSourceUseCase,
     private val retrySourceUseCase: RetrySourceUseCase,
-    private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val sourceFileBytesReader: SourceFileBytesReader,
     private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
     private val openSourceDelayMs: Long,
@@ -507,21 +504,8 @@ internal class HomeSourcesDelegate(
     }
 
     fun onEditSourceClick(source: Source) {
-        state.update { it.copy(optionsSource = null) }
-        if (source.type != SourceType.TEXT) {
-            state.update {
-                it.copy(editingSource = source, editingSourceContent = "")
-            }
-            return
-        }
-        scope.launch {
-            val content = getSourceDetailUseCase(spaceId, source.id)
-                .getOrNull()
-                ?.plainContent
-                .orEmpty()
-            state.update {
-                it.copy(editingSource = source, editingSourceContent = content)
-            }
+        state.update {
+            it.copy(optionsSource = null, editingSource = source)
         }
     }
 
@@ -584,24 +568,18 @@ internal class HomeSourcesDelegate(
     }
 
     fun onEditSourceDismiss() {
-        state.update { it.copy(editingSource = null, editingSourceContent = "") }
+        state.update { it.copy(editingSource = null) }
     }
 
-    fun onEditSourceSave(title: String, author: String, content: String = "") {
+    fun onEditSourceSave(title: String, author: String) {
         if (title.isBlank()) return
         val editing = state.value.editingSource ?: return
         val trimmedTitle = AddSourceInputRules.limitTitle(title.trim())
         val trimmedAuthor = AddSourceInputRules.limitAuthor(author.trim())
-        val contentToSend = if (editing.type == SourceType.TEXT) {
-            if (!AddSourceInputRules.isContentValid(content)) return
-            content.trim()
-        } else {
-            null
-        }
         val updated = editing.copy(title = trimmedTitle, author = trimmedAuthor)
 
         scope.launch {
-            updateSourceUseCase(updated, contentToSend)
+            updateSourceUseCase(updated, null)
                 .onSuccess { saved ->
                     state.update { current ->
                         val updatedSources = current.allSources.map { source ->
@@ -610,7 +588,6 @@ internal class HomeSourcesDelegate(
                         val next = current.copy(
                             allSources = updatedSources,
                             editingSource = null,
-                            editingSourceContent = "",
                             userMessage = HomeUserMessage.SOURCE_UPDATED,
                         )
                         next.copy(visibleSources = filterSources(next))

@@ -50,7 +50,6 @@ import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.GetSpacesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RefreshAuthSessionUseCase
-import com.nus.folio.domain.usecase.RequestPasswordResetUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
 import com.nus.folio.domain.usecase.SignInUseCase
 import com.nus.folio.domain.usecase.SignUpUseCase
@@ -312,10 +311,6 @@ class AppContainer(
 
     val refreshAuthSessionUseCase: RefreshAuthSessionUseCase by lazy {
         RefreshAuthSessionUseCase(authRepository)
-    }
-
-    val requestPasswordResetUseCase: RequestPasswordResetUseCase by lazy {
-        RequestPasswordResetUseCase(authRepository)
     }
 
     val getCurrentSessionUseCase: GetCurrentSessionUseCase by lazy {

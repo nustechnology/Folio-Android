@@ -4,7 +4,6 @@
     <string name="login_description">Your sources, notes and citations in one private archive.</string>
     <string name="login_email_hint">jordan@folio.app</string>
     <string name="login_password_hint">••••••••••</string>
-    <string name="login_forgot_password">Forgot password?</string>
     <string name="login_sign_in">Sign in</string>
     <string name="login_footer">Private by default. Your archive stays yours.</string>
     <string name="login_error_email_required">Enter your email address.</string>
@@ -47,19 +46,6 @@
     <string name="signup_show_confirm_password">Show confirm password</string>
     <string name="signup_hide_confirm_password">Hide confirm password</string>
     <string name="signup_loading">Creating account</string>
-
-    <string name="reset_password_tagline">PRIVATE ARCHIVE</string>
-    <string name="reset_password_headline">Reset password</string>
-    <string name="reset_password_description">Enter your email and Folio will send a secure recovery link.</string>
-    <string name="reset_password_email_label">Email address</string>
-    <string name="reset_password_email_hint">jordan@folio.app</string>
-    <string name="reset_password_send_link">Send recovery link</string>
-    <string name="reset_password_back_to_sign_in">Back to sign in</string>
-    <string name="reset_password_info_title">Private by default</string>
-    <string name="reset_password_info_body">Recovery links expire quickly and never expose source data.</string>
-    <string name="reset_password_error_email_required">Enter your email address.</string>
-    <string name="reset_password_error_send_failed">Could not send recovery link. Please try again.</string>
-    <string name="reset_password_link_sent">Recovery link sent. Check your inbox.</string>
 
     <string name="home_sources_title">Sources</string>
     <string name="home_sources_subtitle">Evidence library</string>
@@ -158,7 +144,7 @@
     <string name="answer_scope_source_subtitle">Source</string>
     <string name="answer_scope_search">Search scopes</string>
     <string name="answer_scope_search_hint">Search sources…</string>
-    <string name="answer_scope_no_matches">No sources match your search.</string>
+    <string name="answer_scope_no_matches">No matching sources</string>
     <string name="home_error_generic">Something went wrong. Please try again.</string>
     <string name="home_error_network">Could not reach the server. Check your connection and try again.</string>
     <string name="home_retry">Retry</string>
@@ -173,17 +159,17 @@
     <string name="add_source_upload_hint">Tap to upload a file or drag and drop</string>
     <string name="add_source_upload_types">PDF, DOCX, EPUB, MD, TXT, PPTX, XLSX, CSV</string>
     <string name="add_source_upload_limit">Max 50 MB per file</string>
-    <string name="add_source_web_url_label">Article URL (required)</string>
+    <string name="add_source_web_url_label">Article URL *</string>
     <string name="add_source_web_url_placeholder">https://example.org/care-technology-adoption</string>
-    <string name="add_source_web_title_label">Title (optional)</string>
+    <string name="add_source_web_title_label">Title</string>
     <string name="add_source_web_title_placeholder">Care Technology Adoption Survey 2026</string>
-    <string name="add_source_web_author_label">Author (optional)</string>
+    <string name="add_source_web_author_label">Author</string>
     <string name="add_source_web_author_placeholder">Care Systems Association</string>
-    <string name="add_source_text_title_label">Title (optional)</string>
+    <string name="add_source_text_title_label">Title</string>
     <string name="add_source_text_title_placeholder">Provider workshop evidence</string>
-    <string name="add_source_text_author_label">Author (optional)</string>
+    <string name="add_source_text_author_label">Author</string>
     <string name="add_source_text_author_placeholder">Internal research</string>
-    <string name="add_source_text_content_label">Content (required)</string>
+    <string name="add_source_text_content_label">Content *</string>
     <string name="add_source_text_content_placeholder">Frontline coordinators described repeated entry across scheduling, incident, and compliance systems.</string>
     <string name="add_source_text_content_counter">%1$s / %2$s</string>
     <string name="add_source_submit">Add source</string>
@@ -218,7 +204,7 @@
     <string name="edit_source_description">Update details for this source document.</string>
     <string name="edit_source_title_label">Title</string>
     <string name="edit_source_title_placeholder">Source title</string>
-    <string name="edit_source_author_label">Author (optional)</string>
+    <string name="edit_source_author_label">Author</string>
     <string name="edit_source_author_placeholder">Author name</string>
     <string name="edit_source_save">Save</string>
 
@@ -311,11 +297,6 @@
     <string name="source_delete_message">This permanently removes the source and its retrieval data.</string>
     <string name="source_delete_confirm">Delete</string>
     <string name="source_detail_title">Source</string>
-    <string name="source_detail_processing_title">Still processing</string>
-    <string name="source_detail_processing">We\u2019re extracting text and indexing evidence from this source. This usually takes a moment — check back soon.</string>
-    <string name="source_detail_failed_title">Processing failed</string>
-    <string name="source_detail_failed">We couldn\u2019t extract content from this source. You can retry processing or open the original file.</string>
-    <string name="source_detail_retry_processing">Retry processing</string>
     <string name="source_detail_sheet_label">Sheet</string>
     <string name="source_detail_ask_source">Ask source</string>
     <string name="source_detail_open_original">Open original ↗</string>

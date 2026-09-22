@@ -25,11 +25,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import com.nus.folio.components.formatFieldLabel
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
@@ -183,7 +188,7 @@ internal fun AddSourceLabeledField(
     val numberFormat = remember { NumberFormat.getIntegerInstance(Locale.getDefault()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = label,
+            text = remember(label) { formatFieldLabel(label) },
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             color = LoginCopper,

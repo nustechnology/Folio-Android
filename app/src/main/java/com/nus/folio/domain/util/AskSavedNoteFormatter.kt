@@ -19,7 +19,8 @@ object AskSavedNoteFormatter {
 
     /**
      * Answer body stored on the note. Keeps inline `[n]` citation markers, then
-     * appends limitation and evidence excerpts so the content field is self-contained.
+     * appends bold Limitation / Evidence headings. Evidence items are a markdown
+     * bullet list of source + location (quote text opens on citation tap).
      */
     fun body(
         content: String,
@@ -34,44 +35,47 @@ object AskSavedNoteFormatter {
             .orEmpty()
         val evidenceBlocks = citations
             .sortedBy { it.index }
-            .mapNotNull { citation -> formatEvidenceBlock(citation) }
+            .mapNotNull { citation -> formatEvidenceLabel(citation) }
         return buildString {
             if (answer.isNotEmpty()) {
                 append(answer)
             }
             if (limitationDetail.isNotEmpty()) {
                 if (isNotEmpty()) append("\n\n")
+                append("**")
                 append(LIMITATION_LABEL)
-                append(' ')
+                append("** ")
                 append(limitationDetail)
             }
             if (evidenceBlocks.isNotEmpty()) {
                 if (isNotEmpty()) append("\n\n")
+                append("**")
                 append(EVIDENCE_LABEL)
-                append("\n\n")
-                append(evidenceBlocks.joinToString("\n\n"))
+                append("**")
+                append('\n')
+                evidenceBlocks.forEach { label ->
+                    append("\n- ")
+                    append(label)
+                }
             }
         }.take(NoteInputRules.MAX_CONTENT_LENGTH).trim()
     }
 
-    private fun formatEvidenceBlock(citation: AskCitation): String? {
-        val evidence = citation.evidenceText.trim()
-        if (evidence.isEmpty()) return null
+    private fun formatEvidenceLabel(citation: AskCitation): String? {
+        val title = citation.sourceTitle.trim()
+        val location = citation.locationLabel.trim()
+        if (title.isEmpty() && location.isEmpty()) return null
         return buildString {
             append('[')
             append(citation.index)
             append("] ")
-            val title = citation.sourceTitle.trim()
             if (title.isNotEmpty()) {
                 append(title)
             }
-            val location = citation.locationLabel.trim()
             if (location.isNotEmpty()) {
                 if (title.isNotEmpty()) append(" — ")
                 append(location)
             }
-            append('\n')
-            append(evidence)
         }
     }
 
