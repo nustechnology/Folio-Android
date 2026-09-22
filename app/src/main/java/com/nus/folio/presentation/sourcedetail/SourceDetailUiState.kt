@@ -21,7 +21,6 @@ data class SourceDetailUiState(
     val previewUrl: String? = null,
     val openOriginalRequest: SourceFileLocation? = null,
     val editingSource: Source? = null,
-    val editingSourceContent: String = "",
     val isUpdatingSource: Boolean = false,
     val deletingSource: Source? = null,
     val isDeletingSource: Boolean = false,

@@ -188,16 +188,13 @@ class SourceDetailViewModel(
     fun onEditSourceClick() {
         val detail = _uiState.value.detail ?: return
         _uiState.update {
-            it.copy(
-                editingSource = detail.toSource(),
-                editingSourceContent = detail.plainContent.orEmpty(),
-            )
+            it.copy(editingSource = detail.toSource())
         }
     }
 
     fun onEditSourceDismiss() {
         if (_uiState.value.isUpdatingSource) return
-        _uiState.update { it.copy(editingSource = null, editingSourceContent = "") }
+        _uiState.update { it.copy(editingSource = null) }
     }
 
     fun onEditSourceSave(title: String, author: String) {
@@ -227,7 +224,6 @@ class SourceDetailViewModel(
                             fileExtension = updated.fileExtension,
                         ),
                         editingSource = null,
-                        editingSourceContent = "",
                         userMessage = SourceDetailUserMessage.SOURCE_UPDATED,
                     )
                 }

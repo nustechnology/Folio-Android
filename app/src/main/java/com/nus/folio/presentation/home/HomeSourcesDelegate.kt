@@ -13,7 +13,6 @@ import com.nus.folio.domain.repository.SourceFileBytesReader
 import com.nus.folio.domain.usecase.CreateSourceUseCase
 import com.nus.folio.domain.usecase.DeleteSourceUseCase
 import com.nus.folio.domain.usecase.GetCurrentSessionUseCase
-import com.nus.folio.domain.usecase.GetSourceDetailUseCase
 import com.nus.folio.domain.usecase.GetSourcesUseCase
 import com.nus.folio.domain.usecase.ObserveSourceProcessingUseCase
 import com.nus.folio.domain.usecase.RetrySourceUseCase
@@ -48,7 +47,6 @@ internal class HomeSourcesDelegate(
     private val updateSourceUseCase: UpdateSourceUseCase,
     private val deleteSourceUseCase: DeleteSourceUseCase,
     private val retrySourceUseCase: RetrySourceUseCase,
-    private val getSourceDetailUseCase: GetSourceDetailUseCase,
     private val sourceFileBytesReader: SourceFileBytesReader,
     private val getCurrentSessionUseCase: GetCurrentSessionUseCase,
     private val openSourceDelayMs: Long,
@@ -507,21 +505,8 @@ internal class HomeSourcesDelegate(
     }
 
     fun onEditSourceClick(source: Source) {
-        state.update { it.copy(optionsSource = null) }
-        if (source.type != SourceType.TEXT) {
-            state.update {
-                it.copy(editingSource = source, editingSourceContent = "")
-            }
-            return
-        }
-        scope.launch {
-            val content = getSourceDetailUseCase(spaceId, source.id)
-                .getOrNull()
-                ?.plainContent
-                .orEmpty()
-            state.update {
-                it.copy(editingSource = source, editingSourceContent = content)
-            }
+        state.update {
+            it.copy(optionsSource = null, editingSource = source)
         }
     }
 
@@ -584,7 +569,7 @@ internal class HomeSourcesDelegate(
     }
 
     fun onEditSourceDismiss() {
-        state.update { it.copy(editingSource = null, editingSourceContent = "") }
+        state.update { it.copy(editingSource = null) }
     }
 
     fun onEditSourceSave(title: String, author: String) {
@@ -604,7 +589,6 @@ internal class HomeSourcesDelegate(
                         val next = current.copy(
                             allSources = updatedSources,
                             editingSource = null,
-                            editingSourceContent = "",
                             userMessage = HomeUserMessage.SOURCE_UPDATED,
                         )
                         next.copy(visibleSources = filterSources(next))

@@ -132,7 +132,6 @@ class HomeViewModel(
         updateSourceUseCase = updateSourceUseCase,
         deleteSourceUseCase = deleteSourceUseCase,
         retrySourceUseCase = retrySourceUseCase,
-        getSourceDetailUseCase = getSourceDetailUseCase,
         sourceFileBytesReader = sourceFileBytesReader,
         getCurrentSessionUseCase = getCurrentSessionUseCase,
         openSourceDelayMs = openSourceDelayMs,

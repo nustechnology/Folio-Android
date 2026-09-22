@@ -1913,22 +1913,6 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `onEditSourceClick for text loads plain content`() = runTest {
-        val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
-        val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
-
-        viewModel.onEditSourceClick(source)
-        advanceUntilIdle()
-
-        assertEquals(source, viewModel.uiState.value.editingSource)
-        assertEquals(
-            "Sample manual source content for editing.",
-            viewModel.uiState.value.editingSourceContent,
-        )
-        assertEquals(1, sourceRepository.getSourceDetailCallCount)
-    }
-
-    @Test
     fun `onEditSourceSave for text saves title and author with null content`() = runTest {
         val viewModel = createViewModel(spaceId = "3", spaceTitle = "Fieldwork")
         val source = viewModel.uiState.value.allSources.first { it.type == SourceType.TEXT }
