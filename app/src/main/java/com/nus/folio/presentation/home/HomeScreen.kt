@@ -546,11 +546,13 @@ internal fun HomeContent(
                     modifier = Modifier
                         .weight(1f)
                         .then(
-                            if (isImeVisible && uiState.selectedTab == HomeTab.ASK) {
+                            if (hideBottomNavForAskInput) {
                                 Modifier.imePadding()
                             } else {
                                 Modifier
-                                    .navigationBarsPadding()
+                                    .windowInsetsPadding(
+                                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                                    )
                                     .padding(bottom = HomeBottomNavClearance)
                             },
                         ),
