@@ -451,62 +451,60 @@ internal fun HomeContent(
             .dismissKeyboardOnTapOutside(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!notebookImeOpen) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HomeHeader)
-                        .statusBarsPadding()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 16.dp),
-                ) {
-                    HomeHeaderRow(
-                        selectedTab = uiState.selectedTab,
-                        spaceTitle = uiState.spaceTitle,
-                        titleOverride = if (
-                            uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
-                        ) {
-                            uiState.askConversationTitle
-                        } else {
-                            ""
-                        },
-                        onBackClick = onBackClick,
-                        onAddClick = onAddClick,
-                    )
-                    if (
-                        uiState.selectedTab == HomeTab.SOURCES ||
-                        uiState.selectedTab == HomeTab.NOTES ||
-                        (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HomeHeader)
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 12.dp, bottom = 16.dp),
+            ) {
+                HomeHeaderRow(
+                    selectedTab = uiState.selectedTab,
+                    spaceTitle = uiState.spaceTitle,
+                    titleOverride = if (
+                        uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
                     ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            FolioSearchField(
-                                query = uiState.searchQuery,
-                                onQueryChange = onSearchQueryChange,
-                                placeholder = stringResource(
-                                    when (uiState.selectedTab) {
-                                        HomeTab.NOTES -> R.string.home_search_notes
-                                        HomeTab.ASK -> R.string.home_search_conversations
-                                        else -> R.string.home_search_sources
-                                    },
-                                ),
-                                modifier = Modifier.weight(1f),
+                        uiState.askConversationTitle
+                    } else {
+                        ""
+                    },
+                    onBackClick = onBackClick,
+                    onAddClick = onAddClick,
+                )
+                if (
+                    uiState.selectedTab == HomeTab.SOURCES ||
+                    uiState.selectedTab == HomeTab.NOTES ||
+                    (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FolioSearchField(
+                            query = uiState.searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            placeholder = stringResource(
+                                when (uiState.selectedTab) {
+                                    HomeTab.NOTES -> R.string.home_search_notes
+                                    HomeTab.ASK -> R.string.home_search_conversations
+                                    else -> R.string.home_search_sources
+                                },
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (uiState.selectedTab == HomeTab.SOURCES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
                             )
-                            if (uiState.selectedTab == HomeTab.SOURCES) {
-                                HomeFilterSortButton(
-                                    onClick = onFilterSortClick,
-                                    showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
-                                )
-                            } else if (uiState.selectedTab == HomeTab.NOTES) {
-                                HomeFilterSortButton(
-                                    onClick = onFilterSortClick,
-                                    showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
-                                )
-                            }
+                        } else if (uiState.selectedTab == HomeTab.NOTES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
+                            )
                         }
                     }
                 }
