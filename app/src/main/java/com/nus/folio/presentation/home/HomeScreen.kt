@@ -547,7 +547,7 @@ internal fun HomeContent(
                         .weight(1f)
                         .then(
                             if (isImeVisible && uiState.selectedTab == HomeTab.ASK) {
-                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                                Modifier.imePadding()
                             } else {
                                 Modifier
                                     .navigationBarsPadding()
