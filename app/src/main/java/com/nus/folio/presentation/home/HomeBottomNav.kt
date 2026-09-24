@@ -129,7 +129,7 @@ private fun HomeNavItem(
         targetValue = if (selected) {
             HomeNavAccent
         } else {
-            Color(0xFF8C9B97)
+            HomeNavInactiveTint
         },
         label = "navItemColor",
     )

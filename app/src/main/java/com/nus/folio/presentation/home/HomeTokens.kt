@@ -29,14 +29,14 @@ internal val HomeBadgeShape = RoundedCornerShape(8.dp)
 internal val HomeStatusShape = RoundedCornerShape(8.dp)
 internal val HomeNavPillShape = RoundedCornerShape(28.dp)
 internal val HomeNavPillBackground = Color(0xFF041814)
-internal val HomeBottomNavClearance = 72.dp
+// outer bottom padding (8 dp) + container vertical padding (24 dp) + item height (~48 dp)
+internal val HomeBottomNavClearance = 80.dp
 internal val NotebookEditorBottomScrollMargin = 80.dp
 internal val HomeSheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 internal val HomeSheetTabShape = RoundedCornerShape(12.dp)
 internal val HomeUploadZoneShape = RoundedCornerShape(16.dp)
 internal val HomeSheetInputBorder = LoginCopper
-internal val HomeNavItemTint = Color(0xFFD8C7A2)
-internal val HomeNavTopLine = Color(0xFF1F3D36)
+internal val HomeNavInactiveTint = Color(0xFF8C9B97)
 internal val AskSuggestionShape = RoundedCornerShape(12.dp)
 internal val AskInputShape = RoundedCornerShape(16.dp)
 internal val AskSourceChipShape = RoundedCornerShape(12.dp)
