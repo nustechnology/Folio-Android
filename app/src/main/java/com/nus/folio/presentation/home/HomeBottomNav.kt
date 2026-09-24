@@ -43,6 +43,7 @@ import com.nus.folio.ui.theme.FolioAndroidTheme
 import com.nus.folio.ui.theme.HomeBackground
 import com.nus.folio.ui.theme.HomeHeader
 import com.nus.folio.ui.theme.HomeNavAccent
+import com.nus.folio.ui.theme.HomeNavInactiveTint
 
 private val NavIndicatorWidth = 28.dp
 private val NavIndicatorHeight = 2.5.dp

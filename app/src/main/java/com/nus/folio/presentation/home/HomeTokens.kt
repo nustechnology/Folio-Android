@@ -36,7 +36,6 @@ internal val HomeSheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.d
 internal val HomeSheetTabShape = RoundedCornerShape(12.dp)
 internal val HomeUploadZoneShape = RoundedCornerShape(16.dp)
 internal val HomeSheetInputBorder = LoginCopper
-internal val HomeNavInactiveTint = Color(0xFF8C9B97)
 internal val AskSuggestionShape = RoundedCornerShape(12.dp)
 internal val AskInputShape = RoundedCornerShape(16.dp)
 internal val AskSourceChipShape = RoundedCornerShape(12.dp)
