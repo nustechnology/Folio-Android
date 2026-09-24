@@ -3,17 +3,11 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Outer open book shape -->
+    <!-- Window outline with top bar line and content line -->
     <path
         android:strokeColor="#FFFFFF"
         android:strokeWidth="1.8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M2,6c2.5,-1.5 6,-1.5 10,0.5c4,-2 7.5,-2 10,-0.5v13c-2.5,-1.5 -6,-1.5 -10,0.5c-4,-2 -7.5,-2 -10,-0.5Z" />
-    <!-- Spine line -->
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M12,6.5v13" />
+        android:pathData="M5,4h14c1.1,0 2,0.9 2,2v12c0,1.1 -0.9,2 -2,2H5c-1.1,0 -2,-0.9 -2,-2V6c0,-1.1 0.9,-2 2,-2Z M3,9h18 M7,14h10" />
 </vector>

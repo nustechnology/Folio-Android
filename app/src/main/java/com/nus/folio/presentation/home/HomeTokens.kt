@@ -27,7 +27,8 @@ internal val HomeSourceFilterChipSelectedBorder = Color(0xFFB8C9DC)
 internal val HomeFilterActiveDot = Color(0xFFE24B4A)
 internal val HomeBadgeShape = RoundedCornerShape(8.dp)
 internal val HomeStatusShape = RoundedCornerShape(8.dp)
-internal val HomeNavPillShape = RoundedCornerShape(14.dp)
+internal val HomeNavPillShape = RoundedCornerShape(28.dp)
+internal val HomeNavPillBackground = Color(0xFF041814)
 internal val HomeBottomNavClearance = 72.dp
 internal val NotebookEditorBottomScrollMargin = 80.dp
 internal val HomeSheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
