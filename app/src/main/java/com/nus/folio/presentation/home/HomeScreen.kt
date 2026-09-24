@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -451,62 +453,60 @@ internal fun HomeContent(
             .dismissKeyboardOnTapOutside(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!notebookImeOpen) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HomeHeader)
-                        .statusBarsPadding()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 16.dp),
-                ) {
-                    HomeHeaderRow(
-                        selectedTab = uiState.selectedTab,
-                        spaceTitle = uiState.spaceTitle,
-                        titleOverride = if (
-                            uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
-                        ) {
-                            uiState.askConversationTitle
-                        } else {
-                            ""
-                        },
-                        onBackClick = onBackClick,
-                        onAddClick = onAddClick,
-                    )
-                    if (
-                        uiState.selectedTab == HomeTab.SOURCES ||
-                        uiState.selectedTab == HomeTab.NOTES ||
-                        (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HomeHeader)
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 12.dp, bottom = 16.dp),
+            ) {
+                HomeHeaderRow(
+                    selectedTab = uiState.selectedTab,
+                    spaceTitle = uiState.spaceTitle,
+                    titleOverride = if (
+                        uiState.isAskChatOpen && uiState.selectedTab == HomeTab.ASK
                     ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            FolioSearchField(
-                                query = uiState.searchQuery,
-                                onQueryChange = onSearchQueryChange,
-                                placeholder = stringResource(
-                                    when (uiState.selectedTab) {
-                                        HomeTab.NOTES -> R.string.home_search_notes
-                                        HomeTab.ASK -> R.string.home_search_conversations
-                                        else -> R.string.home_search_sources
-                                    },
-                                ),
-                                modifier = Modifier.weight(1f),
+                        uiState.askConversationTitle
+                    } else {
+                        ""
+                    },
+                    onBackClick = onBackClick,
+                    onAddClick = onAddClick,
+                )
+                if (
+                    uiState.selectedTab == HomeTab.SOURCES ||
+                    uiState.selectedTab == HomeTab.NOTES ||
+                    (uiState.selectedTab == HomeTab.ASK && !uiState.isAskChatOpen)
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FolioSearchField(
+                            query = uiState.searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            placeholder = stringResource(
+                                when (uiState.selectedTab) {
+                                    HomeTab.NOTES -> R.string.home_search_notes
+                                    HomeTab.ASK -> R.string.home_search_conversations
+                                    else -> R.string.home_search_sources
+                                },
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (uiState.selectedTab == HomeTab.SOURCES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
                             )
-                            if (uiState.selectedTab == HomeTab.SOURCES) {
-                                HomeFilterSortButton(
-                                    onClick = onFilterSortClick,
-                                    showActiveIndicator = uiState.selectedSort != SourceSort.DEFAULT,
-                                )
-                            } else if (uiState.selectedTab == HomeTab.NOTES) {
-                                HomeFilterSortButton(
-                                    onClick = onFilterSortClick,
-                                    showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
-                                )
-                            }
+                        } else if (uiState.selectedTab == HomeTab.NOTES) {
+                            HomeFilterSortButton(
+                                onClick = onFilterSortClick,
+                                showActiveIndicator = uiState.selectedNoteSort != NoteSort.DEFAULT,
+                            )
                         }
                     }
                 }
@@ -524,6 +524,7 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreSources,
                     modifier = Modifier
                         .weight(1f)
+                        .navigationBarsPadding()
                         .padding(bottom = HomeBottomNavClearance),
                 )
                 HomeTab.ASK -> AskPane(
@@ -544,14 +545,17 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreConversations,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(
-                            bottom = if (hideBottomNavForAskInput) {
-                                0.dp
+                        .then(
+                            if (hideBottomNavForAskInput) {
+                                Modifier.imePadding()
                             } else {
-                                HomeBottomNavClearance
+                                Modifier
+                                    .windowInsetsPadding(
+                                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                                    )
+                                    .padding(bottom = HomeBottomNavClearance)
                             },
-                        )
-                        .imePadding(),
+                        ),
                 )
                 HomeTab.NOTES -> NotesPane(
                     uiState = uiState,
@@ -564,6 +568,7 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreNotes,
                     modifier = Modifier
                         .weight(1f)
+                        .navigationBarsPadding()
                         .padding(bottom = HomeBottomNavClearance),
                 )
                 HomeTab.NOTEBOOK -> NotebookPane(
@@ -580,9 +585,13 @@ internal fun HomeContent(
                         .weight(1f)
                         .then(
                             if (notebookImeOpen) {
-                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                                Modifier.windowInsetsPadding(
+                                    WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                                )
                             } else {
-                                Modifier.padding(bottom = HomeBottomNavClearance)
+                                Modifier
+                                    .navigationBarsPadding()
+                                    .padding(bottom = HomeBottomNavClearance)
                             },
                         ),
                 )

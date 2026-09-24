@@ -85,6 +85,35 @@ internal fun NotebookEditorToolbar(
             horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             NotebookToolbarButton(
+                label = stringResource(R.string.notebook_toolbar_undo),
+                enabled = editable && canUndo,
+                selected = false,
+                onClick = onUndoClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "↶",
+                    color = if (editable && canUndo) HomeTextPrimary else HomeTextSecondary,
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            NotebookToolbarButton(
+                label = stringResource(R.string.notebook_toolbar_redo),
+                enabled = editable && canRedo,
+                selected = false,
+                onClick = onRedoClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "↷",
+                    color = if (editable && canRedo) HomeTextPrimary else HomeTextSecondary,
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            NotebookToolbarDivider()
+            NotebookToolbarButton(
                 label = stringResource(R.string.notebook_toolbar_bold),
                 enabled = editable,
                 selected = editable && activeMarks.bold,
@@ -203,35 +232,6 @@ internal fun NotebookEditorToolbar(
                     text = "❝",
                     color = toolbarContentColor(editable && activeMarks.blockquote, editable),
                     fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            NotebookToolbarDivider()
-            NotebookToolbarButton(
-                label = stringResource(R.string.notebook_toolbar_undo),
-                enabled = editable && canUndo,
-                selected = false,
-                onClick = onUndoClick,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = "↶",
-                    color = if (editable && canUndo) HomeTextPrimary else HomeTextSecondary,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            NotebookToolbarButton(
-                label = stringResource(R.string.notebook_toolbar_redo),
-                enabled = editable && canRedo,
-                selected = false,
-                onClick = onRedoClick,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = "↷",
-                    color = if (editable && canRedo) HomeTextPrimary else HomeTextSecondary,
-                    fontSize = 16.sp,
                     textAlign = TextAlign.Center,
                 )
             }
