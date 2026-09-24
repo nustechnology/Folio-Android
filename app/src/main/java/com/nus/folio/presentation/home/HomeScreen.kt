@@ -524,6 +524,7 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreSources,
                     modifier = Modifier
                         .weight(1f)
+                        .navigationBarsPadding()
                         .padding(bottom = HomeBottomNavClearance),
                 )
                 HomeTab.ASK -> AskPane(
@@ -544,11 +545,13 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreConversations,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(
-                            bottom = if (hideBottomNavForAskInput) {
-                                0.dp
+                        .then(
+                            if (hideBottomNavForAskInput) {
+                                Modifier
                             } else {
-                                HomeBottomNavClearance
+                                Modifier
+                                    .navigationBarsPadding()
+                                    .padding(bottom = HomeBottomNavClearance)
                             },
                         )
                         .imePadding(),
@@ -564,6 +567,7 @@ internal fun HomeContent(
                     onLoadMore = onLoadMoreNotes,
                     modifier = Modifier
                         .weight(1f)
+                        .navigationBarsPadding()
                         .padding(bottom = HomeBottomNavClearance),
                 )
                 HomeTab.NOTEBOOK -> NotebookPane(
@@ -582,7 +586,9 @@ internal fun HomeContent(
                             if (notebookImeOpen) {
                                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
                             } else {
-                                Modifier.padding(bottom = HomeBottomNavClearance)
+                                Modifier
+                                    .navigationBarsPadding()
+                                    .padding(bottom = HomeBottomNavClearance)
                             },
                         ),
                 )

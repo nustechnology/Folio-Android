@@ -216,6 +216,7 @@ internal fun NotebookEditor(
                 },
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(bottom = 80.dp)
                     .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         when (notebookShortcutAction(event)) {
