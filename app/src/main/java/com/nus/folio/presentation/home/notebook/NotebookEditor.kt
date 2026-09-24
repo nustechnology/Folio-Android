@@ -39,6 +39,7 @@ import com.nus.folio.R
 import com.nus.folio.components.TextFieldCursorScroll
 import com.nus.folio.components.dismissKeyboardOnTapOutside
 import com.nus.folio.components.rememberTextFieldCursorScroller
+import com.nus.folio.presentation.home.NotebookEditorBottomScrollMargin
 import com.nus.folio.presentation.home.NotebookSaveStatus
 import com.nus.folio.ui.theme.HomeTextPrimary
 import com.nus.folio.ui.theme.LoginCopper
@@ -216,7 +217,7 @@ internal fun NotebookEditor(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 80.dp)
+                    .padding(bottom = NotebookEditorBottomScrollMargin)
                     .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         when (notebookShortcutAction(event)) {

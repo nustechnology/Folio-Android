@@ -29,6 +29,7 @@ internal val HomeBadgeShape = RoundedCornerShape(8.dp)
 internal val HomeStatusShape = RoundedCornerShape(8.dp)
 internal val HomeNavPillShape = RoundedCornerShape(14.dp)
 internal val HomeBottomNavClearance = 72.dp
+internal val NotebookEditorBottomScrollMargin = 80.dp
 internal val HomeSheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 internal val HomeSheetTabShape = RoundedCornerShape(12.dp)
 internal val HomeUploadZoneShape = RoundedCornerShape(16.dp)
