@@ -185,8 +185,8 @@ private fun EditNoteSheetContent(
             AddSourceSubmitButton(
                 enabled = canSave,
                 onClick = { onSave(title.trim(), content.trim()) },
-                labelRes = R.string.add_note_submit,
-                modifier = Modifier.weight(2f),
+                labelRes = R.string.edit_note_submit,
+                modifier = Modifier.weight(1f),
             )
         }
     }

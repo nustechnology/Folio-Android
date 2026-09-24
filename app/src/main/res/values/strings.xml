@@ -234,6 +234,7 @@
     <string name="sheet_discard_confirm">Discard</string>
     <string name="edit_note_title">Edit note</string>
     <string name="edit_note_description">Update the title and content for this note.</string>
+    <string name="edit_note_submit">Save</string>
 
     <string name="home_empty_notes">No notes yet</string>
     <string name="home_empty_notes_subtitle">Create a note to start capturing ideas.</string>
