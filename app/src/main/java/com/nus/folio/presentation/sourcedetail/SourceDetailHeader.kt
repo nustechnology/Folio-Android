@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -96,6 +97,7 @@ internal fun SourceDetailHeader(
                 fontFamily = CormorantGaramond,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.SemiBold,
+                fontStyle = FontStyle.Italic,
                 color = HomeHeader,
                 modifier = Modifier.weight(1f),
                 maxLines = 2,
