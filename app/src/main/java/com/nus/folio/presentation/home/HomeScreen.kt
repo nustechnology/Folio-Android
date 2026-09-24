@@ -546,15 +546,14 @@ internal fun HomeContent(
                     modifier = Modifier
                         .weight(1f)
                         .then(
-                            if (hideBottomNavForAskInput) {
-                                Modifier
+                            if (isImeVisible && uiState.selectedTab == HomeTab.ASK) {
+                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
                             } else {
                                 Modifier
                                     .navigationBarsPadding()
                                     .padding(bottom = HomeBottomNavClearance)
                             },
-                        )
-                        .imePadding(),
+                        ),
                 )
                 HomeTab.NOTES -> NotesPane(
                     uiState = uiState,
