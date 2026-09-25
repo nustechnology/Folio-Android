@@ -8,6 +8,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.nus.folio.R
 
+// Note: Cormorant Garamond Italic is not bundled — FontStyle.Italic uses synthetic
+// slant. Drop cormorant_garamond_italic.ttf into res/font/ and register it here
+// if the skews on the serif face become unacceptable at large sizes.
 val CormorantGaramond = FontFamily(
     Font(R.font.cormorant_garamond_regular, FontWeight.Normal),
     Font(R.font.cormorant_garamond_medium, FontWeight.Medium),
