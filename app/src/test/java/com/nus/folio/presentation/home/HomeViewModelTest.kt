@@ -2612,7 +2612,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `empty notebook loads default template with space title and objective`() = runTest {
+    fun `empty notebook loads blank content without template`() = runTest {
         val viewModel = createViewModel(
             spaceTitle = "Dissertation Research",
             researchObjective = "Primary research archive for doctoral thesis",
@@ -2624,14 +2624,11 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         val content = viewModel.uiState.value.notebookContent
-        assertTrue(content.contains("# Title"))
-        assertTrue(content.contains("Dissertation Research"))
-        assertTrue(content.contains("## Research Objective"))
-        assertTrue(content.contains("Primary research archive for doctoral thesis"))
+        assertTrue(content.isEmpty())
     }
 
     @Test
-    fun `empty notebook default template keeps Research Objective heading when objective blank`() = runTest {
+    fun `empty notebook keeps blank content when objective blank`() = runTest {
         val viewModel = createViewModel(
             spaceTitle = "Teaching Prep",
             researchObjective = "",
@@ -2643,13 +2640,11 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         val content = viewModel.uiState.value.notebookContent
-        assertTrue(content.contains("# Title"))
-        assertTrue(content.contains("Teaching Prep"))
-        assertTrue(content.contains("## Research Objective"))
+        assertTrue(content.isEmpty())
     }
 
     @Test
-    fun `pristine notebook scaffold is reseeded with research objective`() = runTest {
+    fun `pristine notebook scaffold is not reseeded with research objective`() = runTest {
         notebookRepository.seed(
             "1",
             """
@@ -2671,11 +2666,11 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         val content = viewModel.uiState.value.notebookContent
-        assertTrue(content.contains("Primary research archive for doctoral thesis"))
+        assertFalse(content.contains("Primary research archive for doctoral thesis"))
     }
 
     @Test
-    fun `onResearchObjectiveAvailable reseeds pristine notebook`() = runTest {
+    fun `onResearchObjectiveAvailable updates spaceResearchObjective without auto-seeding notebook`() = runTest {
         spaceRepository.spacesResult = Result.success(
             com.nus.folio.domain.model.SpacePage(
                 spaces = listOf(
@@ -2714,7 +2709,7 @@ class HomeViewModelTest {
             "Primary research archive for doctoral thesis",
             viewModel.uiState.value.spaceResearchObjective,
         )
-        assertTrue(
+        assertFalse(
             viewModel.uiState.value.notebookContent.contains(
                 "Primary research archive for doctoral thesis",
             ),
@@ -2740,11 +2735,7 @@ class HomeViewModelTest {
         viewModel.onTabSelected(HomeTab.NOTEBOOK)
         advanceUntilIdle()
 
-        assertTrue(
-            viewModel.uiState.value.notebookContent.contains(
-                "Primary research archive for doctoral thesis",
-            ),
-        )
+        assertTrue(viewModel.uiState.value.notebookContent.isEmpty())
     }
 
     @Test

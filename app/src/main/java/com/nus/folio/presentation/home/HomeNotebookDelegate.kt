@@ -39,12 +39,15 @@ internal class HomeNotebookDelegate(
                     } else {
                         resolveNotebookContent(notebook.content)
                     }
+                    var installedSnapshot = false
                     state.update { current ->
                         // Keep in-progress edits (debounce may still be pending) instead of
                         // replacing them with an older stored snapshot.
                         if (hasUnsavedNotebookEdits(current)) {
+                            installedSnapshot = false
                             current.copy(isLoadingNotebook = false, notebookError = null)
                         } else {
+                            installedSnapshot = true
                             current.copy(
                                 notebookContent = resolvedContent,
                                 notebookSaveStatus = when {
@@ -57,7 +60,15 @@ internal class HomeNotebookDelegate(
                             )
                         }
                     }
-                    ensureDefaultContent()
+                    // Only sanitize-save when the loaded snapshot was installed. A pending
+                    // edit keeps its save job; scheduling here would cancel it and persist
+                    // the scaffold instead of the newer draft.
+                    if (installedSnapshot &&
+                        resolvedContent != notebook.content &&
+                        !notebook.isReadOnly
+                    ) {
+                        scheduleSave(contentToSave = resolvedContent, debounce = false)
+                    }
                 }
                 .onFailure { throwable ->
                     state.update { current ->
@@ -70,17 +81,8 @@ internal class HomeNotebookDelegate(
         }
     }
 
-    /** Re-seeds Title + Research Objective when the notebook is still a pristine default. */
+    /** No-op: Do not auto-seed Title + Research Objective template into blank notebooks. */
     fun ensureDefaultContent() {
-        if (!hasLoadedNotebook) return
-        val current = state.value
-        if (current.notebookSaveStatus == NotebookSaveStatus.READ_ONLY) return
-        if (hasUnsavedNotebookEdits(current)) return
-        val seeded = resolveNotebookContent(current.notebookContent)
-        if (seeded == current.notebookContent) return
-        state.update {
-            it.copy(notebookContent = seeded)
-        }
     }
 
     fun onNotebookContentChange(content: String) {
@@ -259,7 +261,7 @@ internal class HomeNotebookDelegate(
             saveJob?.isActive == true
 
     private fun resolveNotebookContent(storedContent: String): String =
-        NotebookDefaults.applyDefaults(
+        NotebookDefaults.sanitizeContent(
             content = storedContent,
             spaceTitle = state.value.spaceTitle,
             researchObjective = state.value.spaceResearchObjective,

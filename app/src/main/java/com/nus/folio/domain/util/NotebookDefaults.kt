@@ -25,6 +25,37 @@ object NotebookDefaults {
     }
 
     /**
+     * Sanitizes stock default scaffold content ("# Title ... ## Research Objective ...") to empty string.
+     * Returns unchanged content if the user has added custom notes.
+     */
+    fun sanitizeContent(
+        content: String,
+        spaceTitle: String,
+        researchObjective: String = "",
+    ): String {
+        if (content.isBlank()) return ""
+        val trimmed = content.trim()
+        val templateWithObjective = template(spaceTitle, researchObjective).trim()
+        if (trimmed == templateWithObjective) return ""
+        val templateWithoutObjective = template(spaceTitle, "").trim()
+        if (trimmed == templateWithoutObjective) return ""
+        val resolvedTitle = spaceTitle.trim().ifBlank { FALLBACK_TITLE }
+        val headingPrefix = buildString {
+            appendLine("# Title")
+            appendLine(resolvedTitle)
+            appendLine()
+            append(OBJECTIVE_HEADING)
+        }
+        if (trimmed.startsWith(headingPrefix)) {
+            val remainder = trimmed.removePrefix(headingPrefix).trim()
+            if (remainder.isEmpty() || remainder == researchObjective.trim()) {
+                return ""
+            }
+        }
+        return content
+    }
+
+    /**
      * Seeds a blank notebook, or fills an empty Research Objective section with
      * [researchObjective] when that body is still blank.
      */
