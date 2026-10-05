@@ -39,12 +39,15 @@ internal class HomeNotebookDelegate(
                     } else {
                         resolveNotebookContent(notebook.content)
                     }
+                    var installedSnapshot = false
                     state.update { current ->
                         // Keep in-progress edits (debounce may still be pending) instead of
                         // replacing them with an older stored snapshot.
                         if (hasUnsavedNotebookEdits(current)) {
+                            installedSnapshot = false
                             current.copy(isLoadingNotebook = false, notebookError = null)
                         } else {
+                            installedSnapshot = true
                             current.copy(
                                 notebookContent = resolvedContent,
                                 notebookSaveStatus = when {
@@ -57,7 +60,13 @@ internal class HomeNotebookDelegate(
                             )
                         }
                     }
-                    if (resolvedContent != notebook.content && !notebook.isReadOnly) {
+                    // Only sanitize-save when the loaded snapshot was installed. A pending
+                    // edit keeps its save job; scheduling here would cancel it and persist
+                    // the scaffold instead of the newer draft.
+                    if (installedSnapshot &&
+                        resolvedContent != notebook.content &&
+                        !notebook.isReadOnly
+                    ) {
                         scheduleSave(contentToSave = resolvedContent, debounce = false)
                     }
                 }
