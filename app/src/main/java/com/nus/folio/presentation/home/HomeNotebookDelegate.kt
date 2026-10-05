@@ -57,7 +57,9 @@ internal class HomeNotebookDelegate(
                             )
                         }
                     }
-                    ensureDefaultContent()
+                    if (resolvedContent != notebook.content && !notebook.isReadOnly) {
+                        scheduleSave(contentToSave = resolvedContent, debounce = false)
+                    }
                 }
                 .onFailure { throwable ->
                     state.update { current ->
@@ -70,17 +72,8 @@ internal class HomeNotebookDelegate(
         }
     }
 
-    /** Re-seeds Title + Research Objective when the notebook is still a pristine default. */
+    /** No-op: Do not auto-seed Title + Research Objective template into blank notebooks. */
     fun ensureDefaultContent() {
-        if (!hasLoadedNotebook) return
-        val current = state.value
-        if (current.notebookSaveStatus == NotebookSaveStatus.READ_ONLY) return
-        if (hasUnsavedNotebookEdits(current)) return
-        val seeded = resolveNotebookContent(current.notebookContent)
-        if (seeded == current.notebookContent) return
-        state.update {
-            it.copy(notebookContent = seeded)
-        }
     }
 
     fun onNotebookContentChange(content: String) {
@@ -259,7 +252,7 @@ internal class HomeNotebookDelegate(
             saveJob?.isActive == true
 
     private fun resolveNotebookContent(storedContent: String): String =
-        NotebookDefaults.applyDefaults(
+        NotebookDefaults.sanitizeContent(
             content = storedContent,
             spaceTitle = state.value.spaceTitle,
             researchObjective = state.value.spaceResearchObjective,

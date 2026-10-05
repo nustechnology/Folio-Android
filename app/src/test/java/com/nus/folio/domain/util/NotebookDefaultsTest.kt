@@ -115,4 +115,38 @@ class NotebookDefaultsTest {
         assertTrue(applied.contains("Keep this objective"))
         assertFalse(applied.contains("Different objective"))
     }
+
+    @Test
+    fun `sanitizeContent strips stock template with objective`() {
+        val stock = NotebookDefaults.template(
+            spaceTitle = "Q11",
+            researchObjective = "QQQQQQ",
+        )
+        val sanitized = NotebookDefaults.sanitizeContent(
+            content = stock,
+            spaceTitle = "Q11",
+            researchObjective = "QQQQQQ",
+        )
+        assertEquals("", sanitized)
+    }
+
+    @Test
+    fun `sanitizeContent keeps user notes beyond template`() {
+        val custom = """
+            # Title
+            Q11
+
+            ## Research Objective
+            QQQQQQ
+
+            ## My Notes
+            Some actual user input
+        """.trimIndent()
+        val sanitized = NotebookDefaults.sanitizeContent(
+            content = custom,
+            spaceTitle = "Q11",
+            researchObjective = "QQQQQQ",
+        )
+        assertEquals(custom, sanitized)
+    }
 }

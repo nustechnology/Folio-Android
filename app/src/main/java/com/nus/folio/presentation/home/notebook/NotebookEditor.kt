@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -203,14 +204,20 @@ internal fun NotebookEditor(
                 ),
                 cursorBrush = SolidColor(LoginCopper),
                 decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    val viewportHeightDp = with(density) { viewportHeight.toDp() }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (viewportHeightDp > 0.dp) {
+                                    Modifier.height(viewportHeightDp)
+                                } else {
+                                    Modifier.fillMaxSize()
+                                }
+                            ),
+                    ) {
                         if (isNotebookContentEmpty(fieldValue.text)) {
-                            NotebookEmptyPlaceholder(
-                                heading = notebookEmptyHeading(
-                                    spaceTitle = spaceTitle,
-                                    fallback = stringResource(R.string.home_notebook_title),
-                                ),
-                            )
+                            NotebookEmptyPlaceholder()
                         }
                         innerTextField()
                     }
